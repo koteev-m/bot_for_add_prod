@@ -5,6 +5,7 @@ import com.example.bot.availability.AvailabilityService
 import com.example.bot.policy.CutoffPolicy
 import com.example.bot.routes.availabilityRoutes
 import com.example.bot.routes.bookingRoutes
+import com.example.bot.plugins.configureSecurity
 import com.example.bot.booking.BookingService
 import com.example.bot.data.booking.InMemoryBookingRepository
 import com.example.bot.data.outbox.InMemoryOutboxService
@@ -27,7 +28,6 @@ import io.ktor.server.routing.routing
 import kotlinx.serialization.Serializable
 import java.time.Instant
 import java.time.LocalDate
-
 
 @Serializable
 data class TelegramMessage(val text: String? = null)
@@ -61,7 +61,7 @@ fun Application.module() {
     val apiBase = routes.property("api").getString()
 
     configureMonitoring(metricsPath, healthPath)
-
+    configureSecurity()
     val repository = DummyAvailabilityRepository
     val resolver = OperatingRulesResolver(repository)
     val cutoffPolicy = CutoffPolicy()
@@ -118,4 +118,3 @@ private object DummyAvailabilityRepository : AvailabilityRepository {
 
     override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
 }
-
