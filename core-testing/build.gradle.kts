@@ -11,5 +11,5 @@ dependencies {
     testImplementation(libs.kotest.runner)
     testImplementation(libs.kotest.assertions)
     testImplementation(libs.mockk)
-    testImplementation(libs.ktor.server.tests)
+    testImplementation(libs.ktor.server.test.host)
 }

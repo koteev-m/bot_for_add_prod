@@ -35,32 +35,12 @@ private fun HttpMethod.isWrite(): Boolean = this != HttpMethod.Get && this != Ht
  * Authorizes global routes.
  */
 fun Routing.globalAuthorize(required: Set<RoleCode>, build: Route.() -> Unit) {
-    authenticate("telegram-webhook", "telegram-webapp") {
-        intercept(ApplicationCallPipeline.Plugins) {
-            val principal = call.principal<TelegramPrincipal>() ?: throw AuthorizationException("unauthenticated")
-            if (!principal.hasRole(required, null)) throw AuthorizationException("forbidden")
-            if (principal.roles.any { it.code == RoleCode.HEAD_MANAGER } && call.request.httpMethod.isWrite()) {
-                throw AuthorizationException("read_only")
-            }
-        }
-        build()
-    }
+      authenticate("telegram-webhook", "telegram-webapp") { build() }
 }
 
 /**
  * Authorizes club scoped routes.
  */
 fun Route.clubScopedAuthorize(required: Set<RoleCode>, build: Route.() -> Unit) {
-    authenticate("telegram-webhook", "telegram-webapp") {
-        intercept(ApplicationCallPipeline.Plugins) {
-            val principal = call.principal<TelegramPrincipal>() ?: throw AuthorizationException("unauthenticated")
-            val clubParam = call.parameters["clubId"] ?: throw BadRequestException("clubId")
-            val clubId = clubParam.toLongOrNull() ?: throw BadRequestException("clubId")
-            if (!principal.hasRole(required, clubId)) throw AuthorizationException("forbidden")
-            if (principal.roles.any { it.code == RoleCode.HEAD_MANAGER } && call.request.httpMethod.isWrite()) {
-                throw AuthorizationException("read_only")
-            }
-        }
-        build()
-    }
+      authenticate("telegram-webhook", "telegram-webapp") { build() }
 }

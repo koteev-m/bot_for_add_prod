@@ -1,8 +1,8 @@
 [versions]
-kotlin = "1.9.23"
-ksp = "1.9.23-1.0.19"
-ktor = "2.3.7"
-serialization = "1.6.3"
+# Kotlin and related toolchain
+kotlin = "2.2.10"
+ktor = "3.2.3"
+serialization = "1.7.1"
 exposed = "0.49.0"
 hikari = "5.1.0"
 flyway = "10.16.0"
@@ -15,7 +15,7 @@ kotest = "5.8.0"
 mockk = "1.13.10"
 detekt = "1.23.6"
 ktlint = "12.1.1"
-coroutines = "1.8.1"
+coroutines = "1.10.2"
 testcontainers = "1.19.7"
 
 [libraries]
@@ -27,7 +27,8 @@ ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx
 ktor-server-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor" }
 ktor-server-auth = { module = "io.ktor:ktor-server-auth", version.ref = "ktor" }
 ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor" }
-ktor-server-tests = { module = "io.ktor:ktor-server-tests-jvm", version.ref = "ktor" }
+ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
+pengrad-telegram = { module = "com.github.pengrad:java-telegram-bot-api", version = "9.2.0" }
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
 exposed-dao = { module = "org.jetbrains.exposed:exposed-dao", version.ref = "exposed" }
 exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed" }
@@ -49,6 +50,5 @@ testcontainers-postgresql = { module = "org.testcontainers:postgresql", version.
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }

@@ -38,6 +38,17 @@ Required variables:
 The application reads secrets only from the environment. To switch between
 configurations set `APP_ENV` (`dev` is default, set `prod` for production).
 
+## Telegram bot modes
+
+Set `RUN_MODE=webhook` to start the Ktor server and expose `/webhook` for Telegram updates.
+Use `/telegram/setup-webhook` to call Bot API `setWebhook` with the URL `WEBHOOK_BASE_URL/webhook`.
+
+Set `RUN_MODE=polling` to start long polling via `PollingMain`.
+`getUpdates` and `setWebhook` are mutually exclusive.
+
+When using a local Bot API server (`LOCAL_BOT_API_URL`), the bot will send requests
+to that base URL instead of `https://api.telegram.org`.
+
 ## Running the bot
 
 ```bash
