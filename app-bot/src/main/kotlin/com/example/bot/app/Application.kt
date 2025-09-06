@@ -4,6 +4,10 @@ import com.example.bot.availability.AvailabilityRepository
 import com.example.bot.availability.AvailabilityService
 import com.example.bot.policy.CutoffPolicy
 import com.example.bot.routes.availabilityRoutes
+import com.example.bot.routes.bookingRoutes
+import com.example.bot.booking.BookingService
+import com.example.bot.data.booking.InMemoryBookingRepository
+import com.example.bot.data.outbox.InMemoryOutboxService
 import com.example.bot.telemetry.Telemetry.configureMonitoring
 import com.example.bot.time.OperatingRulesResolver
 import io.ktor.http.HttpHeaders
@@ -63,8 +67,15 @@ fun Application.module() {
     val cutoffPolicy = CutoffPolicy()
     val availabilityService = AvailabilityService(repository, resolver, cutoffPolicy)
 
+    val bookingRepo = InMemoryBookingRepository()
+    val outbox = InMemoryOutboxService()
+    val bookingService = BookingService(bookingRepo, bookingRepo, outbox)
+
     routing {
-        route(apiBase) { availabilityRoutes(availabilityService) }
+        route(apiBase) {
+            availabilityRoutes(availabilityService)
+            bookingRoutes(bookingService)
+        }
         post(webhookPath) {
             val update = call.receive<TelegramUpdate>()
             val reply = update.message?.text ?: ""
