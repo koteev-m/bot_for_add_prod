@@ -1,0 +1,36 @@
+package com.example.bot.i18n
+
+/**
+ * Localized bot texts used across guest flow.
+ */
+class BotTexts {
+    /**
+     * Returns greeting text based on [lang]. Defaults to Russian.
+     */
+    fun greeting(lang: String?): String = if (lang.isEnglish()) "Welcome!" else "Привет!"
+
+    /**
+     * Returns menu button labels in selected language.
+     */
+    fun menu(lang: String?): Menu =
+        if (lang.isEnglish()) {
+            Menu("Choose club", "My bookings", "Ask question", "Music")
+        } else {
+            Menu("Выбрать клуб", "Мои бронирования", "Задать вопрос", "Музыка")
+        }
+
+    /**
+     * Legend for hall renderer.
+     */
+    fun legend(lang: String?): String =
+        if (lang.isEnglish()) "🟢 free / 🟡 hold / 🔴 booked" else "🟢 свободно / 🟡 hold / 🔴 занято"
+
+    data class Menu(
+        val chooseClub: String,
+        val myBookings: String,
+        val ask: String,
+        val music: String,
+    )
+
+    private fun String?.isEnglish(): Boolean = this?.startsWith("en", ignoreCase = true) == true
+}

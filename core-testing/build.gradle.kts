@@ -12,4 +12,7 @@ dependencies {
     testImplementation(libs.kotest.assertions)
     testImplementation(libs.mockk)
     testImplementation(libs.ktor.server.test.host)
+    testImplementation(projects.appBot)
+    testImplementation(libs.pengrad.telegram)
+    testImplementation("com.google.code.gson:gson:2.10.1")
 }

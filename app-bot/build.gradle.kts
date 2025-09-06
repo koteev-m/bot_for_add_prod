@@ -18,7 +18,6 @@ dependencies {
     implementation(libs.ktor.server.status.pages)
     implementation(libs.logback)
     implementation(libs.pengrad.telegram)
-    testImplementation(projects.coreTesting)
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.kotest.runner)
