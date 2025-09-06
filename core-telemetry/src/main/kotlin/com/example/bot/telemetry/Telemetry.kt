@@ -13,13 +13,16 @@ import io.micrometer.prometheus.PrometheusMeterRegistry
 object Telemetry {
     val registry: MeterRegistry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
 
-    fun Application.configureMonitoring() {
+    fun Application.configureMonitoring(
+        metricsPath: String,
+        healthPath: String,
+    ) {
         routing {
-            get("/metrics") {
+            get(metricsPath) {
                 val metrics = (registry as PrometheusMeterRegistry).scrape()
                 call.respondText(metrics, ContentType.parse("text/plain"))
             }
-            get("/health") {
+            get(healthPath) {
                 call.respondText("OK")
             }
         }

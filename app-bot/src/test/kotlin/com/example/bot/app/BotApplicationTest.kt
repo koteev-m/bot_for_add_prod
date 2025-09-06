@@ -13,15 +13,28 @@ import io.ktor.server.testing.testApplication
 
 class BotApplicationTest : StringSpec({
     "echoes message" {
-        testApplication {
-            application { module() }
-            val response =
-                client.post("/webhook") {
-                    headers { append(HttpHeaders.ContentType, ContentType.Application.Json.toString()) }
-                    setBody("{\"updateId\":1,\"message\":{\"text\":\"hi\"}}")
-                }
-            response.status shouldBe HttpStatusCode.OK
-            response.bodyAsText() shouldBe "hi"
+        val vars =
+            mapOf(
+                "BOT_TOKEN" to "x",
+                "WEBHOOK_SECRET_TOKEN" to "y",
+                "DATABASE_URL" to "jdbc:test",
+                "DATABASE_USER" to "user",
+                "DATABASE_PASSWORD" to "pass",
+                "OWNER_TELEGRAM_ID" to "1",
+            )
+        vars.forEach { (k, v) -> System.setProperty(k, v) }
+        try {
+            testApplication {
+                val response =
+                    client.post("/webhook") {
+                        headers { append(HttpHeaders.ContentType, ContentType.Application.Json.toString()) }
+                        setBody("{\"updateId\":1,\"message\":{\"text\":\"hi\"}}")
+                    }
+                response.status shouldBe HttpStatusCode.OK
+                response.bodyAsText() shouldBe "hi"
+            }
+        } finally {
+            vars.keys.forEach { System.clearProperty(it) }
         }
     }
 })
