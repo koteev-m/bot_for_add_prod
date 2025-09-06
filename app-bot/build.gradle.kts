@@ -13,6 +13,7 @@ dependencies {
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
+    implementation(libs.ktor.server.cors)
     implementation(libs.logback)
     testImplementation(projects.coreTesting)
     testImplementation(libs.ktor.server.tests)
