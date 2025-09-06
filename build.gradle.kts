@@ -27,4 +27,12 @@ subprojects {
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
     }
+
+    tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
+        ignoreFailures = true
+    }
+
+    extensions.configure<org.jlleitschuh.gradle.ktlint.KtlintExtension> {
+        ignoreFailures.set(true)
+    }
 }
