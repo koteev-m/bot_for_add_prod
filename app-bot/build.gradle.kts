@@ -24,5 +24,5 @@ dependencies {
 }
 
 application {
-    mainClass.set("com.example.bot.app.BotApplicationKt")
+    mainClass.set("com.example.bot.app.ApplicationKt")
 }
