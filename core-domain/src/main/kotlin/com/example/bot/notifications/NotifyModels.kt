@@ -1,5 +1,7 @@
 package com.example.bot.notifications
 
+import kotlinx.serialization.Serializable
+
 // Domain events that may trigger notifications
 sealed interface TxEvent {
     data class BookingCreated(val bookingId: String) : TxEvent
@@ -12,33 +14,38 @@ sealed interface TxEvent {
 }
 
 // Notification send method
+@Serializable
 enum class NotifyMethod {
     TEXT,
     PHOTO,
-    ALBUM
+    ALBUM,
 }
 
 // Simplified parse modes for outgoing messages
+@Serializable
 enum class ParseMode {
     MARKDOWNV2,
-    HTML
+    HTML,
 }
 
 // Simple representation of media for albums
 // type can be "photo", "video", etc.
+@Serializable
 data class MediaItem(
     val type: String,
     val url: String,
     val caption: String? = null,
-    val parseMode: ParseMode? = null
+    val parseMode: ParseMode? = null,
 )
 
 // Minimal keyboard specification: rows of button labels
+@Serializable
 data class InlineKeyboardSpec(val rows: List<List<String>>)
 
 // Unified notification message
 // Depending on method, text/photoUrl/album are used
 // parseMode applies to text or captions where relevant
+@Serializable
 data class NotifyMessage(
     val chatId: Long,
     val messageThreadId: Int?,
@@ -48,5 +55,6 @@ data class NotifyMessage(
     val photoUrl: String?,
     val album: List<MediaItem>?,
     val buttons: InlineKeyboardSpec?,
-    val dedupKey: String?
+    val dedupKey: String?,
 )
+
