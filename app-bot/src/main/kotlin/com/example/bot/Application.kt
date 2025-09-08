@@ -4,6 +4,7 @@ import com.example.bot.dedup.UpdateDeduplicator
 import com.example.bot.polling.PollingMain
 import com.example.bot.telegram.TelegramClient
 import com.example.bot.telegram.telegramSetupRoutes
+import com.example.bot.miniapp.miniAppModule
 import com.example.bot.webhook.WebhookReply
 import com.example.bot.webhook.webhookRoute
 import com.example.bot.webhook.UnauthorizedWebhook
@@ -51,6 +52,7 @@ fun Application.module() {
     val client = TelegramClient(token, localApi)
     val dedup = UpdateDeduplicator()
 
+    miniAppModule()
     routing {
         webhookRoute(secret, dedup, handler = ::handleUpdate, client = client)
         telegramSetupRoutes(client, baseUrl, secret, maxConn, allowedUpdates)
