@@ -15,4 +15,8 @@ dependencies {
     testImplementation(projects.appBot)
     testImplementation(libs.pengrad.telegram)
     testImplementation("com.google.code.gson:gson:2.10.1")
+    testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.testcontainers.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.micrometer.core)
 }
