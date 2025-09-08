@@ -14,9 +14,9 @@ fun Application.miniAppModule() {
         gzip()
     }
     install(DefaultHeaders) {
-        header(HttpHeaders.XFrameOptions, "SAMEORIGIN")
+        header("X-Frame-Options", "SAMEORIGIN")
         header(
-            HttpHeaders.ContentSecurityPolicy,
+            "Content-Security-Policy",
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src *"
         )
     }
