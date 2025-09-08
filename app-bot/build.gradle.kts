@@ -9,6 +9,7 @@ dependencies {
     implementation(projects.coreData)
     implementation(projects.coreTelemetry)
     implementation(projects.coreSecurity)
+    implementation(libs.micrometer.core)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.content.negotiation)
