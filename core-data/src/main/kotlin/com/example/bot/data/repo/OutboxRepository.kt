@@ -96,6 +96,27 @@ class OutboxRepository(private val db: Database) {
             }
         }
 
+    suspend fun postpone(id: Long, nextRetryAt: OffsetDateTime) =
+        newSuspendedTransaction(db = db) {
+            NotificationsOutbox.update({ NotificationsOutbox.id eq id }) {
+                it[status] = "PENDING"
+                it[lastError] = null
+                it[NotificationsOutbox.nextRetryAt] = nextRetryAt
+            }
+        }
+
+    suspend fun markPermanentFailure(id: Long, error: String?) =
+        newSuspendedTransaction(db = db) {
+            NotificationsOutbox.update({ NotificationsOutbox.id eq id }) {
+                it[status] = "FAILED"
+                it[lastError] = error
+                it[NotificationsOutbox.nextRetryAt] = null
+                with(org.jetbrains.exposed.sql.SqlExpressionBuilder) {
+                    it[attempts] = attempts + 1
+                }
+            }
+        }
+
     suspend fun isSent(dedupKey: String): Boolean =
         newSuspendedTransaction(db = db) {
             NotificationsOutbox

@@ -1,37 +1,34 @@
 package com.example.bot.workers
 
 import com.example.bot.data.repo.OutboxRepository
-import com.example.bot.notifications.NotifyMethod
+import com.example.bot.notifications.NotifyConfig
 import com.example.bot.notifications.NotifyMessage
+import com.example.bot.notifications.NotifyMethod
 import com.example.bot.notifications.ParseMode
+import com.example.bot.notifications.RatePolicy
 import com.example.bot.telegram.NotifySender
+import com.example.bot.telemetry.Telemetry
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.model.request.Keyboard
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.OffsetDateTime
-import kotlin.math.pow
-
-/** Simple interface for token buckets. */
-interface TokenBucket {
-    suspend fun take()
-}
 
 class OutboxWorker(
     private val scope: CoroutineScope,
     private val repo: OutboxRepository,
     private val sender: NotifySender,
-    private val globalBucket: TokenBucket,
-    private val chatBucket: (Long) -> TokenBucket,
-    private val workers: Int,
+    private val ratePolicy: RatePolicy,
+    private val config: NotifyConfig,
+    private val registry: MeterRegistry = Telemetry.registry,
     private val batchSize: Int = 10,
 ) {
-
     fun start() {
-        repeat(workers) {
+        repeat(config.workerParallelism) {
             scope.launch { run() }
         }
     }
@@ -51,14 +48,27 @@ class OutboxWorker(
 
     private suspend fun process(rec: OutboxRepository.Record) {
         val msg = rec.message
+        val nowMs = System.currentTimeMillis()
         rec.dedupKey?.let {
             if (repo.isSent(it)) {
                 repo.markSent(rec.id, null)
                 return
             }
         }
-        globalBucket.take()
-        chatBucket(msg.chatId).take()
+        val g = ratePolicy.acquireGlobal(now = nowMs)
+        if (!g.granted) {
+            repo.postpone(rec.id, OffsetDateTime.now().plusNanos(g.retryAfterMs * 1_000_000))
+            registry.counter("notify.rate.throttled.global").increment()
+            registry.counter("notify.retried").increment()
+            return
+        }
+        val c = ratePolicy.acquireChat(msg.chatId, now = nowMs)
+        if (!c.granted) {
+            repo.postpone(rec.id, OffsetDateTime.now().plusNanos(c.retryAfterMs * 1_000_000))
+            registry.counter("notify.rate.throttled.chat").increment()
+            registry.counter("notify.retried").increment()
+            return
+        }
 
         val result = when (msg.method) {
             NotifyMethod.TEXT -> sender.sendMessage(
@@ -88,15 +98,40 @@ class OutboxWorker(
         }
 
         when (result) {
-            NotifySender.Result.Ok -> repo.markSent(rec.id, null)
+            NotifySender.Result.Ok -> {
+                repo.markSent(rec.id, null)
+                registry.counter(
+                    "notify.sent",
+                    "method", msg.method.name,
+                    "threaded", (msg.messageThreadId != null).toString(),
+                ).increment()
+            }
             is NotifySender.Result.RetryAfter -> {
-                val next = OffsetDateTime.now().plusSeconds(result.seconds.toLong())
-                repo.markFailed(rec.id, "retry_after", next)
+                val delayMs = result.seconds * 1000L
+                ratePolicy.on429(msg.chatId, delayMs)
+                registry.summary("notify.retry_after.ms").record(delayMs.toDouble())
+                repo.markFailed(rec.id, "429", OffsetDateTime.now().plusNanos(delayMs * 1_000_000))
+                registry.counter("notify.failed", "code", "429", "retryable", "true").increment()
+                registry.counter("notify.retried").increment()
             }
             is NotifySender.Result.Failed -> {
-                val delaySec = 2.0.pow(rec.attempts.toDouble()).toLong().coerceAtLeast(1)
-                val next = OffsetDateTime.now().plusSeconds(delaySec)
-                repo.markFailed(rec.id, result.description, next)
+                if (result.code == 400 || result.code == 403) {
+                    repo.markPermanentFailure(rec.id, result.description)
+                    registry.counter(
+                        "notify.failed",
+                        "code", result.code.toString(),
+                        "retryable", "false",
+                    ).increment()
+                } else {
+                    val delayMs = (config.retryBaseMs * (1L shl rec.attempts)).coerceAtMost(config.retryMaxMs)
+                    repo.markFailed(rec.id, result.description, OffsetDateTime.now().plusNanos(delayMs * 1_000_000))
+                    registry.counter(
+                        "notify.failed",
+                        "code", result.code.toString(),
+                        "retryable", "true",
+                    ).increment()
+                    registry.counter("notify.retried").increment()
+                }
             }
         }
     }
@@ -115,4 +150,3 @@ class OutboxWorker(
         InlineKeyboardMarkup(*rows)
     }
 }
-

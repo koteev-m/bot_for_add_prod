@@ -1,17 +1,25 @@
 package com.example.bot.telegram
 
 import com.pengrad.telegrambot.TelegramBot
-import com.pengrad.telegrambot.model.request.*
+import com.pengrad.telegrambot.model.request.InputMediaPhoto
+import com.pengrad.telegrambot.model.request.Keyboard
+import com.pengrad.telegrambot.model.request.ParseMode
 import com.pengrad.telegrambot.request.BaseRequest
 import com.pengrad.telegrambot.request.SendMediaGroup
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.request.SendPhoto
 import com.pengrad.telegrambot.response.BaseResponse
+import com.example.bot.telemetry.Telemetry
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 
-class NotifySender(private val bot: TelegramBot) {
+class NotifySender(
+    private val bot: TelegramBot,
+    private val registry: MeterRegistry = Telemetry.registry,
+) {
 
     sealed interface Result {
         data object Ok : Result
@@ -93,10 +101,13 @@ class NotifySender(private val bot: TelegramBot) {
         return result
     }
 
+    private val sendTimer: Timer = registry.timer("notify.send.ms")
+
     private suspend fun <T : BaseRequest<T, R>, R : BaseResponse> execute(
         chatId: Long,
         request: BaseRequest<T, R>,
     ): Result = withContext(Dispatchers.IO) {
+        val sample = Timer.start(registry)
         try {
             val resp = bot.execute(request)
             when {
@@ -110,6 +121,8 @@ class NotifySender(private val bot: TelegramBot) {
         } catch (t: Exception) {
             log.warn("Failed to send to chat {}: {}", mask(chatId), t.message)
             Result.Failed(-1, t.message)
+        } finally {
+            sample.stop(sendTimer)
         }
     }
 
