@@ -72,15 +72,15 @@ class InMemoryBookingRepository : BookingReadRepository, BookingWriteRepository 
         arrivalBy: Instant?,
         qrSecret: String,
         idempotencyKey: String,
-    ): BookingRecord {
-        bookingsByKey[idempotencyKey]?.let { return it }
+    ): BookingRecord = synchronized(bookings) {
+        bookingsByKey[idempotencyKey]?.let { return@synchronized it }
         if (bookings.values.any { it.tableId == tableId && it.eventId == eventId && it.status in setOf("CONFIRMED", "SEATED") }) {
             throw IllegalStateException("active booking exists")
         }
         val record = BookingRecord(UUID.randomUUID(), tableId, tableNumber, eventId, guests, totalDeposit, status, arrivalBy, qrSecret)
         bookings[record.id] = record
         bookingsByKey[idempotencyKey] = record
-        return record
+        return@synchronized record
     }
 
     override suspend fun updateStatus(id: UUID, status: String) {
