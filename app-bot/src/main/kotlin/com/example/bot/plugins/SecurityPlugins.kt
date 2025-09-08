@@ -9,6 +9,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.auth.Authentication
+import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.response.respond
 
@@ -27,6 +28,9 @@ fun Application.configureSecurity() {
     install(StatusPages) {
         exception<AuthorizationException> { call, cause ->
             call.respond(HttpStatusCode.Forbidden, mapOf("error" to cause.message))
+        }
+        exception<BadRequestException> { call, cause ->
+            call.respond(HttpStatusCode.BadRequest, mapOf("error" to cause.message))
         }
         exception<Throwable> { call, cause ->
             call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (cause.message ?: "error")))
