@@ -16,6 +16,8 @@ dependencies {
     implementation(libs.ktor.server.cors)
     implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.status.pages)
+    implementation(libs.ktor.server.compression)
+    implementation(libs.ktor.server.default.headers)
     implementation(libs.logback)
     implementation(libs.pengrad.telegram)
     testImplementation(libs.ktor.server.test.host)

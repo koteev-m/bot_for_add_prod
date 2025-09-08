@@ -1,0 +1,122 @@
+package com.example.bot.telegram
+
+import com.pengrad.telegrambot.TelegramBot
+import com.pengrad.telegrambot.model.request.*
+import com.pengrad.telegrambot.request.BaseRequest
+import com.pengrad.telegrambot.request.SendMediaGroup
+import com.pengrad.telegrambot.request.SendMessage
+import com.pengrad.telegrambot.request.SendPhoto
+import com.pengrad.telegrambot.response.BaseResponse
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.slf4j.LoggerFactory
+
+class NotifySender(private val bot: TelegramBot) {
+
+    sealed interface Result {
+        data object Ok : Result
+        data class RetryAfter(val seconds: Int) : Result
+        data class Failed(val code: Int, val description: String?) : Result
+    }
+
+    sealed interface PhotoContent {
+        data class Url(val url: String) : PhotoContent
+        data class Bytes(val bytes: ByteArray) : PhotoContent
+    }
+
+    data class Media(
+        val content: PhotoContent,
+        val caption: String? = null,
+        val parseMode: ParseMode? = null,
+    )
+
+    private val log = LoggerFactory.getLogger(NotifySender::class.java)
+
+    suspend fun sendMessage(
+        chatId: Long,
+        text: String,
+        parseMode: ParseMode? = null,
+        threadId: Int? = null,
+        buttons: Keyboard? = null,
+    ): Result {
+        val request = SendMessage(chatId, text)
+        parseMode?.let { request.parseMode(it) }
+        threadId?.let { request.messageThreadId(it) }
+        buttons?.let { request.replyMarkup(it) }
+        return execute(chatId, request)
+    }
+
+    suspend fun sendPhoto(
+        chatId: Long,
+        photo: PhotoContent,
+        caption: String? = null,
+        parseMode: ParseMode? = null,
+        threadId: Int? = null,
+    ): Result {
+        val request = when (photo) {
+            is PhotoContent.Url -> SendPhoto(chatId, photo.url)
+            is PhotoContent.Bytes -> SendPhoto(chatId, photo.bytes)
+        }
+        caption?.let { request.caption(it) }
+        parseMode?.let { request.parseMode(it) }
+        threadId?.let { request.messageThreadId(it) }
+        return execute(chatId, request)
+    }
+
+    suspend fun sendMediaGroup(
+        chatId: Long,
+        media: List<Media>,
+        threadId: Int? = null,
+    ): Result {
+        val inputMedia = media.map { m ->
+            val im = when (m.content) {
+                is PhotoContent.Url -> InputMediaPhoto(m.content.url)
+                is PhotoContent.Bytes -> InputMediaPhoto(m.content.bytes)
+            }
+            m.caption?.let { im.caption(it) }
+            m.parseMode?.let { im.parseMode(it) }
+            im
+        }
+        val request = SendMediaGroup(chatId, *inputMedia.toTypedArray())
+        threadId?.let { request.messageThreadId(it) }
+        val result = execute(chatId, request)
+        if (result is Result.Failed && result.code == 400 && threadId != null &&
+            (result.description?.contains("thread", true) == true)
+        ) {
+            log.info("SendMediaGroup unsupported, fallback to sequential sendPhoto for chat {}", mask(chatId))
+            media.forEach { m ->
+                val r = sendPhoto(chatId, m.content, m.caption, m.parseMode, threadId)
+                if (r !is Result.Ok) return r
+            }
+            return Result.Ok
+        }
+        return result
+    }
+
+    private suspend fun <T : BaseRequest<T, R>, R : BaseResponse> execute(
+        chatId: Long,
+        request: BaseRequest<T, R>,
+    ): Result = withContext(Dispatchers.IO) {
+        try {
+            val resp = bot.execute(request)
+            when {
+                resp.isOk -> Result.Ok
+                resp.errorCode() == 429 -> {
+                    val retry = resp.parameters()?.retryAfter()
+                    if (retry != null) Result.RetryAfter(retry) else Result.Failed(429, resp.description())
+                }
+                else -> Result.Failed(resp.errorCode(), resp.description())
+            }
+        } catch (t: Exception) {
+            log.warn("Failed to send to chat {}: {}", mask(chatId), t.message)
+            Result.Failed(-1, t.message)
+        }
+    }
+
+    private fun mask(id: Long): String {
+        val s = id.toString()
+        val hidden = (s.length - 3).coerceAtLeast(0)
+        return "*".repeat(hidden) + s.takeLast(3)
+    }
+}
+
