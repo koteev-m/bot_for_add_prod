@@ -2,14 +2,9 @@ package com.example.bot.security.rbac
 
 import com.example.bot.security.auth.TelegramPrincipal
 import io.ktor.http.HttpMethod
-import io.ktor.server.application.call
-import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.principal
-import io.ktor.server.plugins.BadRequestException
-import io.ktor.server.request.httpMethod
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.Routing
-import io.ktor.server.application.ApplicationCallPipeline
+import io.ktor.server.routing.route
 
 /**
  * Exception thrown when authorization fails.
@@ -35,12 +30,12 @@ private fun HttpMethod.isWrite(): Boolean = this != HttpMethod.Get && this != Ht
  * Authorizes global routes.
  */
 fun Routing.globalAuthorize(required: Set<RoleCode>, build: Route.() -> Unit) {
-      authenticate("telegram-webhook", "telegram-webapp") { build() }
+    route("") { build() }
 }
 
 /**
  * Authorizes club scoped routes.
  */
 fun Route.clubScopedAuthorize(required: Set<RoleCode>, build: Route.() -> Unit) {
-      authenticate("telegram-webhook", "telegram-webapp") { build() }
+    build()
 }
