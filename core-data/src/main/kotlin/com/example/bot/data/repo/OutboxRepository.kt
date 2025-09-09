@@ -3,15 +3,15 @@ package com.example.bot.data.repo
 import com.example.bot.data.notifications.NotificationsOutbox
 import com.example.bot.notifications.NotifyMessage
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insertIgnore
 import org.jetbrains.exposed.sql.select
-import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
-import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.update
 import java.time.OffsetDateTime
 
 class OutboxRepository(private val db: Database) {
@@ -55,8 +55,10 @@ class OutboxRepository(private val db: Database) {
                     (NotificationsOutbox.status eq "PENDING") and
                         (NotificationsOutbox.nextRetryAt lessEq now)
                 }
-                .orderBy(NotificationsOutbox.priority to SortOrder.ASC,
-                    NotificationsOutbox.createdAt to SortOrder.ASC)
+                .orderBy(
+                    NotificationsOutbox.priority to SortOrder.ASC,
+                    NotificationsOutbox.createdAt to SortOrder.ASC,
+                )
                 .forUpdate()
                 .limit(limit)
                 .map {
@@ -127,4 +129,3 @@ class OutboxRepository(private val db: Database) {
                 .empty().not()
         }
 }
-

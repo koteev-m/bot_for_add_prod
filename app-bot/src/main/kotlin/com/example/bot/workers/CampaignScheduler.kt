@@ -61,7 +61,7 @@ class CampaignScheduler(
                 Telemetry.registry.gauge(
                     "notify_campaign_remaining",
                     listOf(Tag.of("campaign", id.toString())),
-                    ref
+                    ref,
                 )
             }
         }
@@ -105,4 +105,3 @@ class CampaignScheduler(
         return start.toInt()..end.toInt()
     }
 }
-

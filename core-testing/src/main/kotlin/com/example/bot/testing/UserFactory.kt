@@ -7,7 +7,5 @@ object UserFactory {
         id: Long = 1,
         name: String = "test",
         role: String = "USER",
-    ): User {
-        return User(id = id, name = name, role = role)
-    }
+    ): User = User(id = id, name = name, role = role)
 }

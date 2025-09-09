@@ -21,4 +21,3 @@ object AuthProviders {
         // no-op stub
     }
 }
-

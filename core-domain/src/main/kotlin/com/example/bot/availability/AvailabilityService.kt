@@ -19,13 +19,21 @@ import java.util.concurrent.ConcurrentHashMap
  */
 interface AvailabilityRepository {
     suspend fun findClub(clubId: Long): Club?
+
     suspend fun listClubHours(clubId: Long): List<ClubHour>
+
     suspend fun listHolidays(clubId: Long, from: LocalDate, to: LocalDate): List<ClubHoliday>
+
     suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate): List<ClubException>
+
     suspend fun listEvents(clubId: Long, from: Instant, to: Instant): List<Event>
+
     suspend fun findEvent(clubId: Long, startUtc: Instant): Event?
+
     suspend fun listTables(clubId: Long): List<Table>
+
     suspend fun listActiveHoldTableIds(eventId: Long, now: Instant): Set<Long>
+
     suspend fun listActiveBookingTableIds(eventId: Long): Set<Long>
 }
 
@@ -117,9 +125,7 @@ class AvailabilityService(
     /**
      * Counts free tables for quick badge display.
      */
-    suspend fun countFreeTables(clubId: Long, eventStartUtc: Instant): Int {
-        return listFreeTables(clubId, eventStartUtc).size
-    }
+    suspend fun countFreeTables(clubId: Long, eventStartUtc: Instant): Int = listFreeTables(clubId, eventStartUtc).size
 
     /** cache invalidation helpers */
     fun invalidateNights(clubId: Long) {
@@ -156,4 +162,3 @@ private class TimedCache<K, V>(private val ttl: Duration) {
         store.remove(key)
     }
 }
-

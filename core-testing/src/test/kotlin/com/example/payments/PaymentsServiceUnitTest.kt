@@ -13,11 +13,11 @@ import com.example.bot.payments.PaymentsRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
-import kotlinx.coroutines.test.runTest
-import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 

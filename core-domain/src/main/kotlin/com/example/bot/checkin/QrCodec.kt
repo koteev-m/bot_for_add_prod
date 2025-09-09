@@ -55,4 +55,3 @@ class QrCodec(private val key: ByteArray) {
         return Data(clubId, eventId, entryId)
     }
 }
-

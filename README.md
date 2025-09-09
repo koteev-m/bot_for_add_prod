@@ -15,7 +15,7 @@ This repository contains a Kotlin multi-module project built with Gradle Kotlin 
 
 ```bash
 ./gradlew build
-./gradlew detekt ktlintCheck
+./gradlew staticCheck
 ```
 
 ## Configuration

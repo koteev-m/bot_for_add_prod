@@ -2,6 +2,7 @@ package com.example.availability
 
 import com.example.bot.availability.AvailabilityRepository
 import com.example.bot.availability.AvailabilityService
+import com.example.bot.availability.Table
 import com.example.bot.policy.CutoffPolicy
 import com.example.bot.time.Club
 import com.example.bot.time.ClubException
@@ -9,26 +10,33 @@ import com.example.bot.time.ClubHoliday
 import com.example.bot.time.ClubHour
 import com.example.bot.time.Event
 import com.example.bot.time.OperatingRulesResolver
-import com.example.bot.availability.Table
-import java.time.*
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import java.time.*
 import kotlin.test.assertEquals
 
 class AvailabilityServiceTest {
     private class FakeRepo : AvailabilityRepository {
         override suspend fun findClub(clubId: Long) = Club(clubId, "Europe/Berlin")
+
         override suspend fun listClubHours(clubId: Long) = listOf(
             ClubHour(DayOfWeek.FRIDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
-            ClubHour(DayOfWeek.SATURDAY, LocalTime.of(22, 0), LocalTime.of(6, 0))
+            ClubHour(DayOfWeek.SATURDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
         )
+
         override suspend fun listHolidays(clubId: Long, from: LocalDate, to: LocalDate) = emptyList<ClubHoliday>()
+
         override suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate) =
             listOf(ClubException(LocalDate.of(2024, 3, 29), false, null, null))
+
         override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) = emptyList<Event>()
+
         override suspend fun findEvent(clubId: Long, startUtc: Instant) = null
+
         override suspend fun listTables(clubId: Long) = emptyList<Table>()
+
         override suspend fun listActiveHoldTableIds(eventId: Long, now: Instant) = emptySet<Long>()
+
         override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
     }
 

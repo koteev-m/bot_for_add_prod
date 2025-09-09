@@ -63,9 +63,14 @@ data class BookingSummary(
  */
 sealed interface BookingError {
     data class Conflict(val message: String) : BookingError
+
     data class Validation(val message: String) : BookingError
+
     data class NotFound(val message: String) : BookingError
+
     data class Forbidden(val message: String) : BookingError
+
     data class Gone(val message: String) : BookingError
+
     data class Internal(val message: String, val cause: Throwable? = null) : BookingError
 }

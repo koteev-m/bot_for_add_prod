@@ -1,0 +1,16 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>CyclomaticComplexMethod:SegmentationRepository.kt$SegmentationRepository$private fun fieldCondition(node: SegmentNode): Op&lt;Boolean&gt;</ID>
+    <ID>MatchingDeclarationName:BookingRepositories.kt$InMemoryBookingRepository : BookingReadRepositoryBookingWriteRepository</ID>
+    <ID>MatchingDeclarationName:OutboxServiceImpl.kt$InMemoryOutboxService : OutboxService</ID>
+    <ID>MatchingDeclarationName:PaymentsRepository.kt$PaymentsRepositoryImpl : PaymentsRepository</ID>
+    <ID>MaxLineLength:BookingRepositories.kt$InMemoryBookingRepository$BookingRecord(UUID.randomUUID(), tableId, tableNumber, eventId, guests, totalDeposit, status, arrivalBy, qrSecret)</ID>
+    <ID>UnusedParameter:OutboxRepository.kt$OutboxRepository$messageId: Long?</ID>
+    <ID>UseCheckOrError:BookingRepositories.kt$InMemoryBookingRepository$throw IllegalStateException("active booking exists")</ID>
+    <ID>UseCheckOrError:BookingRepositories.kt$InMemoryBookingRepository$throw IllegalStateException("active hold exists")</ID>
+    <ID>WildcardImport:Repositories.kt$import com.example.bot.music.*</ID>
+    <ID>WildcardImport:Repositories.kt$import org.jetbrains.exposed.sql.*</ID>
+  </CurrentIssues>
+</SmellBaseline>

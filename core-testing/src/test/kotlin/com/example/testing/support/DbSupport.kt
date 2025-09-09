@@ -1,8 +1,8 @@
 package com.example.testing.support
 
-import javax.sql.DataSource
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.sql.Database
+import javax.sql.DataSource
 
 /**
  * Utility to reset database state and apply migrations before each test.

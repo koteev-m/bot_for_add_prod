@@ -1,10 +1,10 @@
 package com.example.bot.availability
 
 import com.example.bot.time.NightSlot
-import java.time.Instant
-import java.time.LocalDateTime
 import kotlinx.serialization.Contextual
 import kotlinx.serialization.Serializable
+import java.time.Instant
+import java.time.LocalDateTime
 
 /**
  * Public DTO representing available night.
@@ -64,4 +64,3 @@ fun NightSlot.toDto(arrivalBy: Instant): NightDto =
         closeLocal = closeLocal,
         timezone = zone.id,
     )
-

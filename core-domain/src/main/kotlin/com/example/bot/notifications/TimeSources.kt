@@ -12,7 +12,9 @@ object SystemTimeSource : TimeSource {
 
 class FakeTimeSource(startMs: Long = 0L) : TimeSource {
     private val t = AtomicLong(startMs)
+
     override fun nowMs(): Long = t.get()
+
     fun advance(ms: Long) {
         t.addAndGet(ms)
     }

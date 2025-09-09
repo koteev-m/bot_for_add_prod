@@ -88,12 +88,11 @@ data class Event(
 class OperatingRulesResolver(
     private val repository: AvailabilityRepository,
     private val clock: Clock = Clock.systemUTC(),
-)
+) {
 
 /**
- * Resolve slots for given club and period.
- */
-{
+     * Resolve slots for given club and period.
+     */
     suspend fun resolve(clubId: Long, fromUtc: Instant, toUtc: Instant): List<NightSlot> {
         val club = repository.findClub(clubId) ?: return emptyList()
         val zone = ZoneId.of(club.timezone)
@@ -209,4 +208,3 @@ class OperatingRulesResolver(
         return ZonedDateTime.ofLocal(ldt, zone, null)
     }
 }
-

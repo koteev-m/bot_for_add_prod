@@ -6,10 +6,10 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.routing.routing
-import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.testing.testApplication
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -26,10 +26,14 @@ class MetricsRouteTest {
             install(ContentNegotiation) { json() }
             installMetrics(registry)
             routing {
-                observabilityRoutes(provider, object : HealthService {
-                    override suspend fun health() = HealthReport(CheckStatus.UP, emptyList())
-                    override suspend fun readiness() = HealthReport(CheckStatus.UP, emptyList())
-                })
+                observabilityRoutes(
+                    provider,
+                    object : HealthService {
+                        override suspend fun health() = HealthReport(CheckStatus.UP, emptyList())
+
+                        override suspend fun readiness() = HealthReport(CheckStatus.UP, emptyList())
+                    },
+                )
             }
         }
         val res = client.get("/metrics")
@@ -42,4 +46,3 @@ class MetricsRouteTest {
         assertTrue(body.contains("custom_counter_total"))
     }
 }
-

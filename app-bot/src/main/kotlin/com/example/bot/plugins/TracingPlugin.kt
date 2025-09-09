@@ -1,11 +1,9 @@
 package com.example.bot.plugins
 
+import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationCallPipeline
 import io.micrometer.tracing.Tracer
 import org.slf4j.MDC
-import io.ktor.server.application.Application
-import io.ktor.server.request.httpMethod
-import io.ktor.server.request.path
-import io.ktor.server.application.ApplicationCallPipeline
 
 fun Application.installTracing(tracer: Tracer) {
     intercept(ApplicationCallPipeline.Setup) {
@@ -22,4 +20,3 @@ fun Application.installTracing(tracer: Tracer) {
         }
     }
 }
-

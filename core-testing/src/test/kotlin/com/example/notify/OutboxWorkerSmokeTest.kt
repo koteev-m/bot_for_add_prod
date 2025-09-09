@@ -12,9 +12,9 @@ import com.example.bot.telegram.NotifySender
 import com.example.bot.workers.OutboxWorker
 import com.example.testing.support.DbSupport
 import com.example.testing.support.PgContainer
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.coEvery
 import io.mockk.mockk
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -38,9 +38,14 @@ class OutboxWorkerSmokeTest : PgContainer() {
         coEvery { sender.sendPhoto(any(), any(), any(), any(), any()) } returns NotifySender.Result.Ok
         coEvery { sender.sendMediaGroup(any(), any(), any()) } returns NotifySender.Result.Ok
         val policy = object : RatePolicy {
-            override val timeSource: TimeSource = object : TimeSource { override fun nowMs() = System.currentTimeMillis() }
+            override val timeSource: TimeSource = object : TimeSource {
+                override fun nowMs() = System.currentTimeMillis()
+            }
+
             override fun acquireGlobal(n: Int, now: Long) = Permit(true)
+
             override fun acquireChat(chatId: Long, n: Int, now: Long) = Permit(true)
+
             override fun on429(chatId: Long?, retryAfter: Long, now: Long) {}
         }
         val registry = SimpleMeterRegistry()

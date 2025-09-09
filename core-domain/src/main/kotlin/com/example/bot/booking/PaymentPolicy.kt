@@ -26,4 +26,3 @@ data class PaymentPolicy(
     val currency: String = "RUB",
     val splitPay: Boolean = true,
 )
-

@@ -15,7 +15,11 @@ import javax.imageio.ImageIO
 
 class HallRendererTest : StringSpec({
     val base = BufferedImage(100, 60, BufferedImage.TYPE_INT_RGB).apply {
-        createGraphics().apply { color = Color.WHITE; fillRect(0, 0, 100, 60); dispose() }
+        createGraphics().apply {
+            color = Color.WHITE
+            fillRect(0, 0, 100, 60)
+            dispose()
+        }
     }
     val geometry = TableGeometryProvider { _, id ->
         when (id) {

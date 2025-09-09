@@ -1,21 +1,19 @@
 package com.example.bot.payments
 
-import com.example.bot.booking.BookingError
 import com.example.bot.booking.BookingService
-import com.example.bot.booking.PaymentPolicy
-import com.example.bot.booking.Either
 import com.example.bot.booking.BookingSummary
+import com.example.bot.booking.Either
+import com.example.bot.booking.PaymentPolicy
 import com.example.bot.booking.payments.ConfirmInput
-import com.example.bot.booking.payments.ContactInfo
 import com.example.bot.booking.payments.PaymentMode
 import com.example.bot.booking.payments.PaymentsService
 import com.example.bot.payments.PaymentsRepository.PaymentRecord
 import io.mockk.coEvery
 import io.mockk.mockk
+import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
-import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -44,9 +42,13 @@ class PaymentsServiceTest {
         )
 
         override suspend fun markPending(id: UUID) {}
+
         override suspend fun markCaptured(id: UUID, externalId: String?) {}
+
         override suspend fun markDeclined(id: UUID, reason: String) {}
+
         override suspend fun markRefunded(id: UUID, externalId: String?) {}
+
         override suspend fun findByPayload(payload: String): PaymentRecord? = null
     }
     private val config = PaymentConfig(providerToken = "test")
@@ -86,4 +88,3 @@ class PaymentsServiceTest {
         assertEquals(summary, (res.value as com.example.bot.booking.payments.ConfirmResult.Confirmed).booking)
     }
 }
-

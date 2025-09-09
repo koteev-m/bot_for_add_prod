@@ -16,7 +16,7 @@ data class NotifySegment(
     val title: String,
     val definition: JsonElement,
     val createdBy: Long,
-    val createdAt: OffsetDateTime
+    val createdAt: OffsetDateTime,
 )
 
 class NotifySegmentsRepository(private val db: Database) {
@@ -40,7 +40,7 @@ class NotifySegmentsRepository(private val db: Database) {
         title = row[NotifySegments.title],
         definition = row[NotifySegments.definition],
         createdBy = row[NotifySegments.createdBy],
-        createdAt = row[NotifySegments.createdAt]
+        createdAt = row[NotifySegments.createdAt],
     )
 }
 
@@ -56,7 +56,7 @@ data class NotifyCampaign(
     val startsAt: OffsetDateTime?,
     val createdBy: Long,
     val createdAt: OffsetDateTime,
-    val updatedAt: OffsetDateTime
+    val updatedAt: OffsetDateTime,
 )
 
 class NotifyCampaignsRepository(private val db: Database) {
@@ -93,7 +93,7 @@ class NotifyCampaignsRepository(private val db: Database) {
         startsAt = row[NotifyCampaigns.startsAt],
         createdBy = row[NotifyCampaigns.createdBy],
         createdAt = row[NotifyCampaigns.createdAt],
-        updatedAt = row[NotifyCampaigns.updatedAt]
+        updatedAt = row[NotifyCampaigns.updatedAt],
     )
 }
 
@@ -102,7 +102,7 @@ data class UserSubscription(
     val clubId: Long?,
     val topic: String,
     val optIn: Boolean,
-    val lang: String
+    val lang: String,
 )
 
 class UserSubscriptionsRepository(private val db: Database) {
@@ -133,7 +133,7 @@ class UserSubscriptionsRepository(private val db: Database) {
         clubId = row[UserSubscriptions.clubId],
         topic = row[UserSubscriptions.topic],
         optIn = row[UserSubscriptions.optIn],
-        lang = row[UserSubscriptions.lang]
+        lang = row[UserSubscriptions.lang],
     )
 }
 
@@ -146,7 +146,7 @@ data class OutboxRecord(
     val campaignId: Long?,
     val method: String,
     val payload: JsonElement,
-    val createdAt: OffsetDateTime
+    val createdAt: OffsetDateTime,
 )
 
 class NotificationsOutboxRepository(private val db: Database) {
@@ -177,6 +177,6 @@ class NotificationsOutboxRepository(private val db: Database) {
         campaignId = row[NotificationsOutbox.campaignId],
         method = row[NotificationsOutbox.method],
         payload = row[NotificationsOutbox.payload],
-        createdAt = row[NotificationsOutbox.createdAt]
+        createdAt = row[NotificationsOutbox.createdAt],
     )
 }

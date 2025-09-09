@@ -1,8 +1,6 @@
 package com.example.bot.music
 
 import com.example.bot.data.music.MusicItemRepositoryImpl
-import com.example.bot.music.MusicItemCreate
-import com.example.bot.music.MusicSource
 import kotlinx.coroutines.runBlocking
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.sql.Database
@@ -15,16 +13,27 @@ class RepositoryTest {
     @Test
     fun `create and list`() = runBlocking {
         org.junit.jupiter.api.Assumptions.assumeTrue(
-            org.testcontainers.DockerClientFactory.instance().isDockerAvailable
+            org.testcontainers.DockerClientFactory.instance().isDockerAvailable,
         )
         PostgreSQLContainer<Nothing>("postgres:15-alpine").use { pg ->
             pg.start()
             Flyway.configure().dataSource(pg.jdbcUrl, pg.username, pg.password).load().migrate()
-            val db = Database.connect(pg.jdbcUrl, driver = "org.postgresql.Driver", user = pg.username, password = pg.password)
+            val db = Database.connect(
+                pg.jdbcUrl,
+                driver = "org.postgresql.Driver",
+                user = pg.username,
+                password = pg.password,
+            )
             val repo = MusicItemRepositoryImpl(db)
             val created = repo.create(
-                MusicItemCreate(null, "Test", "DJ", MusicSource.YOUTUBE, "http://x", 60, null, listOf("tag"), Instant.EPOCH),
-                actor = 1
+                MusicItemCreate(
+                    null, "Test", "DJ", MusicSource.YOUTUBE, "http://x", 60, null,
+                    listOf(
+                        "tag",
+                    ),
+                    Instant.EPOCH,
+                ),
+                actor = 1,
             )
             val list = repo.listActive(null, 10, 0, null, null)
             assertEquals(1, list.size)
@@ -32,4 +41,3 @@ class RepositoryTest {
         }
     }
 }
-

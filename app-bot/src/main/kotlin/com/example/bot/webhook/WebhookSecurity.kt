@@ -18,4 +18,3 @@ suspend fun ApplicationCall.verifyWebhookSecret(expected: String) {
 
 /** Exception used to interrupt request processing after an unauthorized webhook. */
 object UnauthorizedWebhook : RuntimeException()
-

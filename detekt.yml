@@ -1,0 +1,12 @@
+style:
+  MagicNumber:
+    active: true
+    ignoreNumbers: ['-1', '0', '1', '2', '10', '60', '100', '1000']
+    ignorePropertyDeclaration: true
+    excludes: ['**/test/**']
+
+  MaxLineLength:
+    active: true
+    maxLineLength: 120
+    excludes: ['**/test/**']
+

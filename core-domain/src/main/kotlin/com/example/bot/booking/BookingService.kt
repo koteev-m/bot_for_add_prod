@@ -1,14 +1,14 @@
 package com.example.bot.booking
 
 import com.example.bot.outbox.OutboxService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.math.BigDecimal
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import kotlin.random.Random
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 private const val HOLD_TTL_MINUTES = 7L
 
@@ -177,5 +177,6 @@ class BookingService(
 /** Simple Either implementation. */
 sealed class Either<out L, out R> {
     data class Left<L>(val value: L) : Either<L, Nothing>()
+
     data class Right<R>(val value: R) : Either<Nothing, R>()
 }

@@ -33,4 +33,3 @@ interface SchedulerApi {
     /** Marks campaign as fully processed. */
     suspend fun markDone(id: Long)
 }
-

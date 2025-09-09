@@ -5,11 +5,17 @@ import kotlinx.serialization.Serializable
 // Domain events that may trigger notifications
 sealed interface TxEvent {
     data class BookingCreated(val bookingId: String) : TxEvent
+
     data class BookingCancelled(val bookingId: String) : TxEvent
+
     data class BookingSeated(val bookingId: String) : TxEvent
+
     data class GuestArrived(val guestId: String) : TxEvent
+
     data class GuestDenied(val guestId: String) : TxEvent
+
     data class GuestLate(val guestId: String) : TxEvent
+
     data class QuestionFromUser(val userId: String, val question: String) : TxEvent
 }
 
@@ -57,4 +63,3 @@ data class NotifyMessage(
     val buttons: InlineKeyboardSpec?,
     val dedupKey: String?,
 )
-

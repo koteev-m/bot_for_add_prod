@@ -1,8 +1,6 @@
 package com.example.bot.notifications
 
 import com.example.bot.data.repo.OutboxRepository
-import com.example.bot.notifications.NotifyMethod
-import com.example.bot.notifications.NotifyMessage
 import com.example.bot.telegram.NotifySender
 import com.example.bot.workers.OutboxWorker
 import io.kotest.core.spec.style.StringSpec
@@ -54,7 +52,10 @@ class OutboxRateLimitIT : StringSpec({
         }
         coEvery { repo.markSent(any(), any()) } coAnswers {
             val id: Long = arg(0)
-            records[id]?.apply { status = "SENT"; attempts++ }
+            records[id]?.apply {
+                status = "SENT"
+                attempts++
+            }
             1
         }
         coEvery { repo.markFailed(any(), any(), any()) } coAnswers {

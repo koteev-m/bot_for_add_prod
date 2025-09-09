@@ -6,15 +6,15 @@ import com.example.bot.webhook.UnauthorizedWebhook
 import com.example.bot.webhook.webhookRoute
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
-import io.ktor.client.request.post
 import io.ktor.client.request.header
+import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
@@ -24,6 +24,7 @@ class WebhookSecretHeaderTest : StringSpec({
     val secret = "token"
     val dedup = UpdateDeduplicator()
     val tgClient = TelegramClient("x")
+
     fun io.ktor.server.application.Application.testModule() {
         install(ContentNegotiation) { json() }
         install(StatusPages) {
@@ -69,4 +70,3 @@ class WebhookSecretHeaderTest : StringSpec({
         }
     }
 })
-

@@ -16,10 +16,9 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.serialization.kotlinx.json.json
-import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 
@@ -36,7 +35,9 @@ class NotifyRoutesTest : StringSpec({
             val client = createClient { }
             val resp = client.post("/api/notify/tx") {
                 contentType(ContentType.Application.Json)
-                setBody("""{"chatId":1,"messageThreadId":null,"method":"TEXT","text":"hi","parseMode":null,"photoUrl":null,"album":null,"buttons":null,"dedupKey":null}""")
+                setBody(
+                    """{"chatId":1,"messageThreadId":null,"method":"TEXT","text":"hi","parseMode":null,"photoUrl":null,"album":null,"buttons":null,"dedupKey":null}""",
+                )
             }
             resp.status shouldBe HttpStatusCode.Accepted
         }
@@ -84,4 +85,3 @@ class NotifyRoutesTest : StringSpec({
         }
     }
 })
-

@@ -42,6 +42,7 @@ object MusicPlaylistItemsTable : Table("music_playlist_items") {
     val itemId = long("item_id") references MusicItemsTable.id
     val position = integer("position").default(0)
     override val primaryKey = PrimaryKey(playlistId, itemId)
+
     init {
         index(false, playlistId, position)
     }
@@ -53,4 +54,3 @@ object MusicLikesTable : Table("music_likes") {
     val likedAt = timestampWithTimeZone("liked_at").defaultExpression(CurrentTimestamp())
     override val primaryKey = PrimaryKey(itemId, userId)
 }
-

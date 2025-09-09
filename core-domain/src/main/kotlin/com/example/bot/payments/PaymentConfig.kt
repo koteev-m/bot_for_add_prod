@@ -16,4 +16,3 @@ data class PaymentConfig(
     val starsEnabled: Boolean = false,
     val invoiceTitlePrefix: String = "Deposit for table",
 )
-

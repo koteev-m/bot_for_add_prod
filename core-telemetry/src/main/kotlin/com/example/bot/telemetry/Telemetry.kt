@@ -10,4 +10,3 @@ object Telemetry {
     @Volatile
     var registry: MeterRegistry = SimpleMeterRegistry()
 }
-

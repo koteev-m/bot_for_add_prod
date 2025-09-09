@@ -3,7 +3,6 @@ package com.example.bot.data
 import com.example.bot.data.repo.SegmentationRepository
 import com.example.bot.notifications.SegmentId
 import com.example.bot.notifications.SegmentNode
-import java.time.LocalDate
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
@@ -15,6 +14,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.time.LocalDate
 
 class SegmentationTest {
     private lateinit var db: Database
@@ -78,7 +78,11 @@ class SegmentationTest {
     @AfterEach
     fun tearDown() {
         transaction(db) {
-            SchemaUtils.drop(SegmentationRepository.Segments, SegmentationRepository.Bookings, SegmentationRepository.Users)
+            SchemaUtils.drop(
+                SegmentationRepository.Segments,
+                SegmentationRepository.Bookings,
+                SegmentationRepository.Users,
+            )
         }
     }
 
@@ -87,19 +91,35 @@ class SegmentationTest {
         val segment = SegmentNode(
             op = "AND",
             items = listOf(
-                SegmentNode(field = "club_id", op = "IN", args = listOf(Json.encodeToJsonElement(1), Json.encodeToJsonElement(2))),
+                SegmentNode(
+                    field = "club_id",
+                    op = "IN",
+                    args = listOf(Json.encodeToJsonElement(1), Json.encodeToJsonElement(2)),
+                ),
                 SegmentNode(field = "opt_in", op = "=", args = listOf(Json.encodeToJsonElement(true))),
-                SegmentNode(field = "lang", op = "IN", args = listOf(Json.encodeToJsonElement("ru"), Json.encodeToJsonElement("en"))),
+                SegmentNode(
+                    field = "lang",
+                    op = "IN",
+                    args = listOf(Json.encodeToJsonElement("ru"), Json.encodeToJsonElement("en")),
+                ),
                 SegmentNode(field = "last_visit_days", op = "<=", args = listOf(Json.encodeToJsonElement(60))),
                 SegmentNode(field = "is_promoter", op = "=", args = listOf(Json.encodeToJsonElement(true))),
                 SegmentNode(field = "is_vip", op = "=", args = listOf(Json.encodeToJsonElement(false))),
-                SegmentNode(field = "has_bookings_between", op = "BETWEEN", args = listOf(Json.encodeToJsonElement(LocalDate.now().minusDays(30).toString()), Json.encodeToJsonElement(LocalDate.now().plusDays(1).toString()))),
+                SegmentNode(
+                    field = "has_bookings_between",
+                    op = "BETWEEN",
+                    args = listOf(
+                        Json.encodeToJsonElement(LocalDate.now().minusDays(30).toString()),
+                        Json.encodeToJsonElement(LocalDate.now().plusDays(1).toString()),
+                    ),
+                ),
                 SegmentNode(field = "no_shows_ge", op = ">=", args = listOf(Json.encodeToJsonElement(1))),
-            )
+            ),
         )
 
         val id = transaction(db) {
-            SegmentationRepository.Segments.insert { it[dsl] = Json.encodeToString(segment) } get SegmentationRepository.Segments.id
+            SegmentationRepository.Segments.insert { it[dsl] = Json.encodeToString(segment) } get
+                SegmentationRepository.Segments.id
         }
 
         val ids = repo.resolveSegment(SegmentId(id)).map { it.value }.toList()
@@ -111,18 +131,25 @@ class SegmentationTest {
         val segment = SegmentNode(
             op = "AND",
             items = listOf(
-                SegmentNode(op = "OR", items = listOf(
-                    SegmentNode(field = "club_id", op = "=", args = listOf(Json.encodeToJsonElement(1))),
-                    SegmentNode(field = "club_id", op = "=", args = listOf(Json.encodeToJsonElement(2))),
-                )),
-                SegmentNode(op = "NOT", items = listOf(
-                    SegmentNode(field = "is_vip", op = "=", args = listOf(Json.encodeToJsonElement(true)))
-                ))
-            )
+                SegmentNode(
+                    op = "OR",
+                    items = listOf(
+                        SegmentNode(field = "club_id", op = "=", args = listOf(Json.encodeToJsonElement(1))),
+                        SegmentNode(field = "club_id", op = "=", args = listOf(Json.encodeToJsonElement(2))),
+                    ),
+                ),
+                SegmentNode(
+                    op = "NOT",
+                    items = listOf(
+                        SegmentNode(field = "is_vip", op = "=", args = listOf(Json.encodeToJsonElement(true))),
+                    ),
+                ),
+            ),
         )
 
         val id = transaction(db) {
-            SegmentationRepository.Segments.insert { it[dsl] = Json.encodeToString(segment) } get SegmentationRepository.Segments.id
+            SegmentationRepository.Segments.insert { it[dsl] = Json.encodeToString(segment) } get
+                SegmentationRepository.Segments.id
         }
 
         val ids = repo.resolveSegment(SegmentId(id)).map { it.value }.toSet()

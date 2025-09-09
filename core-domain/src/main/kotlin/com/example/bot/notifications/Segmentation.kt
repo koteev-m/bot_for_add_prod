@@ -1,6 +1,5 @@
 package com.example.bot.notifications
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 

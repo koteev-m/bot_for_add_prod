@@ -8,7 +8,14 @@ import ch.qos.logback.core.AppenderBase
  */
 class LoggingTestAppender : AppenderBase<ILoggingEvent>() {
     private val events = mutableListOf<ILoggingEvent>()
-    override fun append(eventObject: ILoggingEvent) { events += eventObject }
+
+    override fun append(eventObject: ILoggingEvent) {
+        events += eventObject
+    }
+
     fun events(): List<ILoggingEvent> = events.toList()
-    fun clear() { events.clear() }
+
+    fun clear() {
+        events.clear()
+    }
 }

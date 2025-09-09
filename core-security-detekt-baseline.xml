@@ -1,0 +1,15 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>MagicNumber:CallbackStateStore.kt$CallbackStateStore$15</ID>
+    <ID>MatchingDeclarationName:Policy.kt$AuthorizationException : RuntimeException</ID>
+    <ID>ReturnCount:InitDataValidator.kt$InitDataValidator$fun validate(initData: String, botToken: String): TelegramUser?</ID>
+    <ID>UnusedParameter:AuthProviders.kt$AuthProviders$botToken: String</ID>
+    <ID>UnusedParameter:AuthProviders.kt$AuthProviders$rolesProvider: suspend (Long) -&gt; Set&lt;RoleAssignment&gt;</ID>
+    <ID>UnusedParameter:AuthProviders.kt$AuthProviders$secretToken: String</ID>
+    <ID>UnusedParameter:Policy.kt$required: Set&lt;RoleCode&gt;</ID>
+    <ID>UnusedPrivateMember:Policy.kt$private fun HttpMethod.isWrite(): Boolean</ID>
+    <ID>UnusedPrivateMember:Policy.kt$private fun TelegramPrincipal.hasRole(required: Set&lt;RoleCode&gt;, clubId: Long?): Boolean</ID>
+  </CurrentIssues>
+</SmellBaseline>

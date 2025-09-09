@@ -9,9 +9,13 @@ import java.util.UUID
  */
 interface BookingReadRepository {
     suspend fun findEvent(clubId: Long, startUtc: Instant): EventDto?
+
     suspend fun findTable(tableId: Long): TableDto?
+
     suspend fun findActiveHold(holdId: UUID): HoldRecord?
+
     suspend fun findBookingById(id: UUID): BookingRecord?
+
     suspend fun findBookingByQr(qrSecret: String): BookingRecord?
 }
 
