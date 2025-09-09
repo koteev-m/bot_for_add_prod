@@ -55,16 +55,15 @@ class CampaignScheduler(
         }
     }
 
-    private fun remainingGauge(id: Long): AtomicLong =
-        remaining.computeIfAbsent(id) {
-            AtomicLong(0).also { ref ->
-                Telemetry.registry.gauge(
-                    "notify_campaign_remaining",
-                    listOf(Tag.of("campaign", id.toString())),
-                    ref,
-                )
-            }
+    private fun remainingGauge(id: Long): AtomicLong = remaining.computeIfAbsent(id) {
+        AtomicLong(0).also { ref ->
+            Telemetry.registry.gauge(
+                "notify_campaign_remaining",
+                listOf(Tag.of("campaign", id.toString())),
+                ref,
+            )
         }
+    }
 
     private fun isDue(c: SchedulerApi.Campaign, now: OffsetDateTime): Boolean {
         c.startsAt?.let { if (now.isBefore(it)) return false }

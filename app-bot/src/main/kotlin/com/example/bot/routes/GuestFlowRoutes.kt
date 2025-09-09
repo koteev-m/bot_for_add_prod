@@ -18,10 +18,7 @@ import java.time.Instant
 /**
  * Routes serving hall images and open nights for guest flow.
  */
-fun Route.guestFlowRoutes(
-    availability: AvailabilityService,
-    renderer: HallRenderer,
-) {
+fun Route.guestFlowRoutes(availability: AvailabilityService, renderer: HallRenderer) {
     route("/clubs/{clubId}") {
         get("/nights") {
             val clubId = call.parameters.getOrFail("clubId").toLong()

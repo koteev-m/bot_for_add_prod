@@ -54,13 +54,12 @@ data class Table(
 /**
  * Helper to convert domain slot to DTO.
  */
-fun NightSlot.toDto(arrivalBy: Instant): NightDto =
-    NightDto(
-        eventStartUtc = eventStartUtc,
-        eventEndUtc = eventEndUtc,
-        isSpecial = isSpecial,
-        arrivalByUtc = arrivalBy,
-        openLocal = openLocal,
-        closeLocal = closeLocal,
-        timezone = zone.id,
-    )
+fun NightSlot.toDto(arrivalBy: Instant): NightDto = NightDto(
+    eventStartUtc = eventStartUtc,
+    eventEndUtc = eventEndUtc,
+    isSpecial = isSpecial,
+    arrivalByUtc = arrivalBy,
+    openLocal = openLocal,
+    closeLocal = closeLocal,
+    timezone = zone.id,
+)

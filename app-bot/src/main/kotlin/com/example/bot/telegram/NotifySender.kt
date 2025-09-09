@@ -74,11 +74,7 @@ class NotifySender(
         return execute(chatId, request)
     }
 
-    suspend fun sendMediaGroup(
-        chatId: Long,
-        media: List<Media>,
-        threadId: Int? = null,
-    ): Result {
+    suspend fun sendMediaGroup(chatId: Long, media: List<Media>, threadId: Int? = null): Result {
         val inputMedia = media.map { m ->
             val im = when (m.content) {
                 is PhotoContent.Url -> InputMediaPhoto(m.content.url)
@@ -91,17 +87,22 @@ class NotifySender(
         val request = SendMediaGroup(chatId, *inputMedia.toTypedArray())
         threadId?.let { request.messageThreadId(it) }
         val result = execute(chatId, request)
-        if (result is Result.Failed &&
+        if (
+            result is Result.Failed &&
             result.code == 400 &&
             threadId != null &&
             (result.description?.contains("thread", true) == true)
         ) {
             log.info("SendMediaGroup unsupported, fallback to sequential sendPhoto for chat {}", mask(chatId))
-            media.forEach { m ->
+            var finalResult: Result = Result.Ok
+            for (m in media) {
                 val r = sendPhoto(chatId, m.content, m.caption, m.parseMode, threadId)
-                if (r !is Result.Ok) return r
+                if (r !is Result.Ok) {
+                    finalResult = r
+                    break
+                }
             }
-            return Result.Ok
+            return finalResult
         }
         return result
     }

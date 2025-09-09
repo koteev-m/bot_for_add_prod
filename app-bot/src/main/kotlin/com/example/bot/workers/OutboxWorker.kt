@@ -142,12 +142,11 @@ class OutboxWorker(
         }
     }
 
-    private fun toTelegramParseMode(pm: ParseMode?): com.pengrad.telegrambot.model.request.ParseMode? =
-        when (pm) {
-            ParseMode.MARKDOWNV2 -> com.pengrad.telegrambot.model.request.ParseMode.MarkdownV2
-            ParseMode.HTML -> com.pengrad.telegrambot.model.request.ParseMode.HTML
-            null -> null
-        }
+    private fun toTelegramParseMode(pm: ParseMode?): com.pengrad.telegrambot.model.request.ParseMode? = when (pm) {
+        ParseMode.MARKDOWNV2 -> com.pengrad.telegrambot.model.request.ParseMode.MarkdownV2
+        ParseMode.HTML -> com.pengrad.telegrambot.model.request.ParseMode.HTML
+        null -> null
+    }
 
     private fun toKeyboard(msg: NotifyMessage): Keyboard? = msg.buttons?.let { spec ->
         val rows = spec.rows.map { row ->
