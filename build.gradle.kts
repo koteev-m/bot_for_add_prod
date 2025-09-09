@@ -1,11 +1,6 @@
-import org.gradle.api.tasks.testing.Test
-import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
-
 plugins {
-    alias(libs.plugins.detekt) apply false
-    alias(libs.plugins.ktlint) apply false
-    alias(libs.plugins.kotlin.jvm) apply false
-    alias(libs.plugins.kotlin.serialization) apply false
+    alias(libs.plugins.detekt)
+    alias(libs.plugins.ktlintGradle)
 }
 
 allprojects {
@@ -15,24 +10,17 @@ allprojects {
 }
 
 subprojects {
-    apply(plugin = "org.jetbrains.kotlin.jvm")
-    apply(plugin = "org.jetbrains.kotlin.plugin.serialization")
-    apply(plugin = "io.gitlab.arturbosch.detekt")
-    apply(plugin = "org.jlleitschuh.gradle.ktlint")
-
-    extensions.configure<KotlinJvmProjectExtension> {
-        jvmToolchain(21)
+    plugins.withId("org.jetbrains.kotlin.jvm") {
+        apply(from = rootProject.file("gradle/detekt.gradle.kts"))
+        apply(from = rootProject.file("gradle/ktlint.gradle.kts"))
     }
+}
 
-    tasks.withType<Test>().configureEach {
-        useJUnitPlatform()
-    }
-
-    tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
-        ignoreFailures = true
-    }
-
-    extensions.configure<org.jlleitschuh.gradle.ktlint.KtlintExtension> {
-        ignoreFailures.set(true)
-    }
+tasks.register("staticCheck") {
+    group = "verification"
+    description = "Run detekt and ktlintCheck across all modules"
+    dependsOn(
+        subprojects.mapNotNull { it.tasks.findByName("detekt") },
+        subprojects.mapNotNull { it.tasks.findByName("ktlintCheck") }
+    )
 }
