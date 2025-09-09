@@ -14,17 +14,14 @@ import java.util.function.Supplier
  */
 class MetricsProvider(val registry: MeterRegistry) {
     companion object {
-        fun prometheusRegistry(): PrometheusMeterRegistry =
-            PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
+        fun prometheusRegistry(): PrometheusMeterRegistry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
 
         fun simpleRegistry(): SimpleMeterRegistry = SimpleMeterRegistry()
     }
 
-    fun counter(name: String, vararg tags: String): Counter =
-        Counter.builder(name).tags(*tags).register(registry)
+    fun counter(name: String, vararg tags: String): Counter = Counter.builder(name).tags(*tags).register(registry)
 
-    fun timer(name: String, vararg tags: String): Timer =
-        Timer.builder(name).tags(*tags).register(registry)
+    fun timer(name: String, vararg tags: String): Timer = Timer.builder(name).tags(*tags).register(registry)
 
     fun gauge(name: String, supplier: Supplier<Number>, vararg tags: String): Gauge =
         Gauge.builder(name, supplier).tags(*tags).register(registry)

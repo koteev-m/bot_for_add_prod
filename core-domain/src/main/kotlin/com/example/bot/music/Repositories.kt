@@ -4,13 +4,7 @@ package com.example.bot.music
 interface MusicItemRepository {
     suspend fun create(req: MusicItemCreate, actor: UserId): MusicItemView
 
-    suspend fun listActive(
-        clubId: Long?,
-        limit: Int,
-        offset: Int,
-        tag: String?,
-        q: String?,
-    ): List<MusicItemView>
+    suspend fun listActive(clubId: Long?, limit: Int, offset: Int, tag: String?, q: String?): List<MusicItemView>
 }
 
 /** Repository for music playlists. */

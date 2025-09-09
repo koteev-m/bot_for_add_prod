@@ -39,9 +39,11 @@ class AvailabilityPerfTest {
 
             override suspend fun listHolidays(clubId: Long, from: LocalDate, to: LocalDate) = emptyList<ClubHoliday>()
 
-            override suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate) = emptyList<ClubException>()
+            override suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate) =
+                emptyList<ClubException>()
 
-            override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) = emptyList<com.example.bot.time.Event>()
+            override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) =
+                emptyList<com.example.bot.time.Event>()
 
             override suspend fun findEvent(clubId: Long, startUtc: Instant) = com.example.bot.time.Event(
                 1,

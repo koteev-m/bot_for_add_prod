@@ -11,24 +11,22 @@ import java.time.ZoneOffset
 
 /** Exposed implementation of [MusicItemRepository] and [MusicPlaylistRepository]. */
 class MusicItemRepositoryImpl(private val db: Database) : MusicItemRepository {
-    override suspend fun create(
-        req: MusicItemCreate,
-        actor: UserId,
-    ): MusicItemView = newSuspendedTransaction(Dispatchers.IO, db) {
-        val row = MusicItemsTable.insert {
-            it[clubId] = req.clubId
-            it[title] = req.title
-            it[dj] = req.dj
-            it[sourceType] = req.source.name
-            it[sourceUrl] = req.sourceUrl
-            it[durationSec] = req.durationSec
-            it[coverUrl] = req.coverUrl
-            it[tags] = req.tags?.joinToString(",")
-            it[publishedAt] = req.publishedAt?.atOffset(ZoneOffset.UTC)
-            it[createdBy] = actor
-        }.resultedValues!!.first()
-        row.toView()
-    }
+    override suspend fun create(req: MusicItemCreate, actor: UserId): MusicItemView =
+        newSuspendedTransaction(Dispatchers.IO, db) {
+            val row = MusicItemsTable.insert {
+                it[clubId] = req.clubId
+                it[title] = req.title
+                it[dj] = req.dj
+                it[sourceType] = req.source.name
+                it[sourceUrl] = req.sourceUrl
+                it[durationSec] = req.durationSec
+                it[coverUrl] = req.coverUrl
+                it[tags] = req.tags?.joinToString(",")
+                it[publishedAt] = req.publishedAt?.atOffset(ZoneOffset.UTC)
+                it[createdBy] = actor
+            }.resultedValues!!.first()
+            row.toView()
+        }
 
     override suspend fun listActive(
         clubId: Long?,
@@ -66,19 +64,17 @@ class MusicItemRepositoryImpl(private val db: Database) : MusicItemRepository {
 }
 
 class MusicPlaylistRepositoryImpl(private val db: Database) : MusicPlaylistRepository {
-    override suspend fun create(
-        req: PlaylistCreate,
-        actor: UserId,
-    ): PlaylistView = newSuspendedTransaction(Dispatchers.IO, db) {
-        val row = MusicPlaylistsTable.insert {
-            it[clubId] = req.clubId
-            it[title] = req.title
-            it[description] = req.description
-            it[coverUrl] = req.coverUrl
-            it[createdBy] = actor
-        }.resultedValues!!.first()
-        row.toView()
-    }
+    override suspend fun create(req: PlaylistCreate, actor: UserId): PlaylistView =
+        newSuspendedTransaction(Dispatchers.IO, db) {
+            val row = MusicPlaylistsTable.insert {
+                it[clubId] = req.clubId
+                it[title] = req.title
+                it[description] = req.description
+                it[coverUrl] = req.coverUrl
+                it[createdBy] = actor
+            }.resultedValues!!.first()
+            row.toView()
+        }
 
     override suspend fun setItems(playlistId: Long, itemIds: List<Long>) = newSuspendedTransaction(Dispatchers.IO, db) {
         MusicPlaylistItemsTable.deleteWhere { MusicPlaylistItemsTable.playlistId eq playlistId }

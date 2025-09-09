@@ -60,20 +60,19 @@ data class NotifyCampaign(
 )
 
 class NotifyCampaignsRepository(private val db: Database) {
-    suspend fun insert(campaign: NotifyCampaign): Long =
-        newSuspendedTransaction(db = db) {
-            NotifyCampaigns.insert {
-                it[NotifyCampaigns.title] = campaign.title
-                it[NotifyCampaigns.status] = campaign.status
-                it[NotifyCampaigns.kind] = campaign.kind
-                it[NotifyCampaigns.clubId] = campaign.clubId
-                it[NotifyCampaigns.messageThreadId] = campaign.messageThreadId
-                it[NotifyCampaigns.segmentId] = campaign.segmentId
-                it[NotifyCampaigns.scheduleCron] = campaign.scheduleCron
-                it[NotifyCampaigns.startsAt] = campaign.startsAt
-                it[NotifyCampaigns.createdBy] = campaign.createdBy
-            }[NotifyCampaigns.id]
-        }
+    suspend fun insert(campaign: NotifyCampaign): Long = newSuspendedTransaction(db = db) {
+        NotifyCampaigns.insert {
+            it[NotifyCampaigns.title] = campaign.title
+            it[NotifyCampaigns.status] = campaign.status
+            it[NotifyCampaigns.kind] = campaign.kind
+            it[NotifyCampaigns.clubId] = campaign.clubId
+            it[NotifyCampaigns.messageThreadId] = campaign.messageThreadId
+            it[NotifyCampaigns.segmentId] = campaign.segmentId
+            it[NotifyCampaigns.scheduleCron] = campaign.scheduleCron
+            it[NotifyCampaigns.startsAt] = campaign.startsAt
+            it[NotifyCampaigns.createdBy] = campaign.createdBy
+        }[NotifyCampaigns.id]
+    }
 
     suspend fun find(id: Long): NotifyCampaign? = newSuspendedTransaction(db = db) {
         NotifyCampaigns.select { NotifyCampaigns.id eq id }
@@ -116,17 +115,16 @@ class UserSubscriptionsRepository(private val db: Database) {
         }
     }
 
-    suspend fun find(userId: Long, clubId: Long?, topic: String): UserSubscription? =
-        newSuspendedTransaction(db = db) {
-            UserSubscriptions
-                .select {
-                    (UserSubscriptions.userId eq userId) and
-                        (UserSubscriptions.topic eq topic) and
-                        (clubId?.let { UserSubscriptions.clubId eq it } ?: UserSubscriptions.clubId.isNull())
-                }
-                .map { toSubscription(it) }
-                .singleOrNull()
-        }
+    suspend fun find(userId: Long, clubId: Long?, topic: String): UserSubscription? = newSuspendedTransaction(db = db) {
+        UserSubscriptions
+            .select {
+                (UserSubscriptions.userId eq userId) and
+                    (UserSubscriptions.topic eq topic) and
+                    (clubId?.let { UserSubscriptions.clubId eq it } ?: UserSubscriptions.clubId.isNull())
+            }
+            .map { toSubscription(it) }
+            .singleOrNull()
+    }
 
     private fun toSubscription(row: ResultRow): UserSubscription = UserSubscription(
         userId = row[UserSubscriptions.userId],

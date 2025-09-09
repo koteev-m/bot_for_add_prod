@@ -39,9 +39,11 @@ class AvailabilityCalendarTest {
                 ClubHoliday(LocalDate.of(2025, 5, 4), true, LocalTime.of(22, 0), LocalTime.of(3, 0)),
             )
 
-            override suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate) = emptyList<ClubException>()
+            override suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate) =
+                emptyList<ClubException>()
 
-            override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) = emptyList<com.example.bot.time.Event>()
+            override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) =
+                emptyList<com.example.bot.time.Event>()
 
             override suspend fun findEvent(clubId: Long, startUtc: Instant) = null
 
@@ -86,7 +88,8 @@ class AvailabilityCalendarTest {
                 ClubException(LocalDate.of(2025, 5, 3), false, null, null),
             )
 
-            override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) = emptyList<com.example.bot.time.Event>()
+            override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) =
+                emptyList<com.example.bot.time.Event>()
 
             override suspend fun findEvent(clubId: Long, startUtc: Instant) = null
 
