@@ -8,6 +8,14 @@ import com.example.bot.miniapp.miniAppModule
 import com.example.bot.webhook.WebhookReply
 import com.example.bot.webhook.webhookRoute
 import com.example.bot.webhook.UnauthorizedWebhook
+import com.example.bot.observability.DefaultHealthService
+import com.example.bot.observability.MetricsProvider
+import com.example.bot.observability.TracingProvider
+import com.example.bot.plugins.installLogging
+import com.example.bot.plugins.installMetrics
+import com.example.bot.plugins.installTracing
+import com.example.bot.routes.observabilityRoutes
+import com.example.bot.telemetry.Telemetry
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -33,6 +41,24 @@ private val allowedUpdates = listOf(
 fun Application.module() {
     install(ContentNegotiation) { json() }
 
+    val metricsRegistry = MetricsProvider.prometheusRegistry()
+    val metrics = MetricsProvider(metricsRegistry)
+    Telemetry.registry = metricsRegistry
+    metrics.registerBuildInfo(
+        System.getenv("APP_VERSION") ?: "dev",
+        System.getenv("APP_ENV") ?: "local",
+        System.getenv("GIT_COMMIT") ?: "none",
+    )
+
+    installMetrics(metricsRegistry)
+    installLogging()
+
+    val tracing = if (System.getenv("TRACING_ENABLED") == "true") {
+        val endpoint = System.getenv("OTLP_ENDPOINT") ?: "http://localhost:4318"
+        TracingProvider.create(endpoint).tracer
+    } else null
+    tracing?.let { installTracing(it) }
+
     install(StatusPages) {
         exception<UnauthorizedWebhook> { call, _ ->
             call.respond(io.ktor.http.HttpStatusCode.Unauthorized, mapOf("error" to "Bad webhook secret"))
@@ -53,7 +79,10 @@ fun Application.module() {
     val dedup = UpdateDeduplicator()
 
     miniAppModule()
+    val healthService = DefaultHealthService()
+
     routing {
+        observabilityRoutes(metrics, healthService)
         webhookRoute(secret, dedup, handler = ::handleUpdate, client = client)
         telegramSetupRoutes(client, baseUrl, secret, maxConn, allowedUpdates)
     }

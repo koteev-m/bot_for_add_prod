@@ -1,30 +1,13 @@
 package com.example.bot.telemetry
 
-import io.ktor.http.ContentType
-import io.ktor.server.application.Application
-import io.ktor.server.application.call
-import io.ktor.server.response.respondText
-import io.ktor.server.routing.get
-import io.ktor.server.routing.routing
 import io.micrometer.core.instrument.MeterRegistry
-import io.micrometer.prometheus.PrometheusConfig
-import io.micrometer.prometheus.PrometheusMeterRegistry
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 
+/**
+ * Backwards-compatible holder for a global [MeterRegistry].
+ */
 object Telemetry {
-    val registry: MeterRegistry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
-
-    fun Application.configureMonitoring(
-        metricsPath: String,
-        healthPath: String,
-    ) {
-        routing {
-            get(metricsPath) {
-                val metrics = (registry as PrometheusMeterRegistry).scrape()
-                call.respondText(metrics, ContentType.parse("text/plain"))
-            }
-            get(healthPath) {
-                call.respondText("OK")
-            }
-        }
-    }
+    @Volatile
+    var registry: MeterRegistry = SimpleMeterRegistry()
 }
+

@@ -1,10 +1,20 @@
 <configuration>
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %logger - %replace(%msg){'(BOT_TOKEN|WEBHOOK_SECRET_TOKEN|DATABASE_PASSWORD|DATABASE_USER)=([^\s]+)', '$1=****'}%n</pattern>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdc>true</includeMdc>
+            <fieldNames>
+                <timestamp>ts</timestamp>
+                <level>lvl</level>
+                <logger>logger</logger>
+                <message>msg</message>
+            </fieldNames>
+            <replace>
+                <pattern>\+?\d{7,}</pattern>
+                <replacement>+********$0</replacement>
+            </replace>
         </encoder>
     </appender>
-    <root level="INFO">
+    <root level="${LOG_LEVEL:-INFO}">
         <appender-ref ref="STDOUT" />
     </root>
 </configuration>
