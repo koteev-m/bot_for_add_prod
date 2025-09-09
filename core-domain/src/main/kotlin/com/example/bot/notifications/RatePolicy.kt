@@ -4,6 +4,14 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.ceil
 
+// Говорящие константы вместо «магических» чисел
+private const val MS: Long = 1_000
+private const val DEFAULT_GLOBAL_RPS: Int = 25
+private const val DEFAULT_CHAT_RPS: Double = 1.5
+
+/** TTL «мягкой» жизни пер-чатовых вёдер (10 минут). */
+private const val BUCKET_TTL_MS: Long = 10 * 60 * MS
+
 /** Result of token acquisition. */
 data class Permit(val granted: Boolean, val retryAfterMs: Long = 0L)
 
@@ -18,7 +26,7 @@ interface RatePolicy {
     fun on429(chatId: Long?, retryAfter: Long, now: Long = timeSource.nowMs())
 }
 
-private const val SCALE = 1000L
+private const val SCALE = MS
 
 private class TokenBucket(
     private val capacity: Double,
@@ -46,7 +54,8 @@ private class TokenBucket(
                 }
             } else {
                 val shortage = need - cur
-                val retry = ceil(shortage.toDouble() / (refillPerSec * SCALE) * 1000).toLong()
+                val retry =
+                    ceil(shortage.toDouble() / (refillPerSec * SCALE) * MS.toDouble()).toLong()
                 return Permit(false, retry)
             }
         }
@@ -61,7 +70,8 @@ private class TokenBucket(
             val last = lastRefillMs.get()
             if (nowMs <= last) return
             val elapsed = nowMs - last
-            val added = (elapsed * refillPerSec * SCALE / 1000.0).toLong()
+            val added =
+                (elapsed * refillPerSec * SCALE / MS.toDouble()).toLong()
             val currentVal = current.get()
             val newVal = (currentVal + added).coerceAtMost((capacity * SCALE).toLong())
             if (current.compareAndSet(currentVal, newVal)) {
@@ -73,10 +83,10 @@ private class TokenBucket(
 }
 
 class DefaultRatePolicy(
-    globalRps: Int,
-    private val chatRps: Double,
+    globalRps: Int = DEFAULT_GLOBAL_RPS,
+    private val chatRps: Double = DEFAULT_CHAT_RPS,
     override val timeSource: TimeSource = SystemTimeSource,
-    private val chatTtlMs: Long = 10 * 60 * 1000L,
+    private val chatTtlMs: Long = BUCKET_TTL_MS,
 ) : RatePolicy {
     private val globalBucket = TokenBucket(globalRps.toDouble(), globalRps.toDouble(), timeSource)
 
