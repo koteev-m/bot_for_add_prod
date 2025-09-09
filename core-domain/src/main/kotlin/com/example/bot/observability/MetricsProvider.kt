@@ -27,7 +27,8 @@ class MetricsProvider(val registry: MeterRegistry) {
         Gauge.builder(name, supplier).tags(*tags).register(registry)
 
     fun registerBuildInfo(version: String, env: String, commit: String) {
-        Gauge.builder("app.build.info") { 1.0 }
+        Gauge
+            .builder("app.build.info") { 1.0 }
             .tags("version", version, "env", env, "commit", commit)
             .register(registry)
     }

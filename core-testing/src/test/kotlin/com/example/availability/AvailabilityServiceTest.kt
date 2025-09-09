@@ -19,10 +19,11 @@ class AvailabilityServiceTest {
     private class FakeRepo : AvailabilityRepository {
         override suspend fun findClub(clubId: Long) = Club(clubId, "Europe/Berlin")
 
-        override suspend fun listClubHours(clubId: Long) = listOf(
-            ClubHour(DayOfWeek.FRIDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
-            ClubHour(DayOfWeek.SATURDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
-        )
+        override suspend fun listClubHours(clubId: Long) =
+            listOf(
+                ClubHour(DayOfWeek.FRIDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
+                ClubHour(DayOfWeek.SATURDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
+            )
 
         override suspend fun listHolidays(clubId: Long, from: LocalDate, to: LocalDate) = emptyList<ClubHoliday>()
 
@@ -41,22 +42,23 @@ class AvailabilityServiceTest {
     }
 
     @Test
-    fun `should list upcoming nights skipping closed and handle DST`() = runTest {
-        val clock = Clock.fixed(Instant.parse("2024-03-28T12:00:00Z"), ZoneOffset.UTC)
-        val repo = FakeRepo()
-        val resolver = OperatingRulesResolver(repo, clock)
-        val service = AvailabilityService(repo, resolver, CutoffPolicy(), clock)
+    fun `should list upcoming nights skipping closed and handle DST`() =
+        runTest {
+            val clock = Clock.fixed(Instant.parse("2024-03-28T12:00:00Z"), ZoneOffset.UTC)
+            val repo = FakeRepo()
+            val resolver = OperatingRulesResolver(repo, clock)
+            val service = AvailabilityService(repo, resolver, CutoffPolicy(), clock)
 
-        val nights = service.listOpenNights(1, limit = 2)
-        assertEquals(2, nights.size)
+            val nights = service.listOpenNights(1, limit = 2)
+            assertEquals(2, nights.size)
 
-        val first = nights[0]
-        assertEquals(LocalDateTime.of(2024, 3, 30, 22, 0), first.openLocal)
-        assertEquals(LocalDateTime.of(2024, 3, 31, 6, 0), first.closeLocal)
-        assertEquals(Duration.ofHours(7), Duration.between(first.eventStartUtc, first.eventEndUtc))
+            val first = nights[0]
+            assertEquals(LocalDateTime.of(2024, 3, 30, 22, 0), first.openLocal)
+            assertEquals(LocalDateTime.of(2024, 3, 31, 6, 0), first.closeLocal)
+            assertEquals(Duration.ofHours(7), Duration.between(first.eventStartUtc, first.eventEndUtc))
 
-        val second = nights[1]
-        assertEquals(LocalDateTime.of(2024, 4, 5, 22, 0), second.openLocal)
-        assertEquals(LocalDateTime.of(2024, 4, 6, 6, 0), second.closeLocal)
-    }
+            val second = nights[1]
+            assertEquals(LocalDateTime.of(2024, 4, 5, 22, 0), second.openLocal)
+            assertEquals(LocalDateTime.of(2024, 4, 6, 6, 0), second.closeLocal)
+        }
 }

@@ -10,7 +10,9 @@ class MigrationTest {
     @Test
     fun `migrations apply`() {
         org.junit.jupiter.api.Assumptions.assumeTrue(
-            org.testcontainers.DockerClientFactory.instance().isDockerAvailable,
+            org.testcontainers.DockerClientFactory
+                .instance()
+                .isDockerAvailable,
         )
         PostgreSQLContainer<Nothing>("postgres:15-alpine").use { pg ->
             pg.start()

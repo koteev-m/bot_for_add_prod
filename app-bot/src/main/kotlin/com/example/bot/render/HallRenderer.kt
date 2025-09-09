@@ -35,17 +35,19 @@ class HallRenderer(
         g.stroke = BasicStroke(2f * scale)
         tables.forEach { table ->
             val rect = geometryProvider.geometry(clubId, table.tableId) ?: return@forEach
-            val r = Rectangle2D.Double(
-                rect.x * scale,
-                rect.y * scale,
-                rect.width * scale,
-                rect.height * scale,
-            )
-            val color = when (table.status) {
-                TableStatus.FREE -> Color(0x00, 0x80, 0x00)
-                TableStatus.HELD -> Color(0xFF, 0xD7, 0x00)
-                TableStatus.BOOKED -> Color(0xB2, 0x22, 0x22)
-            }
+            val r =
+                Rectangle2D.Double(
+                    rect.x * scale,
+                    rect.y * scale,
+                    rect.width * scale,
+                    rect.height * scale,
+                )
+            val color =
+                when (table.status) {
+                    TableStatus.FREE -> Color(0x00, 0x80, 0x00)
+                    TableStatus.HELD -> Color(0xFF, 0xD7, 0x00)
+                    TableStatus.BOOKED -> Color(0xB2, 0x22, 0x22)
+                }
             val fill = Color(color.red, color.green, color.blue, 80)
             g.color = fill
             g.fill(r)

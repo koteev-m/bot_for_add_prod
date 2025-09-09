@@ -3,6 +3,7 @@
   <ManuallySuppressedIssues></ManuallySuppressedIssues>
   <CurrentIssues>
     <ID>CyclomaticComplexMethod:SegmentationRepository.kt$SegmentationRepository$private fun fieldCondition(node: SegmentNode): Op&lt;Boolean&gt;</ID>
+    <ID>LongMethod:SegmentationRepository.kt$SegmentationRepository$private fun fieldCondition(node: SegmentNode): Op&lt;Boolean&gt;</ID>
     <ID>MatchingDeclarationName:BookingRepositories.kt$InMemoryBookingRepository : BookingReadRepositoryBookingWriteRepository</ID>
     <ID>MatchingDeclarationName:OutboxServiceImpl.kt$InMemoryOutboxService : OutboxService</ID>
     <ID>MatchingDeclarationName:PaymentsRepository.kt$PaymentsRepositoryImpl : PaymentsRepository</ID>

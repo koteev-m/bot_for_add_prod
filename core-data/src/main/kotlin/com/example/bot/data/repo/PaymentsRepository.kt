@@ -39,68 +39,80 @@ class PaymentsRepositoryImpl(private val db: Database) : PaymentsRepository {
         amountMinor: Long,
         payload: String,
         idempotencyKey: String,
-    ): PaymentRecord = newSuspendedTransaction(db = db) {
-        val row = PaymentsTable.insert {
-            it[PaymentsTable.bookingId] = bookingId
-            it[PaymentsTable.provider] = provider
-            it[PaymentsTable.currency] = currency
-            it[PaymentsTable.amountMinor] = amountMinor
-            it[PaymentsTable.status] = "INITIATED"
-            it[PaymentsTable.payload] = payload
-            it[PaymentsTable.idempotencyKey] = idempotencyKey
-        }.resultedValues!!.first()
-        row.toRecord()
-    }
+    ): PaymentRecord =
+        newSuspendedTransaction(db = db) {
+            val row =
+                PaymentsTable
+                    .insert {
+                        it[PaymentsTable.bookingId] = bookingId
+                        it[PaymentsTable.provider] = provider
+                        it[PaymentsTable.currency] = currency
+                        it[PaymentsTable.amountMinor] = amountMinor
+                        it[PaymentsTable.status] = "INITIATED"
+                        it[PaymentsTable.payload] = payload
+                        it[PaymentsTable.idempotencyKey] = idempotencyKey
+                    }.resultedValues!!
+                    .first()
+            row.toRecord()
+        }
 
     override suspend fun markPending(id: UUID) = updateStatus(id, "PENDING")
 
-    override suspend fun markCaptured(id: UUID, externalId: String?) = newSuspendedTransaction(db = db) {
-        PaymentsTable.update({ PaymentsTable.id eq id }) {
-            it[status] = "CAPTURED"
-            it[PaymentsTable.externalId] = externalId
+    override suspend fun markCaptured(id: UUID, externalId: String?) =
+        newSuspendedTransaction(db = db) {
+            PaymentsTable.update({ PaymentsTable.id eq id }) {
+                it[status] = "CAPTURED"
+                it[PaymentsTable.externalId] = externalId
+            }
+            Unit
         }
-        Unit
-    }
 
-    override suspend fun markDeclined(id: UUID, reason: String) = newSuspendedTransaction(db = db) {
-        PaymentsTable.update({ PaymentsTable.id eq id }) {
-            it[status] = "DECLINED"
-            it[externalId] = reason
+    override suspend fun markDeclined(id: UUID, reason: String) =
+        newSuspendedTransaction(db = db) {
+            PaymentsTable.update({ PaymentsTable.id eq id }) {
+                it[status] = "DECLINED"
+                it[externalId] = reason
+            }
+            Unit
         }
-        Unit
-    }
 
-    override suspend fun markRefunded(id: UUID, externalId: String?) = newSuspendedTransaction(db = db) {
-        PaymentsTable.update({ PaymentsTable.id eq id }) {
-            it[status] = "REFUNDED"
-            it[PaymentsTable.externalId] = externalId
+    override suspend fun markRefunded(id: UUID, externalId: String?) =
+        newSuspendedTransaction(db = db) {
+            PaymentsTable.update({ PaymentsTable.id eq id }) {
+                it[status] = "REFUNDED"
+                it[PaymentsTable.externalId] = externalId
+            }
+            Unit
         }
-        Unit
-    }
 
-    override suspend fun findByPayload(payload: String): PaymentRecord? = newSuspendedTransaction(db = db) {
-        PaymentsTable.select { PaymentsTable.payload eq payload }
-            .firstOrNull()?.toRecord()
-    }
-
-    private suspend fun updateStatus(id: UUID, status: String) = newSuspendedTransaction(db = db) {
-        PaymentsTable.update({ PaymentsTable.id eq id }) {
-            it[PaymentsTable.status] = status
+    override suspend fun findByPayload(payload: String): PaymentRecord? =
+        newSuspendedTransaction(db = db) {
+            PaymentsTable
+                .select { PaymentsTable.payload eq payload }
+                .firstOrNull()
+                ?.toRecord()
         }
-        Unit
-    }
 
-    private fun ResultRow.toRecord(): PaymentRecord = PaymentRecord(
-        id = this[PaymentsTable.id],
-        bookingId = this[PaymentsTable.bookingId],
-        provider = this[PaymentsTable.provider],
-        currency = this[PaymentsTable.currency],
-        amountMinor = this[PaymentsTable.amountMinor],
-        status = this[PaymentsTable.status],
-        payload = this[PaymentsTable.payload],
-        externalId = this[PaymentsTable.externalId],
-        idempotencyKey = this[PaymentsTable.idempotencyKey],
-        createdAt = this[PaymentsTable.createdAt],
-        updatedAt = this[PaymentsTable.updatedAt],
-    )
+    private suspend fun updateStatus(id: UUID, status: String) =
+        newSuspendedTransaction(db = db) {
+            PaymentsTable.update({ PaymentsTable.id eq id }) {
+                it[PaymentsTable.status] = status
+            }
+            Unit
+        }
+
+    private fun ResultRow.toRecord(): PaymentRecord =
+        PaymentRecord(
+            id = this[PaymentsTable.id],
+            bookingId = this[PaymentsTable.bookingId],
+            provider = this[PaymentsTable.provider],
+            currency = this[PaymentsTable.currency],
+            amountMinor = this[PaymentsTable.amountMinor],
+            status = this[PaymentsTable.status],
+            payload = this[PaymentsTable.payload],
+            externalId = this[PaymentsTable.externalId],
+            idempotencyKey = this[PaymentsTable.idempotencyKey],
+            createdAt = this[PaymentsTable.createdAt],
+            updatedAt = this[PaymentsTable.updatedAt],
+        )
 }

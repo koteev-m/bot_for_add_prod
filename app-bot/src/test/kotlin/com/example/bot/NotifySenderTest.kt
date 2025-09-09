@@ -34,12 +34,13 @@ class NotifySenderTest :
 
         "sendMessage handles retry after" {
             val params = mockk<ResponseParameters> { every { retryAfter() } returns 5 }
-            val resp = mockk<SendResponse> {
-                every { isOk } returns false
-                every { errorCode() } returns 429
-                every { description() } returns "Too Many Requests"
-                every { parameters() } returns params
-            }
+            val resp =
+                mockk<SendResponse> {
+                    every { isOk } returns false
+                    every { errorCode() } returns 429
+                    every { description() } returns "Too Many Requests"
+                    every { parameters() } returns params
+                }
             every { bot.execute(any<SendMessage>()) } returns resp
             val result = sender.sendMessage(1L, "x")
             result shouldBe NotifySender.Result.RetryAfter(5)
@@ -47,12 +48,13 @@ class NotifySenderTest :
 
         "sendMediaGroup falls back to sequential sendPhoto" {
             val media = listOf(Media(PhotoContent.Url("u1")), Media(PhotoContent.Url("u2")))
-            val groupResp = mockk<MessagesResponse> {
-                every { isOk } returns false
-                every { errorCode() } returns 400
-                every { description() } returns "thread error"
-                every { parameters() } returns null
-            }
+            val groupResp =
+                mockk<MessagesResponse> {
+                    every { isOk } returns false
+                    every { errorCode() } returns 400
+                    every { description() } returns "thread error"
+                    every { parameters() } returns null
+                }
             val photoResp = mockk<SendResponse> { every { isOk } returns true }
             var groupReq: SendMediaGroup? = null
             val photoCaptures = mutableListOf<SendPhoto>()

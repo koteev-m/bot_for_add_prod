@@ -23,9 +23,11 @@ class TelegramClient(token: String, apiUrl: String? = null) {
                 if (apiUrl != null) apiUrl(apiUrl)
             }.build()
 
-    suspend fun send(request: Any): BaseResponse = withContext(Dispatchers.IO) {
-        @Suppress("UNCHECKED_CAST")
-        bot.execute(request as BaseRequest<*, *>) as BaseResponse
+    suspend fun send(request: Any): BaseResponse {
+        return withContext(Dispatchers.IO) {
+            @Suppress("UNCHECKED_CAST")
+            bot.execute(request as BaseRequest<*, *>) as BaseResponse
+        }
     }
 
     suspend fun setWebhook(
@@ -33,31 +35,39 @@ class TelegramClient(token: String, apiUrl: String? = null) {
         secret: String,
         maxConnections: Int,
         allowedUpdates: List<String>,
-    ): BaseResponse = withContext(Dispatchers.IO) {
-        bot.execute(
-            SetWebhook()
-                .url(url)
-                .secretToken(secret)
-                .maxConnections(maxConnections)
-                .allowedUpdates(*allowedUpdates.toTypedArray()),
-        )
-    }
-
-    suspend fun deleteWebhook(dropPending: Boolean): BaseResponse = withContext(Dispatchers.IO) {
-        bot.execute(DeleteWebhook().dropPendingUpdates(dropPending))
-    }
-
-    suspend fun getWebhookInfo(): GetWebhookInfoResponse = withContext(Dispatchers.IO) {
-        bot.execute(GetWebhookInfo())
-    }
-
-    suspend fun getUpdates(offset: Long, allowedUpdates: List<String>): List<Update> = withContext(Dispatchers.IO) {
-        val resp =
+    ): BaseResponse {
+        return withContext(Dispatchers.IO) {
             bot.execute(
-                GetUpdates()
-                    .offset(offset.toInt())
+                SetWebhook()
+                    .url(url)
+                    .secretToken(secret)
+                    .maxConnections(maxConnections)
                     .allowedUpdates(*allowedUpdates.toTypedArray()),
             )
-        resp.updates().toList()
+        }
+    }
+
+    suspend fun deleteWebhook(dropPending: Boolean): BaseResponse {
+        return withContext(Dispatchers.IO) {
+            bot.execute(DeleteWebhook().dropPendingUpdates(dropPending))
+        }
+    }
+
+    suspend fun getWebhookInfo(): GetWebhookInfoResponse {
+        return withContext(Dispatchers.IO) {
+            bot.execute(GetWebhookInfo())
+        }
+    }
+
+    suspend fun getUpdates(offset: Long, allowedUpdates: List<String>): List<Update> {
+        return withContext(Dispatchers.IO) {
+            val resp =
+                bot.execute(
+                    GetUpdates()
+                        .offset(offset.toInt())
+                        .allowedUpdates(*allowedUpdates.toTypedArray()),
+                )
+            resp.updates().toList()
+        }
     }
 }

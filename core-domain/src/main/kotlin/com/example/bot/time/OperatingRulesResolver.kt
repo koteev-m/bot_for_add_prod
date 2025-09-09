@@ -141,16 +141,17 @@ class OperatingRulesResolver(
                 val startUtc = openZdt.toInstant()
                 val endUtc = closeZdt.toInstant()
                 if (endUtc > startUtc) {
-                    result += NightSlot(
-                        clubId = clubId,
-                        eventStartUtc = startUtc,
-                        eventEndUtc = endUtc,
-                        isSpecial = special,
-                        source = source,
-                        openLocal = openZdt.toLocalDateTime(),
-                        closeLocal = closeZdt.toLocalDateTime(),
-                        zone = zone,
-                    )
+                    result +=
+                        NightSlot(
+                            clubId = clubId,
+                            eventStartUtc = startUtc,
+                            eventEndUtc = endUtc,
+                            isSpecial = special,
+                            source = source,
+                            openLocal = openZdt.toLocalDateTime(),
+                            closeLocal = closeZdt.toLocalDateTime(),
+                            zone = zone,
+                        )
                 }
             }
 
@@ -160,16 +161,17 @@ class OperatingRulesResolver(
         events.forEach { event ->
             val startLocal = event.startUtc.atZone(zone).toLocalDateTime()
             val endLocal = event.endUtc.atZone(zone).toLocalDateTime()
-            result += NightSlot(
-                clubId = clubId,
-                eventStartUtc = event.startUtc,
-                eventEndUtc = event.endUtc,
-                isSpecial = event.isSpecial,
-                source = NightSource.EVENT_MATERIALIZED,
-                openLocal = startLocal,
-                closeLocal = endLocal,
-                zone = zone,
-            )
+            result +=
+                NightSlot(
+                    clubId = clubId,
+                    eventStartUtc = event.startUtc,
+                    eventEndUtc = event.endUtc,
+                    isSpecial = event.isSpecial,
+                    source = NightSource.EVENT_MATERIALIZED,
+                    openLocal = startLocal,
+                    closeLocal = endLocal,
+                    zone = zone,
+                )
         }
 
         val now = Instant.now(clock)

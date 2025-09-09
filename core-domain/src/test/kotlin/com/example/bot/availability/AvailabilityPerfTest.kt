@@ -23,41 +23,47 @@ class AvailabilityPerfTest {
     @Test
     fun `performance within limits`() {
         org.junit.jupiter.api.Assumptions.assumeTrue(
-            org.testcontainers.DockerClientFactory.instance().isDockerAvailable,
+            org.testcontainers.DockerClientFactory
+                .instance()
+                .isDockerAvailable,
         )
         PostgreSQLContainer<Nothing>("postgres:15-alpine").use { it.start() }
         val eventStart = Instant.parse("2025-05-02T19:00:00Z")
         val eventEnd = eventStart.plusSeconds(6 * 3600)
         val tables = (1..500).map { id -> Table(id.toLong(), "T$id", "Z", 4, 100, true) }
 
-        val repo = object : AvailabilityRepository {
-            override suspend fun findClub(clubId: Long) = Club(1, "Europe/Moscow")
+        val repo =
+            object : AvailabilityRepository {
+                override suspend fun findClub(clubId: Long) = Club(1, "Europe/Moscow")
 
-            override suspend fun listClubHours(clubId: Long) = listOf(
-                ClubHour(DayOfWeek.FRIDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
-            )
+                override suspend fun listClubHours(clubId: Long) =
+                    listOf(
+                        ClubHour(DayOfWeek.FRIDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
+                    )
 
-            override suspend fun listHolidays(clubId: Long, from: LocalDate, to: LocalDate) = emptyList<ClubHoliday>()
+                override suspend fun listHolidays(clubId: Long, from: LocalDate, to: LocalDate) =
+                    emptyList<ClubHoliday>()
 
-            override suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate) =
-                emptyList<ClubException>()
+                override suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate) =
+                    emptyList<ClubException>()
 
-            override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) =
-                emptyList<com.example.bot.time.Event>()
+                override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) =
+                    emptyList<com.example.bot.time.Event>()
 
-            override suspend fun findEvent(clubId: Long, startUtc: Instant) = com.example.bot.time.Event(
-                1,
-                1,
-                eventStart,
-                eventEnd,
-            )
+                override suspend fun findEvent(clubId: Long, startUtc: Instant) =
+                    com.example.bot.time.Event(
+                        1,
+                        1,
+                        eventStart,
+                        eventEnd,
+                    )
 
-            override suspend fun listTables(clubId: Long) = tables
+                override suspend fun listTables(clubId: Long) = tables
 
-            override suspend fun listActiveHoldTableIds(eventId: Long, now: Instant) = emptySet<Long>()
+                override suspend fun listActiveHoldTableIds(eventId: Long, now: Instant) = emptySet<Long>()
 
-            override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
-        }
+                override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
+            }
 
         val resolver = OperatingRulesResolver(repo)
         val service = AvailabilityService(repo, resolver, CutoffPolicy())

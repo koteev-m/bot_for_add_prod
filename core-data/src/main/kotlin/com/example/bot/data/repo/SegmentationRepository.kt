@@ -55,49 +55,72 @@ class SegmentationRepository(private val db: Database) {
 
     private val json = Json
 
-    fun resolveSegment(segmentId: SegmentId, batchSize: Int = 500): Sequence<UserId> = sequence {
-        val node = transaction(db) {
-            Segments.select { Segments.id eq segmentId.value }
-                .single()[Segments.dsl]
-                .let { json.decodeFromString(SegmentNode.serializer(), it) }
-        }
-        var offset = 0L
-        while (true) {
-            val batch = transaction(db) {
-                Users.slice(Users.id)
-                    .select { buildCondition(node) }
-                    .limit(batchSize, offset)
-                    .map { it[Users.id] }
+    fun resolveSegment(segmentId: SegmentId, batchSize: Int = 500): Sequence<UserId> =
+        sequence {
+            val node =
+                transaction(db) {
+                    Segments
+                        .select { Segments.id eq segmentId.value }
+                        .single()[Segments.dsl]
+                        .let { json.decodeFromString(SegmentNode.serializer(), it) }
+                }
+            var offset = 0L
+            while (true) {
+                val batch =
+                    transaction(db) {
+                        Users
+                            .slice(Users.id)
+                            .select { buildCondition(node) }
+                            .limit(batchSize, offset)
+                            .map { it[Users.id] }
+                    }
+                if (batch.isEmpty()) break
+                batch.forEach { yield(UserId(it)) }
+                offset += batch.size
             }
-            if (batch.isEmpty()) break
-            batch.forEach { yield(UserId(it)) }
-            offset += batch.size
         }
-    }
 
-    private fun buildCondition(node: SegmentNode): Op<Boolean> = when (node.op.uppercase()) {
-        "AND" -> node.items.map { buildCondition(it) }.reduce { acc, op -> acc and op }
-        "OR" -> node.items.map { buildCondition(it) }.reduce { acc, op -> acc or op }
-        "NOT" -> not(buildCondition(node.items.single()))
-        else -> fieldCondition(node)
-    }
+    private fun buildCondition(node: SegmentNode): Op<Boolean> =
+        when (node.op.uppercase()) {
+            "AND" -> node.items.map { buildCondition(it) }.reduce { acc, op -> acc and op }
+            "OR" -> node.items.map { buildCondition(it) }.reduce { acc, op -> acc or op }
+            "NOT" -> not(buildCondition(node.items.single()))
+            else -> fieldCondition(node)
+        }
 
     private fun fieldCondition(node: SegmentNode): Op<Boolean> {
         val field = node.field ?: error("field required for leaf node")
         return when (field) {
-            "club_id" -> when (node.op) {
-                "IN" -> Users.clubId.inList(node.args.map { it.jsonPrimitive.int })
-                "=" -> Users.clubId eq node.args.first().jsonPrimitive.int
-                else -> error("unsupported op ${'$'}{node.op}")
-            }
-            "opt_in" -> Users.optIn eq node.args.first().jsonPrimitive.boolean
-            "lang" -> when (node.op) {
-                "IN" -> Users.lang.inList(node.args.map { it.jsonPrimitive.content })
-                "=" -> Users.lang eq node.args.first().jsonPrimitive.content
-                else -> error("unsupported op ${'$'}{node.op}")
-            }
+            "club_id" ->
+                when (node.op) {
+                    "IN" -> Users.clubId.inList(node.args.map { it.jsonPrimitive.int })
+                    "=" ->
+                        Users.clubId eq
+                            node.args
+                                .first()
+                                .jsonPrimitive.int
+                    else -> error("unsupported op ${'$'}{node.op}")
+                }
+            "opt_in" ->
+                Users.optIn eq
+                    node.args
+                        .first()
+                        .jsonPrimitive.boolean
+            "lang" ->
+                when (node.op) {
+                    "IN" -> Users.lang.inList(node.args.map { it.jsonPrimitive.content })
+                    "=" ->
+                        Users.lang eq
+                            node.args
+                                .first()
+                                .jsonPrimitive.content
+                    else -> error("unsupported op ${'$'}{node.op}")
+                }
             "last_visit_days" -> {
-                val days = node.args.first().jsonPrimitive.int
+                val days =
+                    node.args
+                        .first()
+                        .jsonPrimitive.int
                 val date = LocalDate.now().minusDays(days.toLong())
                 when (node.op) {
                     "<=" -> Users.lastVisit greaterEq date
@@ -105,8 +128,16 @@ class SegmentationRepository(private val db: Database) {
                     else -> error("unsupported op ${'$'}{node.op}")
                 }
             }
-            "is_promoter" -> Users.isPromoter eq node.args.first().jsonPrimitive.boolean
-            "is_vip" -> Users.isVip eq node.args.first().jsonPrimitive.boolean
+            "is_promoter" ->
+                Users.isPromoter eq
+                    node.args
+                        .first()
+                        .jsonPrimitive.boolean
+            "is_vip" ->
+                Users.isVip eq
+                    node.args
+                        .first()
+                        .jsonPrimitive.boolean
             "has_bookings_between" -> {
                 val start = LocalDate.parse(node.args[0].jsonPrimitive.content)
                 val end = LocalDate.parse(node.args[1].jsonPrimitive.content)
@@ -116,7 +147,12 @@ class SegmentationRepository(private val db: Database) {
                     },
                 )
             }
-            "no_shows_ge" -> Users.noShows.greaterEq(node.args.first().jsonPrimitive.int)
+            "no_shows_ge" ->
+                Users.noShows.greaterEq(
+                    node.args
+                        .first()
+                        .jsonPrimitive.int,
+                )
             else -> error("unknown field ${'$'}field")
         }
     }

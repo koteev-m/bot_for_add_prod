@@ -30,17 +30,20 @@ fun Route.guestFlowRoutes(availability: AvailabilityService, renderer: HallRende
         get("/nights/{startUtc}/hall.png") {
             val clubId = call.parameters.getOrFail("clubId").toLong()
             val startUtc = call.parameters.getOrFail("startUtc")
-            val instant = runCatching { Instant.parse(startUtc) }.getOrElse {
-                call.respond(HttpStatusCode.UnprocessableEntity)
-                return@get
-            }
+            val instant =
+                runCatching { Instant.parse(startUtc) }.getOrElse {
+                    call.respond(HttpStatusCode.UnprocessableEntity)
+                    return@get
+                }
             val scale = call.request.queryParameters["scale"]?.toIntOrNull() ?: 1
             val tables = availability.listFreeTables(clubId, instant)
             val bytes = renderer.render(clubId, tables, scale)
             val statusVector = tables.joinToString(";") { "${it.tableId}:${it.status}" }
-            val hash = MessageDigest.getInstance("SHA-256")
-                .digest("$clubId|$instant|$statusVector".toByteArray())
-                .joinToString("") { String.format("%02x", it) }
+            val hash =
+                MessageDigest
+                    .getInstance("SHA-256")
+                    .digest("$clubId|$instant|$statusVector".toByteArray())
+                    .joinToString("") { String.format("%02x", it) }
             val etag = "\"$hash\""
             val ifNone = call.request.headers[HttpHeaders.IfNoneMatch]
             if (ifNone == etag) {

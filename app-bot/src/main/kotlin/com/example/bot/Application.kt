@@ -28,14 +28,15 @@ import org.slf4j.LoggerFactory
 
 private val logger = LoggerFactory.getLogger("Application")
 
-private val allowedUpdates = listOf(
-    "message",
-    "edited_message",
-    "callback_query",
-    "contact",
-    "pre_checkout_query",
-    "successful_payment",
-)
+private val allowedUpdates =
+    listOf(
+        "message",
+        "edited_message",
+        "callback_query",
+        "contact",
+        "pre_checkout_query",
+        "successful_payment",
+    )
 
 /** Ktor application module. */
 fun Application.module() {
@@ -53,12 +54,13 @@ fun Application.module() {
     installMetrics(metricsRegistry)
     installLogging()
 
-    val tracing = if (System.getenv("TRACING_ENABLED") == "true") {
-        val endpoint = System.getenv("OTLP_ENDPOINT") ?: "http://localhost:4318"
-        TracingProvider.create(endpoint).tracer
-    } else {
-        null
-    }
+    val tracing =
+        if (System.getenv("TRACING_ENABLED") == "true") {
+            val endpoint = System.getenv("OTLP_ENDPOINT") ?: "http://localhost:4318"
+            TracingProvider.create(endpoint).tracer
+        } else {
+            null
+        }
     tracing?.let { installTracing(it) }
 
     install(StatusPages) {
@@ -110,6 +112,8 @@ private fun env(name: String): String = System.getenv(name) ?: error("Missing $n
 fun main(args: Array<String>) {
     when (System.getenv("RUN_MODE")?.lowercase()) {
         "polling" -> PollingMain.main(args)
-        else -> io.ktor.server.netty.EngineMain.main(args)
+        else ->
+            io.ktor.server.netty.EngineMain
+                .main(args)
     }
 }

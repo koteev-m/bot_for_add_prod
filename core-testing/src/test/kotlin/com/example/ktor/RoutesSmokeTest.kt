@@ -19,22 +19,23 @@ import kotlin.test.assertTrue
 
 class RoutesSmokeTest {
     @Test
-    fun `health and metrics exposed`() = testApplication {
-        application {
-            install(ContentNegotiation) { json() }
-            val registry = MetricsProvider.prometheusRegistry()
-            installMetrics(registry)
-            routing { observabilityRoutes(MetricsProvider(registry), DefaultHealthService()) }
-            registry.counter("custom.counter").increment()
+    fun `health and metrics exposed`() =
+        testApplication {
+            application {
+                install(ContentNegotiation) { json() }
+                val registry = MetricsProvider.prometheusRegistry()
+                installMetrics(registry)
+                routing { observabilityRoutes(MetricsProvider(registry), DefaultHealthService()) }
+                registry.counter("custom.counter").increment()
+            }
+            val health = client.get("/health")
+            assertEquals(HttpStatusCode.OK, health.status)
+            val metrics = client.get("/metrics")
+            assertEquals(HttpStatusCode.OK, metrics.status)
+            val ctype = metrics.headers[HttpHeaders.ContentType]
+            assertTrue(ctype?.contains("text/plain") == true)
+            val body = metrics.bodyAsText()
+            assertTrue(body.contains("http_server_requests_seconds"))
+            assertTrue(body.contains("custom_counter"))
         }
-        val health = client.get("/health")
-        assertEquals(HttpStatusCode.OK, health.status)
-        val metrics = client.get("/metrics")
-        assertEquals(HttpStatusCode.OK, metrics.status)
-        val ctype = metrics.headers[HttpHeaders.ContentType]
-        assertTrue(ctype?.contains("text/plain") == true)
-        val body = metrics.bodyAsText()
-        assertTrue(body.contains("http_server_requests_seconds"))
-        assertTrue(body.contains("custom_counter"))
-    }
 }

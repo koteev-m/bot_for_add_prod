@@ -39,10 +39,11 @@ class WebhookSecretHeaderTest :
         "missing header returns 401" {
             testApplication {
                 application { testModule() }
-                val response = client.post("/webhook") {
-                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                    setBody("{\"update_id\":1}")
-                }
+                val response =
+                    client.post("/webhook") {
+                        header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                        setBody("{\"update_id\":1}")
+                    }
                 response.status shouldBe HttpStatusCode.Unauthorized
             }
         }
@@ -50,11 +51,12 @@ class WebhookSecretHeaderTest :
         "wrong header returns 401" {
             testApplication {
                 application { testModule() }
-                val response = client.post("/webhook") {
-                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                    header("X-Telegram-Bot-Api-Secret-Token", "bad")
-                    setBody("{\"update_id\":1}")
-                }
+                val response =
+                    client.post("/webhook") {
+                        header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                        header("X-Telegram-Bot-Api-Secret-Token", "bad")
+                        setBody("{\"update_id\":1}")
+                    }
                 response.status shouldBe HttpStatusCode.Unauthorized
             }
         }
@@ -62,11 +64,12 @@ class WebhookSecretHeaderTest :
         "valid header returns 200" {
             testApplication {
                 application { testModule() }
-                val response = client.post("/webhook") {
-                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                    header("X-Telegram-Bot-Api-Secret-Token", secret)
-                    setBody("{\"update_id\":1}")
-                }
+                val response =
+                    client.post("/webhook") {
+                        header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                        header("X-Telegram-Bot-Api-Secret-Token", secret)
+                        setBody("{\"update_id\":1}")
+                    }
                 response.status shouldBe HttpStatusCode.OK
             }
         }

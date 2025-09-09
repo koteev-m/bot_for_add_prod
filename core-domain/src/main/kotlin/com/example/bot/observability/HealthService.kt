@@ -83,11 +83,12 @@ class DefaultHealthService(
         }
     }
 
-    private fun migrationCheck(): HealthCheck = if (migrationsApplied()) {
-        HealthCheck("migrations", CheckStatus.UP)
-    } else {
-        HealthCheck("migrations", CheckStatus.DOWN)
-    }
+    private fun migrationCheck(): HealthCheck =
+        if (migrationsApplied()) {
+            HealthCheck("migrations", CheckStatus.UP)
+        } else {
+            HealthCheck("migrations", CheckStatus.DOWN)
+        }
 
     private fun outboxCheck(): HealthCheck {
         val lag = outboxLagSeconds()

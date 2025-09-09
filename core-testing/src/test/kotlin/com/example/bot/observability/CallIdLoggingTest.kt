@@ -17,19 +17,20 @@ import org.slf4j.LoggerFactory
 
 class CallIdLoggingTest {
     @Test
-    fun `call id propagated`() = testApplication {
-        val list = ListAppender<ILoggingEvent>()
-        val logger = LoggerFactory.getLogger("io.ktor.test") as Logger
-        list.start()
-        logger.addAppender(list)
-        application {
-            installLogging()
-            routing { get("/ping") { call.respondText("pong") } }
+    fun `call id propagated`() =
+        testApplication {
+            val list = ListAppender<ILoggingEvent>()
+            val logger = LoggerFactory.getLogger("io.ktor.test") as Logger
+            list.start()
+            logger.addAppender(list)
+            application {
+                installLogging()
+                routing { get("/ping") { call.respondText("pong") } }
+            }
+            val res = client.get("/ping") { header("X-Request-ID", "abc123") }
+            assertEquals("abc123", res.headers["X-Request-ID"])
+            val event = list.list.firstOrNull { it.mdcPropertyMap.containsKey("callId") }
+            assertEquals("abc123", event?.mdcPropertyMap?.get("callId"))
+            logger.detachAppender(list)
         }
-        val res = client.get("/ping") { header("X-Request-ID", "abc123") }
-        assertEquals("abc123", res.headers["X-Request-ID"])
-        val event = list.list.firstOrNull { it.mdcPropertyMap.containsKey("callId") }
-        assertEquals("abc123", event?.mdcPropertyMap?.get("callId"))
-        logger.detachAppender(list)
-    }
 }

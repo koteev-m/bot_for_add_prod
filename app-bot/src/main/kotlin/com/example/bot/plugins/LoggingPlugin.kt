@@ -32,7 +32,12 @@ fun Application.installLogging() {
         mdc("callId") { it.callId }
         mdc("path") { it.request.path() }
         mdc("method") { it.request.httpMethod.value }
-        mdc("status") { it.response.status()?.value?.toString() }
+        mdc("status") {
+            it.response
+                .status()
+                ?.value
+                ?.toString()
+        }
         mdc("took_ms") {
             val start = if (it.attributes.contains(startTimeKey)) it.attributes[startTimeKey] else null
             start?.let { st -> (System.currentTimeMillis() - st).toString() }

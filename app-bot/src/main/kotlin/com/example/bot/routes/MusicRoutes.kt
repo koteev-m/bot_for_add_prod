@@ -26,8 +26,11 @@ fun Route.musicRoutes(service: MusicService) {
             val items = service.listItems(filter)
             val updatedMax = items.maxOfOrNull { it.publishedAt ?: java.time.Instant.EPOCH } ?: java.time.Instant.EPOCH
             val etagSource = "$clubId|$tag|$q|${updatedMax.toEpochMilli()}"
-            val etag = MessageDigest.getInstance("SHA-256").digest(etagSource.toByteArray())
-                .joinToString(separator = "") { String.format("%02x", it) }
+            val etag =
+                MessageDigest
+                    .getInstance("SHA-256")
+                    .digest(etagSource.toByteArray())
+                    .joinToString(separator = "") { String.format("%02x", it) }
             val ifNone = call.request.headers["If-None-Match"]
             val weak = "W/\"$etag\""
             if (ifNone == weak) {

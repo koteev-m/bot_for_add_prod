@@ -17,9 +17,10 @@ import io.ktor.server.response.respond
  * Installs authentication and basic error handling.
  */
 fun Application.configureSecurity() {
-    val repository = object : RoleRepository {
-        override suspend fun findRoles(userId: Long) = emptySet<com.example.bot.security.rbac.RoleAssignment>()
-    }
+    val repository =
+        object : RoleRepository {
+            override suspend fun findRoles(userId: Long) = emptySet<com.example.bot.security.rbac.RoleAssignment>()
+        }
     val cache = RoleCache(repository)
     install(Authentication) {
         telegramWebhookAuth("secret") { cache.rolesFor(it) }

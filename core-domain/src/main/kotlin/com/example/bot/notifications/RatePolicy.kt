@@ -88,14 +88,15 @@ class DefaultRatePolicy(
     override fun acquireGlobal(n: Int, now: Long): Permit = globalBucket.tryAcquire(n, now)
 
     override fun acquireChat(chatId: Long, n: Int, now: Long): Permit {
-        val holder = chats.compute(chatId) { _, existing ->
-            if (existing == null) {
-                Holder(TokenBucket(chatRps, chatRps, timeSource), AtomicLong(now))
-            } else {
-                existing.lastUsed.set(now)
-                existing
-            }
-        }!!
+        val holder =
+            chats.compute(chatId) { _, existing ->
+                if (existing == null) {
+                    Holder(TokenBucket(chatRps, chatRps, timeSource), AtomicLong(now))
+                } else {
+                    existing.lastUsed.set(now)
+                    existing
+                }
+            }!!
         cleanup(now)
         return holder.bucket.tryAcquire(n, now)
     }
@@ -104,9 +105,10 @@ class DefaultRatePolicy(
         val until = now + retryAfter
         globalBucket.blockUntil(until)
         if (chatId != null) {
-            val holder = chats.computeIfAbsent(chatId) {
-                Holder(TokenBucket(chatRps, chatRps, timeSource), AtomicLong(now))
-            }
+            val holder =
+                chats.computeIfAbsent(chatId) {
+                    Holder(TokenBucket(chatRps, chatRps, timeSource), AtomicLong(now))
+                }
             holder.lastUsed.set(now)
             holder.bucket.blockUntil(until)
         }

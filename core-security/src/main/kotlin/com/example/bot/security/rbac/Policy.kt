@@ -16,13 +16,14 @@ class AuthorizationException(message: String = "Forbidden") : RuntimeException(m
  */
 fun anyOf(vararg codes: RoleCode): Set<RoleCode> = codes.toSet()
 
-private fun TelegramPrincipal.hasRole(required: Set<RoleCode>, clubId: Long?): Boolean = roles.any { assignment ->
-    assignment.code in required &&
-        when (val scope = assignment.scope) {
-            is Scope.Global -> true
-            is Scope.Club -> clubId != null && scope.clubId == clubId
-        }
-}
+private fun TelegramPrincipal.hasRole(required: Set<RoleCode>, clubId: Long?): Boolean =
+    roles.any { assignment ->
+        assignment.code in required &&
+            when (val scope = assignment.scope) {
+                is Scope.Global -> true
+                is Scope.Club -> clubId != null && scope.clubId == clubId
+            }
+    }
 
 private fun HttpMethod.isWrite(): Boolean = this != HttpMethod.Get && this != HttpMethod.Head
 

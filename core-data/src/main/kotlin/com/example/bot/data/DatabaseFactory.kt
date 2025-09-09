@@ -18,7 +18,11 @@ object DatabaseFactory {
                 maximumPoolSize = MAX_POOL_SIZE
             }
         val dataSource = HikariDataSource(config)
-        Flyway.configure().dataSource(dataSource).load().migrate()
+        Flyway
+            .configure()
+            .dataSource(dataSource)
+            .load()
+            .migrate()
         return Database.connect(dataSource)
     }
 }

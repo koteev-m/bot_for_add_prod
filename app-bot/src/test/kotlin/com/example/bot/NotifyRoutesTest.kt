@@ -34,12 +34,13 @@ class NotifyRoutesTest :
             testApplication {
                 application { testModule() }
                 val client = createClient { }
-                val resp = client.post("/api/notify/tx") {
-                    contentType(ContentType.Application.Json)
-                    setBody(
-                        """{"chatId":1,"messageThreadId":null,"method":"TEXT","text":"hi","parseMode":null,"photoUrl":null,"album":null,"buttons":null,"dedupKey":null}""",
-                    )
-                }
+                val resp =
+                    client.post("/api/notify/tx") {
+                        contentType(ContentType.Application.Json)
+                        setBody(
+                            """{"chatId":1,"messageThreadId":null,"method":"TEXT","text":"hi","parseMode":null,"photoUrl":null,"album":null,"buttons":null,"dedupKey":null}""",
+                        )
+                    }
                 resp.status shouldBe HttpStatusCode.Accepted
             }
         }
@@ -49,20 +50,22 @@ class NotifyRoutesTest :
                 application { testModule() }
                 val client = createClient { }
 
-                val create = client.post("/api/campaigns") {
-                    contentType(ContentType.Application.Json)
-                    setBody("""{"title":"t","text":"hello"}""")
-                }
+                val create =
+                    client.post("/api/campaigns") {
+                        contentType(ContentType.Application.Json)
+                        setBody("""{"title":"t","text":"hello"}""")
+                    }
                 create.status shouldBe HttpStatusCode.OK
                 val dto = Json.decodeFromString<CampaignDto>(create.bodyAsText())
                 dto.status shouldBe CampaignStatus.DRAFT
 
                 val id = dto.id
 
-                val update = client.put("/api/campaigns/$id") {
-                    contentType(ContentType.Application.Json)
-                    setBody("""{"title":"t2"}""")
-                }
+                val update =
+                    client.put("/api/campaigns/$id") {
+                        contentType(ContentType.Application.Json)
+                        setBody("""{"title":"t2"}""")
+                    }
                 update.status shouldBe HttpStatusCode.OK
 
                 client.post("/api/campaigns/$id:preview?user_id=1")

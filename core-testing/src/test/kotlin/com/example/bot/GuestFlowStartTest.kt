@@ -18,10 +18,11 @@ class GuestFlowStartTest :
         val texts = BotTexts()
         val keyboards = Keyboards(texts)
         val sent = mutableListOf<Any>()
-        val handler = GuestFlowHandler({ req ->
-            sent += req
-            mockk<BaseResponse>(relaxed = true)
-        }, texts, keyboards)
+        val handler =
+            GuestFlowHandler({ req ->
+                sent += req
+                mockk<BaseResponse>(relaxed = true)
+            }, texts, keyboards)
 
         "start command sends menu with four buttons" {
             val json = """{"update_id":1,"message":{"message_id":1,"chat":{"id":42},"from":{"id":1,"language_code":"en"},"text":"/start"}}"""
