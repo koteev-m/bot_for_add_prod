@@ -26,7 +26,8 @@ class AvailabilityTablesTest {
                 .instance()
                 .isDockerAvailable,
         )
-        PostgreSQLContainer<Nothing>("postgres:15-alpine").use { it.start() }
+        PostgreSQLContainer<Nothing>("postgres:15-alpine")
+            .use { it.start() }
         val eventStart = Instant.parse("2025-05-02T19:00:00Z")
         val eventEnd = eventStart.plusSeconds(6 * 3600)
 
@@ -39,16 +40,31 @@ class AvailabilityTablesTest {
                         ClubHour(DayOfWeek.FRIDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
                     )
 
-                override suspend fun listHolidays(clubId: Long, from: LocalDate, to: LocalDate) =
+                override suspend fun listHolidays(
+                    clubId: Long,
+                    from: LocalDate,
+                    to: LocalDate,
+                ) =
                     emptyList<ClubHoliday>()
 
-                override suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate) =
+                override suspend fun listExceptions(
+                    clubId: Long,
+                    from: LocalDate,
+                    to: LocalDate,
+                ) =
                     emptyList<ClubException>()
 
-                override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) =
+                override suspend fun listEvents(
+                    clubId: Long,
+                    from: Instant,
+                    to: Instant,
+                ) =
                     emptyList<com.example.bot.time.Event>()
 
-                override suspend fun findEvent(clubId: Long, startUtc: Instant) =
+                override suspend fun findEvent(
+                    clubId: Long,
+                    startUtc: Instant,
+                ) =
                     com.example.bot.time.Event(
                         1,
                         1,
@@ -64,9 +80,14 @@ class AvailabilityTablesTest {
                         Table(4, "D", "Z", 4, 100, true),
                     )
 
-                override suspend fun listActiveHoldTableIds(eventId: Long, now: Instant) = setOf(1L)
+                override suspend fun listActiveHoldTableIds(
+                    eventId: Long,
+                    now: Instant,
+                ) = setOf(1L)
 
-                override suspend fun listActiveBookingTableIds(eventId: Long) = setOf(2L)
+                override suspend fun listActiveBookingTableIds(
+                    eventId: Long,
+                ) = setOf(2L)
             }
 
         val resolver = OperatingRulesResolver(repo)

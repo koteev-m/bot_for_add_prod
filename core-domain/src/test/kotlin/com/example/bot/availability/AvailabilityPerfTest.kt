@@ -27,10 +27,14 @@ class AvailabilityPerfTest {
                 .instance()
                 .isDockerAvailable,
         )
-        PostgreSQLContainer<Nothing>("postgres:15-alpine").use { it.start() }
+        PostgreSQLContainer<Nothing>("postgres:15-alpine")
+            .use { it.start() }
         val eventStart = Instant.parse("2025-05-02T19:00:00Z")
         val eventEnd = eventStart.plusSeconds(6 * 3600)
-        val tables = (1..500).map { id -> Table(id.toLong(), "T$id", "Z", 4, 100, true) }
+        val tables =
+            (1..500).map { id ->
+                Table(id.toLong(), "T$id", "Z", 4, 100, true)
+            }
 
         val repo =
             object : AvailabilityRepository {
@@ -41,16 +45,31 @@ class AvailabilityPerfTest {
                         ClubHour(DayOfWeek.FRIDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
                     )
 
-                override suspend fun listHolidays(clubId: Long, from: LocalDate, to: LocalDate) =
+                override suspend fun listHolidays(
+                    clubId: Long,
+                    from: LocalDate,
+                    to: LocalDate,
+                ) =
                     emptyList<ClubHoliday>()
 
-                override suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate) =
+                override suspend fun listExceptions(
+                    clubId: Long,
+                    from: LocalDate,
+                    to: LocalDate,
+                ) =
                     emptyList<ClubException>()
 
-                override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) =
+                override suspend fun listEvents(
+                    clubId: Long,
+                    from: Instant,
+                    to: Instant,
+                ) =
                     emptyList<com.example.bot.time.Event>()
 
-                override suspend fun findEvent(clubId: Long, startUtc: Instant) =
+                override suspend fun findEvent(
+                    clubId: Long,
+                    startUtc: Instant,
+                ) =
                     com.example.bot.time.Event(
                         1,
                         1,
@@ -60,9 +79,14 @@ class AvailabilityPerfTest {
 
                 override suspend fun listTables(clubId: Long) = tables
 
-                override suspend fun listActiveHoldTableIds(eventId: Long, now: Instant) = emptySet<Long>()
+                override suspend fun listActiveHoldTableIds(
+                    eventId: Long,
+                    now: Instant,
+                ) = emptySet<Long>()
 
-                override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
+                override suspend fun listActiveBookingTableIds(
+                    eventId: Long,
+                ) = emptySet<Long>()
             }
 
         val resolver = OperatingRulesResolver(repo)
