@@ -13,8 +13,8 @@ logback = "1.4.14"
 junit = "5.10.2"
 kotest = "5.8.0"
 mockk = "1.13.10"
-detekt = "1.23.6"
-ktlint = "12.1.1"
+detekt = "1.23.8"
+ktlintPlugin = "13.1.0"
 coroutines = "1.10.2"
 testcontainers = "1.19.7"
 micrometerTracing = "1.2.5"
@@ -60,9 +60,11 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 testcontainers-junit = { module = "org.testcontainers:junit-jupiter", version.ref = "testcontainers" }
 testcontainers-postgresql = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }
+detekt-formatting = { group = "io.gitlab.arturbosch.detekt", name = "detekt-formatting", version.ref = "detekt" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
-ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlintPlugin" }
+ktlintGradle = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlintPlugin" }
