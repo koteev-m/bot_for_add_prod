@@ -32,6 +32,8 @@ dependencies {
     testImplementation(libs.flyway)
     testImplementation(libs.exposed.core)
     testImplementation(libs.exposed.jdbc)
+    testImplementation(libs.hikari)
+    testImplementation(libs.postgres)
     testImplementation(libs.ktor.serialization.kotlinx.json)
     testImplementation(libs.ktor.server.content.negotiation)
 }
