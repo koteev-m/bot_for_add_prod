@@ -3,16 +3,18 @@ package com.example.bot.data.music
 import com.example.bot.music.*
 import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
-import org.jetbrains.exposed.sql.Database
 import java.time.ZoneOffset
-import java.time.OffsetDateTime
 
 /** Exposed implementation of [MusicItemRepository] and [MusicPlaylistRepository]. */
 class MusicItemRepositoryImpl(private val db: Database) : MusicItemRepository {
-    override suspend fun create(req: MusicItemCreate, actor: UserId): MusicItemView = newSuspendedTransaction(Dispatchers.IO, db) {
+    override suspend fun create(
+        req: MusicItemCreate,
+        actor: UserId,
+    ): MusicItemView = newSuspendedTransaction(Dispatchers.IO, db) {
         val row = MusicItemsTable.insert {
             it[clubId] = req.clubId
             it[title] = req.title
@@ -39,7 +41,7 @@ class MusicItemRepositoryImpl(private val db: Database) : MusicItemRepository {
         if (clubId != null) cond = cond and (MusicItemsTable.clubId eq clubId)
         // tag filtering omitted for simplicity
         if (!q.isNullOrBlank()) {
-            val like = "%${q}%"
+            val like = "%$q%"
             cond = cond and ((MusicItemsTable.title like like) or (MusicItemsTable.dj like like))
         }
         MusicItemsTable.select { cond }
@@ -64,7 +66,10 @@ class MusicItemRepositoryImpl(private val db: Database) : MusicItemRepository {
 }
 
 class MusicPlaylistRepositoryImpl(private val db: Database) : MusicPlaylistRepository {
-    override suspend fun create(req: PlaylistCreate, actor: UserId): PlaylistView = newSuspendedTransaction(Dispatchers.IO, db) {
+    override suspend fun create(
+        req: PlaylistCreate,
+        actor: UserId,
+    ): PlaylistView = newSuspendedTransaction(Dispatchers.IO, db) {
         val row = MusicPlaylistsTable.insert {
             it[clubId] = req.clubId
             it[title] = req.title
@@ -118,4 +123,3 @@ class MusicPlaylistRepositoryImpl(private val db: Database) : MusicPlaylistRepos
         publishedAt = this[MusicItemsTable.publishedAt]?.toInstant(),
     )
 }
-

@@ -32,4 +32,3 @@ fun Route.telegramSetupRoutes(
         call.respond(mapOf("info" to info.toString()))
     }
 }
-

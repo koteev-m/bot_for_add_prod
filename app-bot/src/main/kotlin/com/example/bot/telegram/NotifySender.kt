@@ -1,5 +1,6 @@
 package com.example.bot.telegram
 
+import com.example.bot.telemetry.Telemetry
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.request.InputMediaPhoto
 import com.pengrad.telegrambot.model.request.Keyboard
@@ -9,7 +10,6 @@ import com.pengrad.telegrambot.request.SendMediaGroup
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.request.SendPhoto
 import com.pengrad.telegrambot.response.BaseResponse
-import com.example.bot.telemetry.Telemetry
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.Dispatchers
@@ -23,12 +23,15 @@ class NotifySender(
 
     sealed interface Result {
         data object Ok : Result
+
         data class RetryAfter(val seconds: Int) : Result
+
         data class Failed(val code: Int, val description: String?) : Result
     }
 
     sealed interface PhotoContent {
         data class Url(val url: String) : PhotoContent
+
         data class Bytes(val bytes: ByteArray) : PhotoContent
     }
 
@@ -88,7 +91,9 @@ class NotifySender(
         val request = SendMediaGroup(chatId, *inputMedia.toTypedArray())
         threadId?.let { request.messageThreadId(it) }
         val result = execute(chatId, request)
-        if (result is Result.Failed && result.code == 400 && threadId != null &&
+        if (result is Result.Failed &&
+            result.code == 400 &&
+            threadId != null &&
             (result.description?.contains("thread", true) == true)
         ) {
             log.info("SendMediaGroup unsupported, fallback to sequential sendPhoto for chat {}", mask(chatId))
@@ -132,4 +137,3 @@ class NotifySender(
         return "*".repeat(hidden) + s.takeLast(3)
     }
 }
-

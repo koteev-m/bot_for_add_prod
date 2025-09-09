@@ -56,9 +56,13 @@ fun Route.bookingRoutes(service: BookingService) {
 private fun mapError(error: com.example.bot.booking.BookingError): Pair<HttpStatusCode, Map<String, String>> =
     when (error) {
         is com.example.bot.booking.BookingError.Conflict -> HttpStatusCode.Conflict to mapOf("error" to error.message)
-        is com.example.bot.booking.BookingError.Validation -> HttpStatusCode.UnprocessableEntity to mapOf("error" to error.message)
+        is com.example.bot.booking.BookingError.Validation ->
+            HttpStatusCode.UnprocessableEntity to
+                mapOf("error" to error.message)
         is com.example.bot.booking.BookingError.NotFound -> HttpStatusCode.NotFound to mapOf("error" to error.message)
         is com.example.bot.booking.BookingError.Forbidden -> HttpStatusCode.Forbidden to mapOf("error" to error.message)
         is com.example.bot.booking.BookingError.Gone -> HttpStatusCode.Gone to mapOf("error" to error.message)
-        is com.example.bot.booking.BookingError.Internal -> HttpStatusCode.InternalServerError to mapOf("error" to error.message)
+        is com.example.bot.booking.BookingError.Internal ->
+            HttpStatusCode.InternalServerError to
+                mapOf("error" to error.message)
     }

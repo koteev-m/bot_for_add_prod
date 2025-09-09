@@ -10,8 +10,11 @@ data class Permit(val granted: Boolean, val retryAfterMs: Long = 0L)
 /** Rate policy with global and per-chat token buckets. */
 interface RatePolicy {
     val timeSource: TimeSource
+
     fun acquireGlobal(n: Int = 1, now: Long = timeSource.nowMs()): Permit
+
     fun acquireChat(chatId: Long, n: Int = 1, now: Long = timeSource.nowMs()): Permit
+
     fun on429(chatId: Long?, retryAfter: Long, now: Long = timeSource.nowMs())
 }
 
@@ -78,6 +81,7 @@ class DefaultRatePolicy(
     private val globalBucket = TokenBucket(globalRps.toDouble(), globalRps.toDouble(), timeSource)
 
     private data class Holder(val bucket: TokenBucket, val lastUsed: AtomicLong)
+
     private val chats = ConcurrentHashMap<Long, Holder>()
     private val lastCleanup = AtomicLong(timeSource.nowMs())
 

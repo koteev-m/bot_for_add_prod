@@ -16,6 +16,7 @@ data class HealthReport(val status: CheckStatus, val checks: List<HealthCheck>)
 
 interface HealthService {
     suspend fun health(): HealthReport
+
     suspend fun readiness(): HealthReport
 }
 
@@ -56,7 +57,11 @@ class DefaultHealthService(
     private fun memory(): HealthCheck {
         val rt = Runtime.getRuntime()
         val used = rt.totalMemory() - rt.freeMemory()
-        return HealthCheck("memory", CheckStatus.UP, mapOf("used" to used.toString(), "max" to rt.maxMemory().toString()))
+        return HealthCheck(
+            "memory",
+            CheckStatus.UP,
+            mapOf("used" to used.toString(), "max" to rt.maxMemory().toString()),
+        )
     }
 
     private fun threads(): HealthCheck {
@@ -79,8 +84,11 @@ class DefaultHealthService(
     }
 
     private fun migrationCheck(): HealthCheck =
-        if (migrationsApplied()) HealthCheck("migrations", CheckStatus.UP)
-        else HealthCheck("migrations", CheckStatus.DOWN)
+        if (migrationsApplied()) {
+            HealthCheck("migrations", CheckStatus.UP)
+        } else {
+            HealthCheck("migrations", CheckStatus.DOWN)
+        }
 
     private fun outboxCheck(): HealthCheck {
         val lag = outboxLagSeconds()
@@ -91,4 +99,3 @@ class DefaultHealthService(
     private fun workersCheck(): HealthCheck =
         if (workersRunning()) HealthCheck("workers", CheckStatus.UP) else HealthCheck("workers", CheckStatus.DOWN)
 }
-

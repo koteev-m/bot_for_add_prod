@@ -33,4 +33,3 @@ class CallIdLoggingTest {
         logger.detachAppender(list)
     }
 }
-

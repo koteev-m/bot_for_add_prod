@@ -1,19 +1,13 @@
 package com.example.bot.booking
 
-import com.example.bot.booking.BookingError
-import com.example.bot.booking.BookingService
-import com.example.bot.booking.ConfirmRequest
 import com.example.bot.data.booking.InMemoryBookingRepository
 import com.example.bot.data.outbox.InMemoryOutboxService
-import com.example.bot.booking.EventDto
-import com.example.bot.booking.TableDto
-import com.example.bot.booking.Either
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
-import java.math.BigDecimal
-import java.time.Instant
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import java.math.BigDecimal
+import java.time.Instant
 
 class BookingRaceTest : StringSpec({
     "two parallel confirms, only one succeeds" {

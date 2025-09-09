@@ -5,10 +5,10 @@ import com.example.bot.routes.observabilityRoutes
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.routing.routing
-import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.testing.testApplication
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -23,10 +23,20 @@ class HealthReadyTest {
             install(ContentNegotiation) { json() }
             installMetrics(registry)
             routing {
-                observabilityRoutes(provider, object : HealthService {
-                    override suspend fun health() = HealthReport(CheckStatus.UP, listOf(HealthCheck("db", CheckStatus.UP)))
-                    override suspend fun readiness() = HealthReport(CheckStatus.DOWN, listOf(HealthCheck("outbox", CheckStatus.DOWN)))
-                })
+                observabilityRoutes(
+                    provider,
+                    object : HealthService {
+                        override suspend fun health() = HealthReport(
+                            CheckStatus.UP,
+                            listOf(HealthCheck("db", CheckStatus.UP)),
+                        )
+
+                        override suspend fun readiness() = HealthReport(
+                            CheckStatus.DOWN,
+                            listOf(HealthCheck("outbox", CheckStatus.DOWN)),
+                        )
+                    },
+                )
             }
         }
         val h = client.get("/health")
@@ -37,4 +47,3 @@ class HealthReadyTest {
         assertTrue(r.bodyAsText().contains("outbox"))
     }
 }
-

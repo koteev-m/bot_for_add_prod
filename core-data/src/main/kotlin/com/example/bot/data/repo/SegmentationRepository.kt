@@ -3,7 +3,6 @@ package com.example.bot.data.repo
 import com.example.bot.notifications.SegmentId
 import com.example.bot.notifications.SegmentNode
 import com.example.bot.notifications.UserId
-import java.time.LocalDate
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
@@ -16,13 +15,14 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
 import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.exists
+import org.jetbrains.exposed.sql.javatime.date
 import org.jetbrains.exposed.sql.not
 import org.jetbrains.exposed.sql.or
-import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.javatime.date
+import java.time.LocalDate
 
 /**
  * Repository resolving audience segments into user id sequences.
@@ -110,9 +110,11 @@ class SegmentationRepository(private val db: Database) {
             "has_bookings_between" -> {
                 val start = LocalDate.parse(node.args[0].jsonPrimitive.content)
                 val end = LocalDate.parse(node.args[1].jsonPrimitive.content)
-                exists(Bookings.select {
-                    Bookings.userId eq Users.id and Bookings.date.between(start, end)
-                })
+                exists(
+                    Bookings.select {
+                        Bookings.userId eq Users.id and Bookings.date.between(start, end)
+                    },
+                )
             }
             "no_shows_ge" -> Users.noShows.greaterEq(node.args.first().jsonPrimitive.int)
             else -> error("unknown field ${'$'}field")

@@ -30,4 +30,3 @@ fun Route.availabilityRoutes(service: AvailabilityService) {
         }
     }
 }
-

@@ -52,4 +52,3 @@ object PollingMain {
 
     private fun env(name: String): String = System.getenv(name) ?: error("Missing $name")
 }
-

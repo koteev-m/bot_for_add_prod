@@ -33,4 +33,3 @@ suspend fun BookingService.startConfirmation(
             Either.Right(ConfirmResult.PendingPayment(invoice))
         }
     }
-

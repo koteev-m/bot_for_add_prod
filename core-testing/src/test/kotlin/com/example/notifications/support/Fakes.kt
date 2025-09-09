@@ -7,6 +7,7 @@ import com.pengrad.telegrambot.model.request.ParseMode
 /** Simple in-memory fake of [NotifySender] that records sent messages. */
 class FakeNotifySender {
     data class Sent(val timestamp: Long, val chatId: Long, val method: String)
+
     val sent = mutableListOf<Sent>()
     private val scripted = ArrayDeque<NotifySender.Result>()
 

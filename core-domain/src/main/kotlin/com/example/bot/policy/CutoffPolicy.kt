@@ -28,4 +28,3 @@ class CutoffPolicy(
         return if (proposed.isAfter(slot.eventEndUtc)) slot.eventEndUtc else proposed
     }
 }
-

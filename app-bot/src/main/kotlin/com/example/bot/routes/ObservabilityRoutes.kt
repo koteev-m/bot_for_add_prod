@@ -1,7 +1,7 @@
 package com.example.bot.routes
 
-import com.example.bot.observability.HealthService
 import com.example.bot.observability.CheckStatus
+import com.example.bot.observability.HealthService
 import com.example.bot.observability.MetricsProvider
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -17,7 +17,7 @@ fun Route.observabilityRoutes(metrics: MetricsProvider, health: HealthService) {
         val registry = metrics.registry as PrometheusMeterRegistry
         call.respondText(
             registry.scrape(),
-            ContentType.parse("text/plain; version=0.0.4; charset=utf-8")
+            ContentType.parse("text/plain; version=0.0.4; charset=utf-8"),
         )
     }
     get("/health") {
@@ -31,4 +31,3 @@ fun Route.observabilityRoutes(metrics: MetricsProvider, health: HealthService) {
         call.respond(status, report)
     }
 }
-

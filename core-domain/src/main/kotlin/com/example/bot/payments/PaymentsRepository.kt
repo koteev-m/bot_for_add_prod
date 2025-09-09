@@ -32,9 +32,12 @@ interface PaymentsRepository {
     ): PaymentRecord
 
     suspend fun markPending(id: UUID)
+
     suspend fun markCaptured(id: UUID, externalId: String?)
+
     suspend fun markDeclined(id: UUID, reason: String)
+
     suspend fun markRefunded(id: UUID, externalId: String?)
+
     suspend fun findByPayload(payload: String): PaymentRecord?
 }
-

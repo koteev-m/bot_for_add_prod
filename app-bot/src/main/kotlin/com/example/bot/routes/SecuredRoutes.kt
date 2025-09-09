@@ -1,9 +1,9 @@
 package com.example.bot.routes
 
-import com.example.bot.security.rbac.anyOf
-import com.example.bot.security.rbac.globalAuthorize
-import com.example.bot.security.rbac.clubScopedAuthorize
 import com.example.bot.security.rbac.RoleCode
+import com.example.bot.security.rbac.anyOf
+import com.example.bot.security.rbac.clubScopedAuthorize
+import com.example.bot.security.rbac.globalAuthorize
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
 import io.ktor.server.response.respondText

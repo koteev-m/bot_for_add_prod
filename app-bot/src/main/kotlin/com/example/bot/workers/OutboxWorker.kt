@@ -102,8 +102,10 @@ class OutboxWorker(
                 repo.markSent(rec.id, null)
                 registry.counter(
                     "notify.sent",
-                    "method", msg.method.name,
-                    "threaded", (msg.messageThreadId != null).toString(),
+                    "method",
+                    msg.method.name,
+                    "threaded",
+                    (msg.messageThreadId != null).toString(),
                 ).increment()
             }
             is NotifySender.Result.RetryAfter -> {
@@ -119,16 +121,20 @@ class OutboxWorker(
                     repo.markPermanentFailure(rec.id, result.description)
                     registry.counter(
                         "notify.failed",
-                        "code", result.code.toString(),
-                        "retryable", "false",
+                        "code",
+                        result.code.toString(),
+                        "retryable",
+                        "false",
                     ).increment()
                 } else {
                     val delayMs = (config.retryBaseMs * (1L shl rec.attempts)).coerceAtMost(config.retryMaxMs)
                     repo.markFailed(rec.id, result.description, OffsetDateTime.now().plusNanos(delayMs * 1_000_000))
                     registry.counter(
                         "notify.failed",
-                        "code", result.code.toString(),
-                        "retryable", "true",
+                        "code",
+                        result.code.toString(),
+                        "retryable",
+                        "true",
                     ).increment()
                     registry.counter("notify.retried").increment()
                 }

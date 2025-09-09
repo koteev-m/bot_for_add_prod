@@ -2,17 +2,17 @@ package com.example.bot.plugins
 
 import io.ktor.http.HttpHeaders
 import io.ktor.server.application.Application
-import io.ktor.server.application.install
 import io.ktor.server.application.call
+import io.ktor.server.application.install
 import io.ktor.server.plugins.callid.CallId
 import io.ktor.server.plugins.callid.callId
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.util.AttributeKey
+import org.slf4j.event.Level
 import java.util.concurrent.ThreadLocalRandom
 import kotlin.text.buildString
-import org.slf4j.event.Level
 
 fun Application.installLogging() {
     val startTimeKey = AttributeKey<Long>("call-start")
@@ -45,8 +45,7 @@ fun Application.installLogging() {
 }
 
 private fun randomId(): String {
-    val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_ .".replace(" ","")
+    val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_ .".replace(" ", "")
     val rnd = ThreadLocalRandom.current()
     return buildString(16) { repeat(16) { append(chars[rnd.nextInt(chars.length)]) } }
 }
-

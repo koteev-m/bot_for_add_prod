@@ -1,14 +1,14 @@
 package com.example.bot.telegram
 
 import com.example.bot.booking.payments.InvoiceInfo
-import com.pengrad.telegrambot.TelegramBot
-import com.pengrad.telegrambot.request.SendInvoice
-import com.pengrad.telegrambot.response.SendResponse
-import com.pengrad.telegrambot.request.AnswerPreCheckoutQuery
-import com.pengrad.telegrambot.model.Message
-import com.pengrad.telegrambot.model.PreCheckoutQuery
 import com.example.bot.payments.PaymentConfig
 import com.example.bot.payments.PaymentsRepository
+import com.pengrad.telegrambot.TelegramBot
+import com.pengrad.telegrambot.model.Message
+import com.pengrad.telegrambot.model.PreCheckoutQuery
+import com.pengrad.telegrambot.request.AnswerPreCheckoutQuery
+import com.pengrad.telegrambot.request.SendInvoice
+import com.pengrad.telegrambot.response.SendResponse
 import java.util.UUID
 
 /**
@@ -43,4 +43,3 @@ class PaymentsHandlers(
         paymentsRepo.markCaptured(payment.id, UUID.randomUUID().toString())
     }
 }
-

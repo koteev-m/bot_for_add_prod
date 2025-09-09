@@ -1,10 +1,10 @@
 package com.example.bot.booking.payments
 
-import com.example.bot.booking.BookingService
 import com.example.bot.booking.BookingError
+import com.example.bot.booking.BookingService
 import com.example.bot.booking.ConfirmRequest
-import com.example.bot.booking.PaymentPolicy
 import com.example.bot.booking.Either
+import com.example.bot.booking.PaymentPolicy
 import com.example.bot.payments.PaymentConfig
 import com.example.bot.payments.PaymentsRepository
 import java.math.BigDecimal
@@ -88,4 +88,3 @@ class PaymentsService(
         }
     }
 }
-

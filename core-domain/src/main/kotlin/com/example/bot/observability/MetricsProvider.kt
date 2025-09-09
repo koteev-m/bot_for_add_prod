@@ -35,4 +35,3 @@ class MetricsProvider(val registry: MeterRegistry) {
             .register(registry)
     }
 }
-

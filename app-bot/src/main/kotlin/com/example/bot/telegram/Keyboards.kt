@@ -16,16 +16,16 @@ class Keyboards(private val texts: BotTexts) {
         val m = texts.menu(lang)
         return InlineKeyboardMarkup(
             arrayOf(
-                InlineKeyboardButton(m.chooseClub).callbackData("menu:clubs")
+                InlineKeyboardButton(m.chooseClub).callbackData("menu:clubs"),
             ),
             arrayOf(
-                InlineKeyboardButton(m.myBookings).callbackData("menu:bookings")
+                InlineKeyboardButton(m.myBookings).callbackData("menu:bookings"),
             ),
             arrayOf(
-                InlineKeyboardButton(m.ask).callbackData("menu:ask")
+                InlineKeyboardButton(m.ask).callbackData("menu:ask"),
             ),
             arrayOf(
-                InlineKeyboardButton(m.music).callbackData("menu:music")
+                InlineKeyboardButton(m.music).callbackData("menu:music"),
             ),
         )
     }
@@ -65,17 +65,21 @@ class Keyboards(private val texts: BotTexts) {
         val rows = slice.map { t ->
             arrayOf(
                 InlineKeyboardButton("Table ${t.tableNumber} · от ${t.minDeposit}₽")
-                    .callbackData("tbl:${encode(t)}")
+                    .callbackData("tbl:${encode(t)}"),
             )
         }.toMutableList()
         val totalPages = (tables.size + pageSize - 1) / pageSize
         if (totalPages > 1) {
             val nav = mutableListOf<InlineKeyboardButton>()
-            if (page > 1) nav += InlineKeyboardButton("⬅️")
-                .callbackData("pg:${page - 1}")
-            nav += InlineKeyboardButton("${page}/$totalPages").callbackData("noop")
-            if (page < totalPages) nav += InlineKeyboardButton("➡️")
-                .callbackData("pg:${page + 1}")
+            if (page > 1) {
+                nav += InlineKeyboardButton("⬅️")
+                    .callbackData("pg:${page - 1}")
+            }
+            nav += InlineKeyboardButton("$page/$totalPages").callbackData("noop")
+            if (page < totalPages) {
+                nav += InlineKeyboardButton("➡️")
+                    .callbackData("pg:${page + 1}")
+            }
             rows += nav.toTypedArray()
         }
         return InlineKeyboardMarkup(*rows.toTypedArray())

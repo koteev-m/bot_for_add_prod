@@ -1,0 +1,33 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>ComplexCondition:OperatingRulesResolver.kt$OperatingRulesResolver$last != null &amp;&amp; last.source == slot.source &amp;&amp; last.isSpecial == slot.isSpecial &amp;&amp; last.eventEndUtc == slot.eventStartUtc</ID>
+    <ID>CyclomaticComplexMethod:OperatingRulesResolver.kt$OperatingRulesResolver$suspend fun resolve(clubId: Long, fromUtc: Instant, toUtc: Instant): List&lt;NightSlot&gt;</ID>
+    <ID>LongMethod:OperatingRulesResolver.kt$OperatingRulesResolver$suspend fun resolve(clubId: Long, fromUtc: Instant, toUtc: Instant): List&lt;NightSlot&gt;</ID>
+    <ID>LongMethod:PaymentsService.kt$PaymentsService$suspend fun startConfirmation( input: ConfirmInput, contact: ContactInfo?, policy: PaymentPolicy, idemKey: String, ): Either&lt;BookingError, ConfirmResult&gt;</ID>
+    <ID>LongParameterList:BookingRepository.kt$BookingWriteRepository$( tableId: Long, eventId: Long, tableNumber: Int, guests: Int, totalDeposit: BigDecimal, status: String, arrivalBy: Instant?, qrSecret: String, idempotencyKey: String, )</ID>
+    <ID>LongParameterList:PaymentsRepository.kt$PaymentsRepository$( bookingId: UUID?, provider: String, currency: String, amountMinor: Long, payload: String, idempotencyKey: String, )</ID>
+    <ID>LoopWithTooManyJumpStatements:OperatingRulesResolver.kt$OperatingRulesResolver$while</ID>
+    <ID>MagicNumber:AvailabilityService.kt$AvailabilityService$30</ID>
+    <ID>MagicNumber:BookingService.kt$BookingService$32</ID>
+    <ID>MagicNumber:PaymentsService.kt$PaymentsService$8</ID>
+    <ID>MagicNumber:QrCodec.kt$QrCodec$3</ID>
+    <ID>MagicNumber:QrCodec.kt$QrCodec$4</ID>
+    <ID>MagicNumber:QrCodec.kt$QrCodec$5</ID>
+    <ID>MagicNumber:QrCodec.kt$QrCodec$6</ID>
+    <ID>MagicNumber:QrCodec.kt$QrCodec$7</ID>
+    <ID>MagicNumber:UpdateDeduplicator.kt$UpdateDeduplicator$24</ID>
+    <ID>ReturnCount:AvailabilityService.kt$AvailabilityService$suspend fun listFreeTables(clubId: Long, eventStartUtc: Instant): List&lt;TableAvailabilityDto&gt;</ID>
+    <ID>ReturnCount:OperatingRulesResolver.kt$OperatingRulesResolver$suspend fun resolve(clubId: Long, fromUtc: Instant, toUtc: Instant): List&lt;NightSlot&gt;</ID>
+    <ID>ReturnCount:QrCodec.kt$QrCodec$fun decode(qr: String): Data?</ID>
+    <ID>ReturnCount:RatePolicy.kt$TokenBucket$fun tryAcquire(n: Int, nowMs: Long): Permit</ID>
+    <ID>TooGenericExceptionCaught:HealthService.kt$DefaultHealthService$e: Exception</ID>
+    <ID>UnusedParameter:BookingService.kt$BookingService$actorUserId: Long</ID>
+    <ID>UnusedParameter:BookingService.kt$BookingService$entryManagerUserId: Long</ID>
+    <ID>UnusedParameter:BookingService.kt$BookingService$idemKey: String</ID>
+    <ID>UnusedParameter:BookingService.kt$BookingService$now: Instant</ID>
+    <ID>UnusedParameter:BookingService.kt$BookingService$reason: String?</ID>
+    <ID>UnusedPrivateProperty:PaymentsService.kt$PaymentsService$private val config: PaymentConfig</ID>
+  </CurrentIssues>
+</SmellBaseline>

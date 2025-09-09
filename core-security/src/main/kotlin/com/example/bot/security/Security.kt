@@ -19,9 +19,7 @@ class AccessController(
     fun isAllowed(
         role: Role,
         action: String,
-    ): Boolean {
-        return permissions[role]?.contains(action) ?: false
-    }
+    ): Boolean = permissions[role]?.contains(action) ?: false
 }
 
 object SignatureValidator {
@@ -41,7 +39,5 @@ object SignatureValidator {
         secret: String,
         data: String,
         signature: String,
-    ): Boolean {
-        return sign(secret, data) == signature
-    }
+    ): Boolean = sign(secret, data) == signature
 }

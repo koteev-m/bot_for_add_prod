@@ -3,7 +3,6 @@ package com.example.bot.webhook
 import com.example.bot.dedup.UpdateDeduplicator
 import com.example.bot.telegram.TelegramClient
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -82,4 +81,3 @@ sealed interface WebhookReply {
     /** Asynchronous response that should be executed via Telegram API. */
     data class Async(val request: Any) : WebhookReply
 }
-

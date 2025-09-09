@@ -1,0 +1,18 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>EmptyFunctionBlock:OutboxWorkerSmokeTest.kt$OutboxWorkerSmokeTest.&lt;no name provided&gt;${}</ID>
+    <ID>EmptyFunctionBlock:PaymentsServiceTest.kt$PaymentsServiceTest.&lt;no name provided&gt;${}</ID>
+    <ID>LongParameterList:Fixtures.kt$Fixtures$( id: Long = 1, number: String = "T1", zone: String = "A", capacity: Int = 4, minDeposit: Int = 100, active: Boolean = true, )</ID>
+    <ID>UnusedParameter:Fakes.kt$FakeNotifySender$buttons: Keyboard? = null</ID>
+    <ID>UnusedParameter:Fakes.kt$FakeNotifySender$caption: String? = null</ID>
+    <ID>UnusedParameter:Fakes.kt$FakeNotifySender$media: List&lt;NotifySender.Media&gt;</ID>
+    <ID>UnusedParameter:Fakes.kt$FakeNotifySender$parseMode: ParseMode? = null</ID>
+    <ID>UnusedParameter:Fakes.kt$FakeNotifySender$photo: NotifySender.PhotoContent</ID>
+    <ID>UnusedParameter:Fakes.kt$FakeNotifySender$text: String</ID>
+    <ID>UnusedParameter:Fakes.kt$FakeNotifySender$threadId: Int? = null</ID>
+    <ID>UtilityClassWithPublicConstructor:PgContainer.kt$PgContainer</ID>
+    <ID>WildcardImport:AvailabilityServiceTest.kt$import java.time.*</ID>
+  </CurrentIssues>
+</SmellBaseline>

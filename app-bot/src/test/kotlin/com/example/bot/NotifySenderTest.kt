@@ -1,17 +1,17 @@
 package com.example.bot
 
 import com.example.bot.telegram.NotifySender
-import com.example.bot.telegram.NotifySender.PhotoContent
 import com.example.bot.telegram.NotifySender.Media
+import com.example.bot.telegram.NotifySender.PhotoContent
 import com.pengrad.telegrambot.TelegramBot
+import com.pengrad.telegrambot.model.ResponseParameters
 import com.pengrad.telegrambot.model.request.ParseMode
+import com.pengrad.telegrambot.request.BaseRequest
 import com.pengrad.telegrambot.request.SendMediaGroup
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.request.SendPhoto
-import com.pengrad.telegrambot.request.BaseRequest
 import com.pengrad.telegrambot.response.MessagesResponse
 import com.pengrad.telegrambot.response.SendResponse
-import com.pengrad.telegrambot.model.ResponseParameters
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -75,4 +75,3 @@ class NotifySenderTest : StringSpec({
         photoCaptures.size shouldBe 2
     }
 })
-

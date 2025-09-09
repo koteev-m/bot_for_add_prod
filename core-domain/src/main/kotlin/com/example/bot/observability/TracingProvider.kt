@@ -4,10 +4,10 @@ import io.micrometer.tracing.Tracer
 import io.micrometer.tracing.otel.bridge.OtelCurrentTraceContext
 import io.micrometer.tracing.otel.bridge.OtelTracer
 import io.opentelemetry.api.OpenTelemetry
+import io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporter
 import io.opentelemetry.sdk.OpenTelemetrySdk
 import io.opentelemetry.sdk.trace.SdkTracerProvider
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor
-import io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporter
 import io.opentelemetry.sdk.trace.export.SpanExporter
 
 /**
@@ -33,6 +33,4 @@ object TracingProvider {
         val tracer = OtelTracer(openTelemetry.getTracer("bot-app"), OtelCurrentTraceContext()) { }
         return Tracing(tracer, sdkTracerProvider)
     }
-
 }
-

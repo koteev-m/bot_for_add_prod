@@ -20,8 +20,7 @@ fun Application.installMetrics(registry: MeterRegistry) {
             JvmGcMetrics(),
             ProcessorMetrics(),
             JvmThreadMetrics(),
-            LogbackMetrics()
+            LogbackMetrics(),
         )
     }
 }
-

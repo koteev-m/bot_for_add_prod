@@ -24,4 +24,3 @@ class QrCodecTest {
         assertNull(codec.decode(tampered))
     }
 }
-

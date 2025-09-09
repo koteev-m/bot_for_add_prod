@@ -26,4 +26,3 @@ fun Route.confirmRoutes(payments: PaymentsService) {
         }
     }
 }
-

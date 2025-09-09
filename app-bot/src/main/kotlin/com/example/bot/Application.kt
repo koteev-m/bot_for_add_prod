@@ -1,25 +1,25 @@
 package com.example.bot
 
 import com.example.bot.dedup.UpdateDeduplicator
-import com.example.bot.polling.PollingMain
-import com.example.bot.telegram.TelegramClient
-import com.example.bot.telegram.telegramSetupRoutes
 import com.example.bot.miniapp.miniAppModule
-import com.example.bot.webhook.WebhookReply
-import com.example.bot.webhook.webhookRoute
-import com.example.bot.webhook.UnauthorizedWebhook
 import com.example.bot.observability.DefaultHealthService
 import com.example.bot.observability.MetricsProvider
 import com.example.bot.observability.TracingProvider
 import com.example.bot.plugins.installLogging
 import com.example.bot.plugins.installMetrics
 import com.example.bot.plugins.installTracing
+import com.example.bot.polling.PollingMain
 import com.example.bot.routes.observabilityRoutes
+import com.example.bot.telegram.TelegramClient
+import com.example.bot.telegram.telegramSetupRoutes
 import com.example.bot.telemetry.Telemetry
+import com.example.bot.webhook.UnauthorizedWebhook
+import com.example.bot.webhook.WebhookReply
+import com.example.bot.webhook.webhookRoute
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
-import io.ktor.server.application.install
 import io.ktor.server.application.call
+import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.response.respond
@@ -56,7 +56,9 @@ fun Application.module() {
     val tracing = if (System.getenv("TRACING_ENABLED") == "true") {
         val endpoint = System.getenv("OTLP_ENDPOINT") ?: "http://localhost:4318"
         TracingProvider.create(endpoint).tracer
-    } else null
+    } else {
+        null
+    }
     tracing?.let { installTracing(it) }
 
     install(StatusPages) {
@@ -95,7 +97,7 @@ private suspend fun handleUpdate(update: com.example.bot.webhook.UpdateDto): Web
     update.message?.let { msg ->
         if (msg.text == "/start") {
             return WebhookReply.Inline(
-                mapOf("method" to "sendMessage", "chat_id" to msg.chat.id, "text" to "Hello")
+                mapOf("method" to "sendMessage", "chat_id" to msg.chat.id, "text" to "Hello"),
             )
         }
     }
@@ -111,4 +113,3 @@ fun main(args: Array<String>) {
         else -> io.ktor.server.netty.EngineMain.main(args)
     }
 }
-

@@ -43,4 +43,3 @@ sealed interface ConfirmResult {
     /** Booking has been confirmed immediately. */
     data class Confirmed(val booking: BookingSummary) : ConfirmResult
 }
-

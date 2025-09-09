@@ -63,4 +63,3 @@ data class PlaylistFullView(
 
 /** Identifier of the user. */
 typealias UserId = Long
-

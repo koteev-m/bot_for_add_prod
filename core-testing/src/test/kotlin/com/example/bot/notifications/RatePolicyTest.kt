@@ -1,10 +1,10 @@
 package com.example.bot.notifications
 
+import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.longs.shouldBeLessThan
-import io.kotest.core.spec.style.StringSpec
 
 class RatePolicyTest : StringSpec({
     "global and chat buckets" {

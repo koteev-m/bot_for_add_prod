@@ -36,7 +36,10 @@ class InMemoryBookingRepository : BookingReadRepository, BookingWriteRepository 
 
     override suspend fun findBookingById(id: UUID): BookingRecord? = bookings[id]
 
-    override suspend fun findBookingByQr(qrSecret: String): BookingRecord? = bookings.values.find { it.qrSecret == qrSecret }
+    override suspend fun findBookingByQr(qrSecret: String): BookingRecord? = bookings.values.find {
+        it.qrSecret ==
+            qrSecret
+    }
 
     override suspend fun insertHold(
         tableId: Long,
@@ -46,7 +49,10 @@ class InMemoryBookingRepository : BookingReadRepository, BookingWriteRepository 
         idempotencyKey: String,
     ): HoldRecord {
         holdsByKey[idempotencyKey]?.let { return it }
-        if (holds.values.any { it.tableId == tableId && it.eventId == eventId && it.expiresAt.isAfter(Instant.now()) }) {
+        if (holds.values.any {
+                it.tableId == tableId && it.eventId == eventId && it.expiresAt.isAfter(Instant.now())
+            }
+        ) {
             throw IllegalStateException("active hold exists")
         }
         val record = HoldRecord(UUID.randomUUID(), tableId, eventId, guests, expiresAt)
@@ -74,10 +80,16 @@ class InMemoryBookingRepository : BookingReadRepository, BookingWriteRepository 
         idempotencyKey: String,
     ): BookingRecord = synchronized(bookings) {
         bookingsByKey[idempotencyKey]?.let { return@synchronized it }
-        if (bookings.values.any { it.tableId == tableId && it.eventId == eventId && it.status in setOf("CONFIRMED", "SEATED") }) {
+        if (bookings.values.any {
+                it.tableId == tableId &&
+                    it.eventId == eventId &&
+                    it.status in setOf("CONFIRMED", "SEATED")
+            }
+        ) {
             throw IllegalStateException("active booking exists")
         }
-        val record = BookingRecord(UUID.randomUUID(), tableId, tableNumber, eventId, guests, totalDeposit, status, arrivalBy, qrSecret)
+        val record =
+            BookingRecord(UUID.randomUUID(), tableId, tableNumber, eventId, guests, totalDeposit, status, arrivalBy, qrSecret)
         bookings[record.id] = record
         bookingsByKey[idempotencyKey] = record
         return@synchronized record

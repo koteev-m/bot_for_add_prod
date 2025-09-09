@@ -1,6 +1,4 @@
 plugins {
-    alias(libs.plugins.detekt)
-    alias(libs.plugins.ktlintGradle)
 }
 
 allprojects {
@@ -10,17 +8,29 @@ allprojects {
 }
 
 subprojects {
-    plugins.withId("org.jetbrains.kotlin.jvm") {
-        apply(from = rootProject.file("gradle/detekt.gradle.kts"))
-        apply(from = rootProject.file("gradle/ktlint.gradle.kts"))
+    pluginManager.withPlugin("org.jetbrains.kotlin.jvm") {
+        apply(from = rootProject.file("gradle/detekt-cli.gradle.kts"))
+        apply(from = rootProject.file("gradle/ktlint-cli.gradle.kts"))
     }
 }
 
 tasks.register("staticCheck") {
     group = "verification"
-    description = "Run detekt and ktlintCheck across all modules"
+    description = "Run detekt CLI and ktlint CLI across all Kotlin modules"
     dependsOn(
-        subprojects.mapNotNull { it.tasks.findByName("detekt") },
-        subprojects.mapNotNull { it.tasks.findByName("ktlintCheck") }
+        subprojects.flatMap { sp ->
+            listOfNotNull(
+                sp.tasks.findByName("detektCli"),
+                sp.tasks.findByName("ktlintCheckCli")
+            )
+        }
+    )
+}
+
+tasks.register("formatAll") {
+    group = "formatting"
+    description = "Run ktlint format for all Kotlin modules"
+    dependsOn(
+        subprojects.mapNotNull { it.tasks.findByName("ktlintFormatCli") }
     )
 }

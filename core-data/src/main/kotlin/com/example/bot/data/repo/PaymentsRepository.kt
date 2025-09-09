@@ -2,16 +2,16 @@ package com.example.bot.data.repo
 
 import com.example.bot.payments.PaymentsRepository
 import com.example.bot.payments.PaymentsRepository.PaymentRecord
-import java.util.UUID
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
-import org.jetbrains.exposed.sql.update
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.javatime.timestamp
+import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.javatime.CurrentTimestamp
+import org.jetbrains.exposed.sql.javatime.timestamp
+import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import org.jetbrains.exposed.sql.update
+import java.util.UUID
 
 /**
  * Exposed-based implementation of [PaymentsRepository].
@@ -104,4 +104,3 @@ class PaymentsRepositoryImpl(private val db: Database) : PaymentsRepository {
         updatedAt = this[PaymentsTable.updatedAt],
     )
 }
-

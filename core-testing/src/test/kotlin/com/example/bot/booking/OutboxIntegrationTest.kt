@@ -2,9 +2,6 @@ package com.example.bot.booking
 
 import com.example.bot.data.booking.InMemoryBookingRepository
 import com.example.bot.data.outbox.InMemoryOutboxService
-import com.example.bot.booking.ConfirmRequest
-import com.example.bot.booking.EventDto
-import com.example.bot.booking.TableDto
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import java.math.BigDecimal
