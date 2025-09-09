@@ -55,3 +55,26 @@ to that base URL instead of `https://api.telegram.org`.
 export $(grep -v '^#' .env | xargs)
 ./gradlew :app-bot:run
 ```
+
+## Testing
+
+Run the full test suite:
+
+```bash
+./gradlew test
+```
+
+Run only integration smoke tests:
+
+```bash
+./gradlew :core-testing:test --tests "*SmokeTest*"
+```
+
+Enable verbose logging:
+
+```bash
+./gradlew test -i
+```
+
+Test reports are generated under `build/reports/tests/test/index.html`.
+
