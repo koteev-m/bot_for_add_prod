@@ -19,4 +19,9 @@ dependencies {
     testImplementation(libs.testcontainers.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.micrometer.core)
+    testImplementation(libs.flyway)
+    testImplementation(libs.exposed.core)
+    testImplementation(libs.exposed.jdbc)
+    testImplementation(libs.ktor.serialization.kotlinx.json)
+    testImplementation(libs.ktor.server.content.negotiation)
 }
