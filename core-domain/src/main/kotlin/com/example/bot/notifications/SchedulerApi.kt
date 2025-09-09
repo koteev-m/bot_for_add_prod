@@ -8,12 +8,7 @@ interface SchedulerApi {
     enum class Status { SCHEDULED, SENDING, PAUSED, DONE, FAILED }
 
     /** Campaign definition returned by the API. */
-    data class Campaign(
-        val id: Long,
-        val status: Status,
-        val scheduleCron: String?,
-        val startsAt: OffsetDateTime?,
-    )
+    data class Campaign(val id: Long, val status: Status, val scheduleCron: String?, val startsAt: OffsetDateTime?)
 
     /** Progress information for metrics. */
     data class Progress(val enqueued: Long, val total: Long)

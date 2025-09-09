@@ -15,10 +15,7 @@ import kotlinx.coroutines.withContext
 /**
  * Abstraction over the Telegram Bot API client based on pengrad implementation.
  */
-class TelegramClient(
-    token: String,
-    apiUrl: String? = null,
-) {
+class TelegramClient(token: String, apiUrl: String? = null) {
     private val bot: TelegramBot =
         TelegramBot
             .Builder(token)

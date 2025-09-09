@@ -1,10 +1,7 @@
 package com.example.bot.music
 
 /** Service orchestrating music repositories. */
-class MusicService(
-    private val items: MusicItemRepository,
-    private val playlists: MusicPlaylistRepository,
-) {
+class MusicService(private val items: MusicItemRepository, private val playlists: MusicPlaylistRepository) {
     suspend fun createItem(req: MusicItemCreate, actor: UserId): MusicItemView = items.create(req, actor)
 
     suspend fun listItems(filter: ItemFilter): List<MusicItemView> =

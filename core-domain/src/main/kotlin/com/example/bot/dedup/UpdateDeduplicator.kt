@@ -11,9 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
  * identifiers for the same period. Entries older than [ttl] are discarded on
  * each access.
  */
-class UpdateDeduplicator(
-    private val ttl: Duration = Duration.ofHours(24),
-) {
+class UpdateDeduplicator(private val ttl: Duration = Duration.ofHours(24)) {
     private val seen: MutableMap<Long, Instant> = ConcurrentHashMap()
 
     /**

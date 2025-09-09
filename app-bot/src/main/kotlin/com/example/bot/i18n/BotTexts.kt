@@ -24,12 +24,7 @@ class BotTexts {
     fun legend(lang: String?): String =
         if (lang.isEnglish()) "🟢 free / 🟡 hold / 🔴 booked" else "🟢 свободно / 🟡 hold / 🔴 занято"
 
-    data class Menu(
-        val chooseClub: String,
-        val myBookings: String,
-        val ask: String,
-        val music: String,
-    )
+    data class Menu(val chooseClub: String, val myBookings: String, val ask: String, val music: String)
 
     private fun String?.isEnglish(): Boolean = this?.startsWith("en", ignoreCase = true) == true
 }

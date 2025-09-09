@@ -13,9 +13,7 @@ enum class Role {
     ADMIN,
 }
 
-class AccessController(
-    private val permissions: Map<Role, Set<String>>,
-) {
+class AccessController(private val permissions: Map<Role, Set<String>>) {
     fun isAllowed(role: Role, action: String): Boolean = permissions[role]?.contains(action) ?: false
 }
 

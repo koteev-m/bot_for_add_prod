@@ -7,12 +7,7 @@ import java.util.UUID
 /**
  * Request to place a hold on a table for a particular event.
  */
-data class HoldRequest(
-    val clubId: Long,
-    val eventStartUtc: Instant,
-    val tableId: Long,
-    val guestsCount: Int,
-)
+data class HoldRequest(val clubId: Long, val eventStartUtc: Instant, val tableId: Long, val guestsCount: Int)
 
 /**
  * Response for a successful hold operation.

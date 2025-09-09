@@ -40,24 +40,13 @@ data class CampaignDto(
 )
 
 @Serializable
-data class CampaignCreateRequest(
-    val title: String,
-    val text: String,
-    val parseMode: ParseMode? = null,
-)
+data class CampaignCreateRequest(val title: String, val text: String, val parseMode: ParseMode? = null)
 
 @Serializable
-data class CampaignUpdateRequest(
-    val title: String? = null,
-    val text: String? = null,
-    val parseMode: ParseMode? = null,
-)
+data class CampaignUpdateRequest(val title: String? = null, val text: String? = null, val parseMode: ParseMode? = null)
 
 @Serializable
-data class ScheduleRequest(
-    val cron: String? = null,
-    val startsAt: String? = null,
-)
+data class ScheduleRequest(val cron: String? = null, val startsAt: String? = null)
 
 /** Simple in-memory campaign service used by routes. */
 class CampaignService {

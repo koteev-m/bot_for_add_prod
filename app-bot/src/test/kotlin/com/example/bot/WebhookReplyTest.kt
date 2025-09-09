@@ -22,40 +22,41 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 
-class WebhookReplyTest : StringSpec({
-    val secret = "s"
-    val dedup = UpdateDeduplicator()
-    val tgClient = TelegramClient("x")
+class WebhookReplyTest :
+    StringSpec({
+        val secret = "s"
+        val dedup = UpdateDeduplicator()
+        val tgClient = TelegramClient("x")
 
-    fun io.ktor.server.application.Application.testModule() {
-        install(ContentNegotiation) { json() }
-        install(StatusPages) {
-            exception<UnauthorizedWebhook> { call, _ ->
-                call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Bad webhook secret"))
-            }
-        }
-        routing {
-            webhookRoute(secret, dedup, handler = { update ->
-                update.callbackQuery?.let {
-                    WebhookReply.Inline(mapOf("method" to "answerCallbackQuery", "callback_query_id" to it.id))
+        fun io.ktor.server.application.Application.testModule() {
+            install(ContentNegotiation) { json() }
+            install(StatusPages) {
+                exception<UnauthorizedWebhook> { call, _ ->
+                    call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Bad webhook secret"))
                 }
-            }, client = tgClient)
-        }
-    }
-
-    "callback query replied inline" {
-        testApplication {
-            application { testModule() }
-            val body = "{" +
-                "\"update_id\":1,\"callback_query\":{\"id\":\"q1\"}}"
-            val response = client.post("/webhook") {
-                header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                header("X-Telegram-Bot-Api-Secret-Token", secret)
-                setBody(body)
             }
-            response.status shouldBe HttpStatusCode.OK
-            response.bodyAsText() shouldBe "{" +
-                "\"method\":\"answerCallbackQuery\",\"callback_query_id\":\"q1\"}"
+            routing {
+                webhookRoute(secret, dedup, handler = { update ->
+                    update.callbackQuery?.let {
+                        WebhookReply.Inline(mapOf("method" to "answerCallbackQuery", "callback_query_id" to it.id))
+                    }
+                }, client = tgClient)
+            }
         }
-    }
-})
+
+        "callback query replied inline" {
+            testApplication {
+                application { testModule() }
+                val body = "{" +
+                    "\"update_id\":1,\"callback_query\":{\"id\":\"q1\"}}"
+                val response = client.post("/webhook") {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    header("X-Telegram-Bot-Api-Secret-Token", secret)
+                    setBody(body)
+                }
+                response.status shouldBe HttpStatusCode.OK
+                response.bodyAsText() shouldBe "{" +
+                    "\"method\":\"answerCallbackQuery\",\"callback_query_id\":\"q1\"}"
+            }
+        }
+    })

@@ -21,8 +21,4 @@ enum class PaymentMode {
  * @property currency ISO 4217 currency code or "XTR" for stars
  * @property splitPay whether invoice supports split payment
  */
-data class PaymentPolicy(
-    val mode: PaymentMode,
-    val currency: String = "RUB",
-    val splitPay: Boolean = true,
-)
+data class PaymentPolicy(val mode: PaymentMode, val currency: String = "RUB", val splitPay: Boolean = true)

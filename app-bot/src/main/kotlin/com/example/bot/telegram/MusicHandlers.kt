@@ -7,10 +7,7 @@ import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.response.BaseResponse
 
 /** Telegram handlers for music commands. */
-class MusicHandlers(
-    private val send: suspend (Any) -> BaseResponse,
-    private val service: MusicService,
-) {
+class MusicHandlers(private val send: suspend (Any) -> BaseResponse, private val service: MusicService) {
     /** Handles /music command by listing recent items. */
     suspend fun handle(update: Update) {
         val msg = update.message() ?: return

@@ -18,10 +18,7 @@ data class ConfirmInput(
 /**
  * Contact details supplied by the guest.
  */
-data class ContactInfo(
-    val tgUsername: String?,
-    val phoneE164: String?,
-)
+data class ContactInfo(val tgUsername: String?, val phoneE164: String?)
 
 /**
  * Information about a generated invoice.

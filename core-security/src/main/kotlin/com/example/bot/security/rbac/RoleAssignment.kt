@@ -6,7 +6,4 @@ package com.example.bot.security.rbac
  * @property code the role code
  * @property scope scope of the role
  */
-data class RoleAssignment(
-    val code: RoleCode,
-    val scope: Scope,
-)
+data class RoleAssignment(val code: RoleCode, val scope: Scope)

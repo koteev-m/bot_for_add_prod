@@ -20,53 +20,54 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 
-class WebhookSecretHeaderTest : StringSpec({
-    val secret = "token"
-    val dedup = UpdateDeduplicator()
-    val tgClient = TelegramClient("x")
+class WebhookSecretHeaderTest :
+    StringSpec({
+        val secret = "token"
+        val dedup = UpdateDeduplicator()
+        val tgClient = TelegramClient("x")
 
-    fun io.ktor.server.application.Application.testModule() {
-        install(ContentNegotiation) { json() }
-        install(StatusPages) {
-            exception<UnauthorizedWebhook> { call, _ ->
-                call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Bad webhook secret"))
+        fun io.ktor.server.application.Application.testModule() {
+            install(ContentNegotiation) { json() }
+            install(StatusPages) {
+                exception<UnauthorizedWebhook> { call, _ ->
+                    call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Bad webhook secret"))
+                }
+            }
+            routing { webhookRoute(secret, dedup, handler = { null }, client = tgClient) }
+        }
+
+        "missing header returns 401" {
+            testApplication {
+                application { testModule() }
+                val response = client.post("/webhook") {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    setBody("{\"update_id\":1}")
+                }
+                response.status shouldBe HttpStatusCode.Unauthorized
             }
         }
-        routing { webhookRoute(secret, dedup, handler = { null }, client = tgClient) }
-    }
 
-    "missing header returns 401" {
-        testApplication {
-            application { testModule() }
-            val response = client.post("/webhook") {
-                header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                setBody("{\"update_id\":1}")
+        "wrong header returns 401" {
+            testApplication {
+                application { testModule() }
+                val response = client.post("/webhook") {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    header("X-Telegram-Bot-Api-Secret-Token", "bad")
+                    setBody("{\"update_id\":1}")
+                }
+                response.status shouldBe HttpStatusCode.Unauthorized
             }
-            response.status shouldBe HttpStatusCode.Unauthorized
         }
-    }
 
-    "wrong header returns 401" {
-        testApplication {
-            application { testModule() }
-            val response = client.post("/webhook") {
-                header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                header("X-Telegram-Bot-Api-Secret-Token", "bad")
-                setBody("{\"update_id\":1}")
+        "valid header returns 200" {
+            testApplication {
+                application { testModule() }
+                val response = client.post("/webhook") {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    header("X-Telegram-Bot-Api-Secret-Token", secret)
+                    setBody("{\"update_id\":1}")
+                }
+                response.status shouldBe HttpStatusCode.OK
             }
-            response.status shouldBe HttpStatusCode.Unauthorized
         }
-    }
-
-    "valid header returns 200" {
-        testApplication {
-            application { testModule() }
-            val response = client.post("/webhook") {
-                header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                header("X-Telegram-Bot-Api-Secret-Token", secret)
-                setBody("{\"update_id\":1}")
-            }
-            response.status shouldBe HttpStatusCode.OK
-        }
-    }
-})
+    })

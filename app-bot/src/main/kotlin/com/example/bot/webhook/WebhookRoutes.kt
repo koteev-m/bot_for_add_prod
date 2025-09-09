@@ -64,11 +64,7 @@ data class MessageDto(
 data class ChatDto(@SerialName("id") val id: Long)
 
 @Serializable
-data class CallbackQueryDto(
-    val id: String,
-    @SerialName("from") val from: UserDto? = null,
-    val data: String? = null,
-)
+data class CallbackQueryDto(val id: String, @SerialName("from") val from: UserDto? = null, val data: String? = null)
 
 @Serializable
 data class UserDto(@SerialName("id") val id: Long)
