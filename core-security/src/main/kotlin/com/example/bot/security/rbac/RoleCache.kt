@@ -7,14 +7,8 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * Simple in-memory cache for role assignments with a fixed TTL.
  */
-class RoleCache(
-    private val repository: RoleRepository,
-    private val ttl: Duration = Duration.ofSeconds(60),
-) {
-    private data class Cached(
-        val roles: Set<RoleAssignment>,
-        val expiresAt: Instant,
-    )
+class RoleCache(private val repository: RoleRepository, private val ttl: Duration = Duration.ofSeconds(60)) {
+    private data class Cached(val roles: Set<RoleAssignment>, val expiresAt: Instant)
 
     private val cache = ConcurrentHashMap<Long, Cached>()
 

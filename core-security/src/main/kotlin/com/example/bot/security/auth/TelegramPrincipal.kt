@@ -10,8 +10,5 @@ import io.ktor.server.auth.Principal
  * @property username Optional Telegram username
  * @property roles Assigned roles for this user
  */
-data class TelegramPrincipal(
-    val telegramUserId: Long,
-    val username: String?,
-    val roles: Set<RoleAssignment>,
-) : Principal
+data class TelegramPrincipal(val telegramUserId: Long, val username: String?, val roles: Set<RoleAssignment>) :
+    Principal

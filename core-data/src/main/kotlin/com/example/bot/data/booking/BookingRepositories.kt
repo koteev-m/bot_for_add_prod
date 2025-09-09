@@ -15,7 +15,9 @@ import java.util.concurrent.ConcurrentHashMap
  * Simple in-memory repositories used for tests. This is a lightweight
  * substitute for real database implementations.
  */
-class InMemoryBookingRepository : BookingReadRepository, BookingWriteRepository {
+class InMemoryBookingRepository :
+    BookingReadRepository,
+    BookingWriteRepository {
     private val events = ConcurrentHashMap<Pair<Long, Instant>, EventDto>()
     private val tables = ConcurrentHashMap<Long, TableDto>()
     private val holds = ConcurrentHashMap<UUID, HoldRecord>()

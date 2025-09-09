@@ -7,16 +7,17 @@ import io.kotest.matchers.shouldBe
 import java.math.BigDecimal
 import java.time.Instant
 
-class OutboxIntegrationTest : StringSpec({
-    "confirm enqueues outbox record" {
-        val repo = InMemoryBookingRepository()
-        val outbox = InMemoryOutboxService()
-        val service = BookingService(repo, repo, outbox)
-        val event = EventDto(1, 1, Instant.now(), Instant.now().plusSeconds(3600))
-        val table = TableDto(1, 1, 2, BigDecimal("10"), true)
-        repo.seed(event, table)
-        val req = ConfirmRequest(null, 1, event.startUtc, 1, 1, null, null, null)
-        service.confirm(req, "k")
-        outbox.items.size shouldBe 1
-    }
-})
+class OutboxIntegrationTest :
+    StringSpec({
+        "confirm enqueues outbox record" {
+            val repo = InMemoryBookingRepository()
+            val outbox = InMemoryOutboxService()
+            val service = BookingService(repo, repo, outbox)
+            val event = EventDto(1, 1, Instant.now(), Instant.now().plusSeconds(3600))
+            val table = TableDto(1, 1, 2, BigDecimal("10"), true)
+            repo.seed(event, table)
+            val req = ConfirmRequest(null, 1, event.startUtc, 1, 1, null, null, null)
+            service.confirm(req, "k")
+            outbox.items.size shouldBe 1
+        }
+    })

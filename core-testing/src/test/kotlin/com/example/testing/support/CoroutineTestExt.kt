@@ -15,7 +15,9 @@ fun runBlockingTest(block: suspend TestScope.() -> Unit) = runTest { block() }
 /**
  * JUnit extension that fails a test if [forbiddenSleep] was invoked.
  */
-class NoThreadSleepExtension : BeforeEachCallback, AfterEachCallback {
+class NoThreadSleepExtension :
+    BeforeEachCallback,
+    AfterEachCallback {
     override fun beforeEach(context: ExtensionContext) {
         slept.set(false)
     }

@@ -37,12 +37,7 @@ enum class ParseMode {
 // Simple representation of media for albums
 // type can be "photo", "video", etc.
 @Serializable
-data class MediaItem(
-    val type: String,
-    val url: String,
-    val caption: String? = null,
-    val parseMode: ParseMode? = null,
-)
+data class MediaItem(val type: String, val url: String, val caption: String? = null, val parseMode: ParseMode? = null)
 
 // Minimal keyboard specification: rows of button labels
 @Serializable

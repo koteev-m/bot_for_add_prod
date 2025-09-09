@@ -16,10 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 
-class NotifySender(
-    private val bot: TelegramBot,
-    private val registry: MeterRegistry = Telemetry.registry,
-) {
+class NotifySender(private val bot: TelegramBot, private val registry: MeterRegistry = Telemetry.registry) {
 
     sealed interface Result {
         data object Ok : Result
@@ -35,11 +32,7 @@ class NotifySender(
         data class Bytes(val bytes: ByteArray) : PhotoContent
     }
 
-    data class Media(
-        val content: PhotoContent,
-        val caption: String? = null,
-        val parseMode: ParseMode? = null,
-    )
+    data class Media(val content: PhotoContent, val caption: String? = null, val parseMode: ParseMode? = null)
 
     private val log = LoggerFactory.getLogger(NotifySender::class.java)
 

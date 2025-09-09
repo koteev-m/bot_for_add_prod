@@ -21,40 +21,41 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 
-class UpdateDedupTest : StringSpec({
-    val secret = "s"
-    val dedup = UpdateDeduplicator()
-    val tgClient = TelegramClient("x")
+class UpdateDedupTest :
+    StringSpec({
+        val secret = "s"
+        val dedup = UpdateDeduplicator()
+        val tgClient = TelegramClient("x")
 
-    fun io.ktor.server.application.Application.testModule() {
-        install(ContentNegotiation) { json() }
-        install(StatusPages) {
-            exception<UnauthorizedWebhook> { call, _ ->
-                call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Bad webhook secret"))
+        fun io.ktor.server.application.Application.testModule() {
+            install(ContentNegotiation) { json() }
+            install(StatusPages) {
+                exception<UnauthorizedWebhook> { call, _ ->
+                    call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Bad webhook secret"))
+                }
+            }
+            routing { webhookRoute(secret, dedup, handler = { null }, client = tgClient) }
+        }
+
+        "duplicate update ignored" {
+            testApplication {
+                application { testModule() }
+                val body = "{\"update_id\":1}"
+                val first = client.post("/webhook") {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    header("X-Telegram-Bot-Api-Secret-Token", secret)
+                    setBody(body)
+                }
+                first.status shouldBe HttpStatusCode.OK
+                first.bodyAsText() shouldBe ""
+
+                val second = client.post("/webhook") {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    header("X-Telegram-Bot-Api-Secret-Token", secret)
+                    setBody(body)
+                }
+                second.status shouldBe HttpStatusCode.OK
+                second.bodyAsText() shouldBe ""
             }
         }
-        routing { webhookRoute(secret, dedup, handler = { null }, client = tgClient) }
-    }
-
-    "duplicate update ignored" {
-        testApplication {
-            application { testModule() }
-            val body = "{\"update_id\":1}"
-            val first = client.post("/webhook") {
-                header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                header("X-Telegram-Bot-Api-Secret-Token", secret)
-                setBody(body)
-            }
-            first.status shouldBe HttpStatusCode.OK
-            first.bodyAsText() shouldBe ""
-
-            val second = client.post("/webhook") {
-                header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                header("X-Telegram-Bot-Api-Secret-Token", secret)
-                setBody(body)
-            }
-            second.status shouldBe HttpStatusCode.OK
-            second.bodyAsText() shouldBe ""
-        }
-    }
-})
+    })

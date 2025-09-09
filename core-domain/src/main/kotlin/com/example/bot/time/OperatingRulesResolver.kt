@@ -37,11 +37,7 @@ data class NightSlot(
 /**
  * Weekly operating hours for a club.
  */
-data class ClubHour(
-    val dayOfWeek: DayOfWeek,
-    val open: LocalTime,
-    val close: LocalTime,
-)
+data class ClubHour(val dayOfWeek: DayOfWeek, val open: LocalTime, val close: LocalTime)
 
 /**
  * Special holiday rules for a club.
@@ -66,10 +62,7 @@ data class ClubException(
 /**
  * Minimal club representation.
  */
-data class Club(
-    val id: Long,
-    val timezone: String,
-)
+data class Club(val id: Long, val timezone: String)
 
 /**
  * Materialized event stored in the database.

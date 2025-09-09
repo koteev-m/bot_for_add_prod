@@ -7,17 +7,18 @@ import io.kotest.matchers.shouldBe
 import java.math.BigDecimal
 import java.time.Instant
 
-class SeatByQrTest : StringSpec({
-    "seat moves booking to SEATED" {
-        val repo = InMemoryBookingRepository()
-        val outbox = InMemoryOutboxService()
-        val service = BookingService(repo, repo, outbox)
-        val event = EventDto(1, 1, Instant.now(), Instant.now().plusSeconds(3600))
-        val table = TableDto(1, 1, 2, BigDecimal("10"), true)
-        repo.seed(event, table)
-        val req = ConfirmRequest(null, 1, event.startUtc, 1, 1, null, null, null)
-        val booking = (service.confirm(req, "a") as Either.Right).value
-        val res = service.seatByQr(booking.qrSecret, 1, "b")
-        (res as Either.Right).value.status shouldBe "SEATED"
-    }
-})
+class SeatByQrTest :
+    StringSpec({
+        "seat moves booking to SEATED" {
+            val repo = InMemoryBookingRepository()
+            val outbox = InMemoryOutboxService()
+            val service = BookingService(repo, repo, outbox)
+            val event = EventDto(1, 1, Instant.now(), Instant.now().plusSeconds(3600))
+            val table = TableDto(1, 1, 2, BigDecimal("10"), true)
+            repo.seed(event, table)
+            val req = ConfirmRequest(null, 1, event.startUtc, 1, 1, null, null, null)
+            val booking = (service.confirm(req, "a") as Either.Right).value
+            val res = service.seatByQr(booking.qrSecret, 1, "b")
+            (res as Either.Right).value.status shouldBe "SEATED"
+        }
+    })

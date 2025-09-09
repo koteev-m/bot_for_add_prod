@@ -13,7 +13,4 @@ interface ClubRepository {
 /**
  * Simple projection of a club used in selection lists.
  */
-data class Club(
-    val id: Long,
-    val name: String,
-)
+data class Club(val id: Long, val name: String)

@@ -16,12 +16,7 @@ import java.time.OffsetDateTime
 
 class OutboxRepository(private val db: Database) {
 
-    data class Record(
-        val id: Long,
-        val message: NotifyMessage,
-        val dedupKey: String?,
-        val attempts: Int,
-    )
+    data class Record(val id: Long, val message: NotifyMessage, val dedupKey: String?, val attempts: Int)
 
     private val json = Json
 
