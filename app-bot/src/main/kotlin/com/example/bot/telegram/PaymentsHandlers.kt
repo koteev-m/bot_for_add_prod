@@ -25,9 +25,12 @@ class PaymentsHandlers(
 ) {
     /** Sends invoice using Bot Payments API. */
     fun sendInvoice(chatId: Long, invoice: InvoiceInfo): SendResponse {
-        val price = com.pengrad.telegrambot.model.request.LabeledPrice("deposit", invoice.totalMinor.toInt())
-        val req = SendInvoice(chatId, config.invoiceTitlePrefix, "", invoice.payload, invoice.currency, price)
-            .providerToken(config.providerToken)
+        val price =
+            com.pengrad.telegrambot.model.request
+                .LabeledPrice("deposit", invoice.totalMinor.toInt())
+        val req =
+            SendInvoice(chatId, config.invoiceTitlePrefix, "", invoice.payload, invoice.currency, price)
+                .providerToken(config.providerToken)
         return bot.execute(req)
     }
 

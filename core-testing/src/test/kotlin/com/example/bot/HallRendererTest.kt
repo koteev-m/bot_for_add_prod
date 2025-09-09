@@ -15,29 +15,32 @@ import javax.imageio.ImageIO
 
 class HallRendererTest :
     StringSpec({
-        val base = BufferedImage(100, 60, BufferedImage.TYPE_INT_RGB).apply {
-            createGraphics().apply {
-                color = Color.WHITE
-                fillRect(0, 0, 100, 60)
-                dispose()
+        val base =
+            BufferedImage(100, 60, BufferedImage.TYPE_INT_RGB).apply {
+                createGraphics().apply {
+                    color = Color.WHITE
+                    fillRect(0, 0, 100, 60)
+                    dispose()
+                }
             }
-        }
-        val geometry = TableGeometryProvider { _, id ->
-            when (id) {
-                1L -> Rectangle2D.Double(0.0, 0.0, 30.0, 30.0)
-                2L -> Rectangle2D.Double(35.0, 0.0, 30.0, 30.0)
-                3L -> Rectangle2D.Double(70.0, 0.0, 30.0, 30.0)
-                else -> null
+        val geometry =
+            TableGeometryProvider { _, id ->
+                when (id) {
+                    1L -> Rectangle2D.Double(0.0, 0.0, 30.0, 30.0)
+                    2L -> Rectangle2D.Double(35.0, 0.0, 30.0, 30.0)
+                    3L -> Rectangle2D.Double(70.0, 0.0, 30.0, 30.0)
+                    else -> null
+                }
             }
-        }
         val renderer = HallRenderer({ base }, geometry, BotTexts())
 
         "renders colored tables" {
-            val tables = listOf(
-                TableAvailabilityDto(1, "1", "A", 4, 100, TableStatus.FREE),
-                TableAvailabilityDto(2, "2", "A", 4, 100, TableStatus.HELD),
-                TableAvailabilityDto(3, "3", "A", 4, 100, TableStatus.BOOKED),
-            )
+            val tables =
+                listOf(
+                    TableAvailabilityDto(1, "1", "A", 4, 100, TableStatus.FREE),
+                    TableAvailabilityDto(2, "2", "A", 4, 100, TableStatus.HELD),
+                    TableAvailabilityDto(3, "3", "A", 4, 100, TableStatus.BOOKED),
+                )
             val bytes = renderer.render(1, tables)
             bytes.size shouldBeGreaterThan 0
             val img = ImageIO.read(bytes.inputStream())

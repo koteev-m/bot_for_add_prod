@@ -47,13 +47,15 @@ class WebhookReplyTest :
         "callback query replied inline" {
             testApplication {
                 application { testModule() }
-                val body = "{" +
-                    "\"update_id\":1,\"callback_query\":{\"id\":\"q1\"}}"
-                val response = client.post("/webhook") {
-                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                    header("X-Telegram-Bot-Api-Secret-Token", secret)
-                    setBody(body)
-                }
+                val body =
+                    "{" +
+                        "\"update_id\":1,\"callback_query\":{\"id\":\"q1\"}}"
+                val response =
+                    client.post("/webhook") {
+                        header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                        header("X-Telegram-Bot-Api-Secret-Token", secret)
+                        setBody(body)
+                    }
                 response.status shouldBe HttpStatusCode.OK
                 response.bodyAsText() shouldBe "{" +
                     "\"method\":\"answerCallbackQuery\",\"callback_query_id\":\"q1\"}"

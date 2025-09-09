@@ -31,38 +31,42 @@ class OutboxWorkerSmokeTest : PgContainer() {
     }
 
     @Test
-    fun `should send all messages`() = runTest {
-        val repo = OutboxRepository(database)
-        val sender = mockk<NotifySender>()
-        coEvery { sender.sendMessage(any(), any(), any(), any(), any()) } returns NotifySender.Result.Ok
-        coEvery { sender.sendPhoto(any(), any(), any(), any(), any()) } returns NotifySender.Result.Ok
-        coEvery { sender.sendMediaGroup(any(), any(), any()) } returns NotifySender.Result.Ok
-        val policy = object : RatePolicy {
-            override val timeSource: TimeSource = object : TimeSource {
-                override fun nowMs() = System.currentTimeMillis()
+    fun `should send all messages`() =
+        runTest {
+            val repo = OutboxRepository(database)
+            val sender = mockk<NotifySender>()
+            coEvery { sender.sendMessage(any(), any(), any(), any(), any()) } returns NotifySender.Result.Ok
+            coEvery { sender.sendPhoto(any(), any(), any(), any(), any()) } returns NotifySender.Result.Ok
+            coEvery { sender.sendMediaGroup(any(), any(), any()) } returns NotifySender.Result.Ok
+            val policy =
+                object : RatePolicy {
+                    override val timeSource: TimeSource =
+                        object : TimeSource {
+                            override fun nowMs() = System.currentTimeMillis()
+                        }
+
+                    override fun acquireGlobal(n: Int, now: Long) = Permit(true)
+
+                    override fun acquireChat(chatId: Long, n: Int, now: Long) = Permit(true)
+
+                    override fun on429(chatId: Long?, retryAfter: Long, now: Long) {}
+                }
+            val registry = SimpleMeterRegistry()
+            val config = NotifyConfig(workerParallelism = 1)
+
+            for (i in 1..10) {
+                repo.enqueue(NotifyMessage(i.toLong(), null, NotifyMethod.TEXT, "hi", null, null, null, null, null))
             }
 
-            override fun acquireGlobal(n: Int, now: Long) = Permit(true)
+            val worker = OutboxWorker(this, repo, sender, policy, config, registry)
+            worker.start()
+            advanceUntilIdle()
 
-            override fun acquireChat(chatId: Long, n: Int, now: Long) = Permit(true)
-
-            override fun on429(chatId: Long?, retryAfter: Long, now: Long) {}
+            val sent =
+                newSuspendedTransaction(db = database) {
+                    NotificationsOutbox.select { NotificationsOutbox.status eq "SENT" }.count()
+                }
+            assertEquals(10, sent)
+            assertEquals(10.0, registry.counter("notify.sent", "method", "TEXT", "threaded", "false").count())
         }
-        val registry = SimpleMeterRegistry()
-        val config = NotifyConfig(workerParallelism = 1)
-
-        for (i in 1..10) {
-            repo.enqueue(NotifyMessage(i.toLong(), null, NotifyMethod.TEXT, "hi", null, null, null, null, null))
-        }
-
-        val worker = OutboxWorker(this, repo, sender, policy, config, registry)
-        worker.start()
-        advanceUntilIdle()
-
-        val sent = newSuspendedTransaction(db = database) {
-            NotificationsOutbox.select { NotificationsOutbox.status eq "SENT" }.count()
-        }
-        assertEquals(10, sent)
-        assertEquals(10.0, registry.counter("notify.sent", "method", "TEXT", "threaded", "false").count())
-    }
 }

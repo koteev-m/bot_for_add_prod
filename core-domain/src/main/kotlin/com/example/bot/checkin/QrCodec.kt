@@ -18,9 +18,10 @@ class QrCodec(private val key: ByteArray) {
     /** Data extracted from a QR code. */
     data class Data(val clubId: Long, val eventId: Long, val entryId: Long)
 
-    private fun mac(): Mac = Mac.getInstance("HmacSHA256").apply {
-        init(SecretKeySpec(key, algorithm))
-    }
+    private fun mac(): Mac =
+        Mac.getInstance("HmacSHA256").apply {
+            init(SecretKeySpec(key, algorithm))
+        }
 
     /** Encodes the given [data] into a QR string. */
     fun encode(data: Data): String {
@@ -46,11 +47,12 @@ class QrCodec(private val key: ByteArray) {
 
         val base = parts.take(5).joinToString(":")
         val expected = mac().doFinal(base.toByteArray(StandardCharsets.UTF_8))
-        val provided = try {
-            Base64.getUrlDecoder().decode(hmacPart)
-        } catch (_: IllegalArgumentException) {
-            return null
-        }
+        val provided =
+            try {
+                Base64.getUrlDecoder().decode(hmacPart)
+            } catch (_: IllegalArgumentException) {
+                return null
+            }
         if (!MessageDigest.isEqual(provided, expected)) return null
         return Data(clubId, eventId, entryId)
     }

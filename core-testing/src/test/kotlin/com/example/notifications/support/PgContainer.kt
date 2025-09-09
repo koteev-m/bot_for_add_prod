@@ -8,10 +8,11 @@ import org.testcontainers.containers.PostgreSQLContainer
 abstract class PgContainer {
     companion object {
         @JvmStatic
-        protected val PG: PostgreSQLContainer<*> = PostgreSQLContainer("postgres:15-alpine")
-            .withDatabaseName("testdb")
-            .withUsername("test")
-            .withPassword("test")
+        protected val PG: PostgreSQLContainer<*> =
+            PostgreSQLContainer("postgres:15-alpine")
+                .withDatabaseName("testdb")
+                .withUsername("test")
+                .withPassword("test")
 
         @JvmStatic
         @BeforeAll

@@ -17,19 +17,27 @@ object TracingProvider {
     data class Tracing(val tracer: Tracer, val sdk: SdkTracerProvider)
 
     fun create(endpoint: String, headers: Map<String, String> = emptyMap()): Tracing {
-        val exporter = OtlpGrpcSpanExporter.builder().setEndpoint(endpoint).apply {
-            headers.forEach { (k, v) -> addHeader(k, v) }
-        }.build()
+        val exporter =
+            OtlpGrpcSpanExporter
+                .builder()
+                .setEndpoint(endpoint)
+                .apply {
+                    headers.forEach { (k, v) -> addHeader(k, v) }
+                }.build()
         return create(exporter)
     }
 
     fun create(exporter: SpanExporter): Tracing {
-        val sdkTracerProvider = SdkTracerProvider.builder()
-            .addSpanProcessor(SimpleSpanProcessor.create(exporter))
-            .build()
-        val openTelemetry: OpenTelemetry = OpenTelemetrySdk.builder()
-            .setTracerProvider(sdkTracerProvider)
-            .build()
+        val sdkTracerProvider =
+            SdkTracerProvider
+                .builder()
+                .addSpanProcessor(SimpleSpanProcessor.create(exporter))
+                .build()
+        val openTelemetry: OpenTelemetry =
+            OpenTelemetrySdk
+                .builder()
+                .setTracerProvider(sdkTracerProvider)
+                .build()
         val tracer = OtelTracer(openTelemetry.getTracer("bot-app"), OtelCurrentTraceContext()) { }
         return Tracing(tracer, sdkTracerProvider)
     }

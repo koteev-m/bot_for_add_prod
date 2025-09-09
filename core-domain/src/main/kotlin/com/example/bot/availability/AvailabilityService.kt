@@ -63,9 +63,11 @@ class AvailabilityService(
                 now,
                 now.plus(Duration.ofDays(30)),
             )
-        val nights = slots.filter { cutoffPolicy.isOnlineBookingOpen(it, now) }
-            .map { slot -> slot.toDto(cutoffPolicy.arrivalBy(slot)) }
-            .take(limit)
+        val nights =
+            slots
+                .filter { cutoffPolicy.isOnlineBookingOpen(it, now) }
+                .map { slot -> slot.toDto(cutoffPolicy.arrivalBy(slot)) }
+                .take(limit)
         nightsCache.put(clubId, nights)
         return nights
     }
@@ -93,11 +95,12 @@ class AvailabilityService(
                     zone = zone,
                 )
             }
-                ?: rulesResolver.resolve(
-                    clubId,
-                    eventStartUtc.minus(Duration.ofDays(1)),
-                    eventStartUtc.plus(Duration.ofDays(1)),
-                ).find { eventStartUtc == it.eventStartUtc }
+                ?: rulesResolver
+                    .resolve(
+                        clubId,
+                        eventStartUtc.minus(Duration.ofDays(1)),
+                        eventStartUtc.plus(Duration.ofDays(1)),
+                    ).find { eventStartUtc == it.eventStartUtc }
                 ?: return emptyList()
 
         val eventId = event?.id
@@ -106,7 +109,8 @@ class AvailabilityService(
         val bookings = eventId?.let { repository.listActiveBookingTableIds(it) } ?: emptySet()
 
         val freeTables =
-            tables.filter { t -> t.id !in holds && t.id !in bookings }
+            tables
+                .filter { t -> t.id !in holds && t.id !in bookings }
                 .map { t ->
                     TableAvailabilityDto(
                         tableId = t.id,

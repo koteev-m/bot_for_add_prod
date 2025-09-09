@@ -16,34 +16,37 @@ import org.junit.jupiter.api.Test
 
 class HealthReadyTest {
     @Test
-    fun `health ok and ready down`() = testApplication {
-        val registry = MetricsProvider.prometheusRegistry()
-        val provider = MetricsProvider(registry)
-        application {
-            install(ContentNegotiation) { json() }
-            installMetrics(registry)
-            routing {
-                observabilityRoutes(
-                    provider,
-                    object : HealthService {
-                        override suspend fun health() = HealthReport(
-                            CheckStatus.UP,
-                            listOf(HealthCheck("db", CheckStatus.UP)),
-                        )
+    fun `health ok and ready down`() =
+        testApplication {
+            val registry = MetricsProvider.prometheusRegistry()
+            val provider = MetricsProvider(registry)
+            application {
+                install(ContentNegotiation) { json() }
+                installMetrics(registry)
+                routing {
+                    observabilityRoutes(
+                        provider,
+                        object : HealthService {
+                            override suspend fun health() =
+                                HealthReport(
+                                    CheckStatus.UP,
+                                    listOf(HealthCheck("db", CheckStatus.UP)),
+                                )
 
-                        override suspend fun readiness() = HealthReport(
-                            CheckStatus.DOWN,
-                            listOf(HealthCheck("outbox", CheckStatus.DOWN)),
-                        )
-                    },
-                )
+                            override suspend fun readiness() =
+                                HealthReport(
+                                    CheckStatus.DOWN,
+                                    listOf(HealthCheck("outbox", CheckStatus.DOWN)),
+                                )
+                        },
+                    )
+                }
             }
+            val h = client.get("/health")
+            assertEquals(HttpStatusCode.OK, h.status)
+            assertTrue(h.bodyAsText().contains("\"status\":\"UP\""))
+            val r = client.get("/ready")
+            assertEquals(HttpStatusCode.ServiceUnavailable, r.status)
+            assertTrue(r.bodyAsText().contains("outbox"))
         }
-        val h = client.get("/health")
-        assertEquals(HttpStatusCode.OK, h.status)
-        assertTrue(h.bodyAsText().contains("\"status\":\"UP\""))
-        val r = client.get("/ready")
-        assertEquals(HttpStatusCode.ServiceUnavailable, r.status)
-        assertTrue(r.bodyAsText().contains("outbox"))
-    }
 }

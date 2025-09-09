@@ -27,37 +27,41 @@ class PaymentsServiceUnitTest {
     private val service = PaymentsService(bookingService, repo, PaymentConfig(providerToken = "token"))
 
     @Test
-    fun `should create pending payment for provider deposit`() = runTest {
-        val input = ConfirmInput(1, Instant.parse("2024-03-01T00:00:00Z"), 1, 1, 2, BigDecimal(100))
-        val policy = PaymentPolicy(mode = PaymentMode.PROVIDER_DEPOSIT, currency = "RUB")
-        val res = service.startConfirmation(input, null, policy, "idem")
-        assertTrue(res is Either.Right)
-        val pending = res.value as ConfirmResult.PendingPayment
-        assertEquals(20000L, pending.invoice.totalMinor)
-        assertTrue(pending.invoice.payload.isNotBlank())
-        coVerify { repo.createInitiated(null, "PROVIDER", "RUB", 20000L, pending.invoice.payload, "idem") }
-    }
+    fun `should create pending payment for provider deposit`() =
+        runTest {
+            val input = ConfirmInput(1, Instant.parse("2024-03-01T00:00:00Z"), 1, 1, 2, BigDecimal(100))
+            val policy = PaymentPolicy(mode = PaymentMode.PROVIDER_DEPOSIT, currency = "RUB")
+            val res = service.startConfirmation(input, null, policy, "idem")
+            assertTrue(res is Either.Right)
+            val pending = res.value as ConfirmResult.PendingPayment
+            assertEquals(20000L, pending.invoice.totalMinor)
+            assertTrue(pending.invoice.payload.isNotBlank())
+            coVerify { repo.createInitiated(null, "PROVIDER", "RUB", 20000L, pending.invoice.payload, "idem") }
+        }
 
     @Test
-    fun `should confirm without payment when mode none`() = runTest {
-        val summary = BookingSummary(UUID.randomUUID(), 1, 1, 1, 1, 1, BigDecimal(50), "CONFIRMED", Instant.now(), "qr")
-        coEvery { bookingService.confirm(any(), any()) } returns Either.Right(summary)
-        val input = ConfirmInput(1, Instant.now(), 1, 1, 1, BigDecimal(50))
-        val policy = PaymentPolicy(mode = PaymentMode.NONE)
-        val res = service.startConfirmation(input, null, policy, "idem2")
-        assertTrue(res is Either.Right)
-        val confirmed = res.value as ConfirmResult.Confirmed
-        assertEquals(summary, confirmed.booking)
-    }
+    fun `should confirm without payment when mode none`() =
+        runTest {
+            val summary =
+                BookingSummary(UUID.randomUUID(), 1, 1, 1, 1, 1, BigDecimal(50), "CONFIRMED", Instant.now(), "qr")
+            coEvery { bookingService.confirm(any(), any()) } returns Either.Right(summary)
+            val input = ConfirmInput(1, Instant.now(), 1, 1, 1, BigDecimal(50))
+            val policy = PaymentPolicy(mode = PaymentMode.NONE)
+            val res = service.startConfirmation(input, null, policy, "idem2")
+            assertTrue(res is Either.Right)
+            val confirmed = res.value as ConfirmResult.Confirmed
+            assertEquals(summary, confirmed.booking)
+        }
 
     @Test
-    fun `stars mode uses XTR currency`() = runTest {
-        val input = ConfirmInput(1, Instant.now(), 1, 1, 3, BigDecimal(1))
-        val policy = PaymentPolicy(mode = PaymentMode.STARS_DIGITAL)
-        val res = service.startConfirmation(input, null, policy, "idem3")
-        assertTrue(res is Either.Right)
-        val pending = res.value as ConfirmResult.PendingPayment
-        assertEquals("XTR", pending.invoice.currency)
-        coVerify { repo.createInitiated(null, "STARS", "XTR", 3L, pending.invoice.payload, "idem3") }
-    }
+    fun `stars mode uses XTR currency`() =
+        runTest {
+            val input = ConfirmInput(1, Instant.now(), 1, 1, 3, BigDecimal(1))
+            val policy = PaymentPolicy(mode = PaymentMode.STARS_DIGITAL)
+            val res = service.startConfirmation(input, null, policy, "idem3")
+            assertTrue(res is Either.Right)
+            val pending = res.value as ConfirmResult.PendingPayment
+            assertEquals("XTR", pending.invoice.currency)
+            coVerify { repo.createInitiated(null, "STARS", "XTR", 3L, pending.invoice.payload, "idem3") }
+        }
 }

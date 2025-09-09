@@ -21,57 +21,59 @@ import org.slf4j.LoggerFactory
 
 class TracingSmokeTest {
     @Test
-    fun `tracing disabled`() = testApplication {
-        val registry = MetricsProvider.prometheusRegistry()
-        val provider = MetricsProvider(registry)
-        application {
-            install(ContentNegotiation) { json() }
-            installMetrics(registry)
-            installLogging()
-            routing {
-                observabilityRoutes(
-                    provider,
-                    object : HealthService {
-                        override suspend fun health() = HealthReport(CheckStatus.UP, emptyList())
+    fun `tracing disabled`() =
+        testApplication {
+            val registry = MetricsProvider.prometheusRegistry()
+            val provider = MetricsProvider(registry)
+            application {
+                install(ContentNegotiation) { json() }
+                installMetrics(registry)
+                installLogging()
+                routing {
+                    observabilityRoutes(
+                        provider,
+                        object : HealthService {
+                            override suspend fun health() = HealthReport(CheckStatus.UP, emptyList())
 
-                        override suspend fun readiness() = HealthReport(CheckStatus.UP, emptyList())
-                    },
-                )
+                            override suspend fun readiness() = HealthReport(CheckStatus.UP, emptyList())
+                        },
+                    )
+                }
             }
+            assertEquals(200, client.get("/metrics").status.value)
         }
-        assertEquals(200, client.get("/metrics").status.value)
-    }
 
     @Test
-    fun `tracing enabled`() = testApplication {
-        val registry = MetricsProvider.prometheusRegistry()
-        val provider = MetricsProvider(registry)
-        val exporter = InMemorySpanExporter.create()
-        val tracer = TracingProvider.create(exporter).tracer
-        val list = ListAppender<ILoggingEvent>()
-        val logger = LoggerFactory.getLogger("io.ktor.test") as Logger
-        list.start()
-        logger.addAppender(list)
-        application {
-            install(ContentNegotiation) { json() }
-            installMetrics(registry)
-            installLogging()
-            installTracing(tracer)
-            routing {
-                observabilityRoutes(
-                    provider,
-                    object : HealthService {
-                        override suspend fun health() = HealthReport(CheckStatus.UP, emptyList())
+    fun `tracing enabled`() =
+        testApplication {
+            val registry = MetricsProvider.prometheusRegistry()
+            val provider = MetricsProvider(registry)
+            val exporter = InMemorySpanExporter.create()
+            val tracer = TracingProvider.create(exporter).tracer
+            val list = ListAppender<ILoggingEvent>()
+            val logger = LoggerFactory.getLogger("io.ktor.test") as Logger
+            list.start()
+            logger.addAppender(list)
+            application {
+                install(ContentNegotiation) { json() }
+                installMetrics(registry)
+                installLogging()
+                installTracing(tracer)
+                routing {
+                    observabilityRoutes(
+                        provider,
+                        object : HealthService {
+                            override suspend fun health() = HealthReport(CheckStatus.UP, emptyList())
 
-                        override suspend fun readiness() = HealthReport(CheckStatus.UP, emptyList())
-                    },
-                )
+                            override suspend fun readiness() = HealthReport(CheckStatus.UP, emptyList())
+                        },
+                    )
+                }
             }
+            client.get("/metrics")
+            assertTrue(exporter.finishedSpanItems.isNotEmpty(), "spans")
+            val event = list.list.firstOrNull { it.mdcPropertyMap.containsKey("traceId") }
+            assertTrue(event != null && event.mdcPropertyMap["traceId"]?.isNotEmpty() == true)
+            logger.detachAppender(list)
         }
-        client.get("/metrics")
-        assertTrue(exporter.finishedSpanItems.isNotEmpty(), "spans")
-        val event = list.list.firstOrNull { it.mdcPropertyMap.containsKey("traceId") }
-        assertTrue(event != null && event.mdcPropertyMap["traceId"]?.isNotEmpty() == true)
-        logger.detachAppender(list)
-    }
 }

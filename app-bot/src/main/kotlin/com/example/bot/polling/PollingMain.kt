@@ -8,14 +8,15 @@ import org.slf4j.LoggerFactory
 
 private val logger = LoggerFactory.getLogger("PollingRunner")
 
-private val allowedUpdates = listOf(
-    "message",
-    "edited_message",
-    "callback_query",
-    "contact",
-    "pre_checkout_query",
-    "successful_payment",
-)
+private val allowedUpdates =
+    listOf(
+        "message",
+        "edited_message",
+        "callback_query",
+        "contact",
+        "pre_checkout_query",
+        "successful_payment",
+    )
 
 /** Runs the long polling loop using [client] and [handler]. */
 class PollingRunner(
@@ -42,12 +43,14 @@ class PollingRunner(
 /** Entry point that starts the polling runner in an infinite loop. */
 object PollingMain {
     @JvmStatic
-    fun main(args: Array<String>) = runBlocking {
-        val token = env("BOT_TOKEN")
-        val apiUrl = System.getenv("LOCAL_BOT_API_URL")
-        val client = TelegramClient(token, apiUrl)
-        val runner = PollingRunner(client, handler = { /* integrate domain handlers here */ })
-        while (true) runner.runOnce()
+    fun main(args: Array<String>) {
+        runBlocking {
+            val token = env("BOT_TOKEN")
+            val apiUrl = System.getenv("LOCAL_BOT_API_URL")
+            val client = TelegramClient(token, apiUrl)
+            val runner = PollingRunner(client, handler = { /* integrate domain handlers here */ })
+            while (true) runner.runOnce()
+        }
     }
 
     private fun env(name: String): String = System.getenv(name) ?: error("Missing $name")

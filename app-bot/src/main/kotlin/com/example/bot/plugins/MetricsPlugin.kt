@@ -14,13 +14,14 @@ import io.micrometer.core.instrument.binder.system.ProcessorMetrics
 fun Application.installMetrics(registry: MeterRegistry) {
     install(MicrometerMetrics) {
         this.registry = registry
-        meterBinders = listOf(
-            ClassLoaderMetrics(),
-            JvmMemoryMetrics(),
-            JvmGcMetrics(),
-            ProcessorMetrics(),
-            JvmThreadMetrics(),
-            LogbackMetrics(),
-        )
+        meterBinders =
+            listOf(
+                ClassLoaderMetrics(),
+                JvmMemoryMetrics(),
+                JvmGcMetrics(),
+                ProcessorMetrics(),
+                JvmThreadMetrics(),
+                LogbackMetrics(),
+            )
     }
 }

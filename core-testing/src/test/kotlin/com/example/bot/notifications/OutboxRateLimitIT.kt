@@ -36,9 +36,10 @@ class OutboxRateLimitIT :
             val chatB = 2L
             for (i in 0 until total) {
                 val chat = if (i % 2 == 0) chatA else chatB
-                records[i.toLong()] = State(
-                    msg = NotifyMessage(chat, null, NotifyMethod.TEXT, "hi", null, null, null, null, null),
-                )
+                records[i.toLong()] =
+                    State(
+                        msg = NotifyMessage(chat, null, NotifyMethod.TEXT, "hi", null, null, null, null, null),
+                    )
             }
 
             val repo = mockk<OutboxRepository>()

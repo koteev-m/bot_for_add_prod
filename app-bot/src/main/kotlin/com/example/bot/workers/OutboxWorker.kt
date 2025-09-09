@@ -70,43 +70,48 @@ class OutboxWorker(
             return
         }
 
-        val result = when (msg.method) {
-            NotifyMethod.TEXT -> sender.sendMessage(
-                msg.chatId,
-                msg.text.orEmpty(),
-                toTelegramParseMode(msg.parseMode),
-                msg.messageThreadId,
-                toKeyboard(msg),
-            )
-            NotifyMethod.PHOTO -> sender.sendPhoto(
-                msg.chatId,
-                NotifySender.PhotoContent.Url(requireNotNull(msg.photoUrl)),
-                msg.text,
-                toTelegramParseMode(msg.parseMode),
-                msg.messageThreadId,
-            )
-            NotifyMethod.ALBUM -> {
-                val media = msg.album.orEmpty().map {
-                    NotifySender.Media(
-                        content = NotifySender.PhotoContent.Url(it.url),
-                        caption = it.caption,
-                        parseMode = toTelegramParseMode(it.parseMode),
+        val result =
+            when (msg.method) {
+                NotifyMethod.TEXT ->
+                    sender.sendMessage(
+                        msg.chatId,
+                        msg.text.orEmpty(),
+                        toTelegramParseMode(msg.parseMode),
+                        msg.messageThreadId,
+                        toKeyboard(msg),
                     )
+                NotifyMethod.PHOTO ->
+                    sender.sendPhoto(
+                        msg.chatId,
+                        NotifySender.PhotoContent.Url(requireNotNull(msg.photoUrl)),
+                        msg.text,
+                        toTelegramParseMode(msg.parseMode),
+                        msg.messageThreadId,
+                    )
+                NotifyMethod.ALBUM -> {
+                    val media =
+                        msg.album.orEmpty().map {
+                            NotifySender.Media(
+                                content = NotifySender.PhotoContent.Url(it.url),
+                                caption = it.caption,
+                                parseMode = toTelegramParseMode(it.parseMode),
+                            )
+                        }
+                    sender.sendMediaGroup(msg.chatId, media, msg.messageThreadId)
                 }
-                sender.sendMediaGroup(msg.chatId, media, msg.messageThreadId)
             }
-        }
 
         when (result) {
             NotifySender.Result.Ok -> {
                 repo.markSent(rec.id, null)
-                registry.counter(
-                    "notify.sent",
-                    "method",
-                    msg.method.name,
-                    "threaded",
-                    (msg.messageThreadId != null).toString(),
-                ).increment()
+                registry
+                    .counter(
+                        "notify.sent",
+                        "method",
+                        msg.method.name,
+                        "threaded",
+                        (msg.messageThreadId != null).toString(),
+                    ).increment()
             }
             is NotifySender.Result.RetryAfter -> {
                 val delayMs = result.seconds * 1000L
@@ -119,39 +124,47 @@ class OutboxWorker(
             is NotifySender.Result.Failed -> {
                 if (result.code == 400 || result.code == 403) {
                     repo.markPermanentFailure(rec.id, result.description)
-                    registry.counter(
-                        "notify.failed",
-                        "code",
-                        result.code.toString(),
-                        "retryable",
-                        "false",
-                    ).increment()
+                    registry
+                        .counter(
+                            "notify.failed",
+                            "code",
+                            result.code.toString(),
+                            "retryable",
+                            "false",
+                        ).increment()
                 } else {
                     val delayMs = (config.retryBaseMs * (1L shl rec.attempts)).coerceAtMost(config.retryMaxMs)
                     repo.markFailed(rec.id, result.description, OffsetDateTime.now().plusNanos(delayMs * 1_000_000))
-                    registry.counter(
-                        "notify.failed",
-                        "code",
-                        result.code.toString(),
-                        "retryable",
-                        "true",
-                    ).increment()
+                    registry
+                        .counter(
+                            "notify.failed",
+                            "code",
+                            result.code.toString(),
+                            "retryable",
+                            "true",
+                        ).increment()
                     registry.counter("notify.retried").increment()
                 }
             }
         }
     }
 
-    private fun toTelegramParseMode(pm: ParseMode?): com.pengrad.telegrambot.model.request.ParseMode? = when (pm) {
-        ParseMode.MARKDOWNV2 -> com.pengrad.telegrambot.model.request.ParseMode.MarkdownV2
-        ParseMode.HTML -> com.pengrad.telegrambot.model.request.ParseMode.HTML
-        null -> null
+    private fun toTelegramParseMode(pm: ParseMode?): com.pengrad.telegrambot.model.request.ParseMode? {
+        return when (pm) {
+            ParseMode.MARKDOWNV2 -> com.pengrad.telegrambot.model.request.ParseMode.MarkdownV2
+            ParseMode.HTML -> com.pengrad.telegrambot.model.request.ParseMode.HTML
+            null -> null
+        }
     }
 
-    private fun toKeyboard(msg: NotifyMessage): Keyboard? = msg.buttons?.let { spec ->
-        val rows = spec.rows.map { row ->
-            row.map { text -> InlineKeyboardButton(text).callbackData(text) }.toTypedArray()
-        }.toTypedArray()
-        InlineKeyboardMarkup(*rows)
+    private fun toKeyboard(msg: NotifyMessage): Keyboard? {
+        return msg.buttons?.let { spec ->
+            val rows =
+                spec.rows
+                    .map { row ->
+                        row.map { text -> InlineKeyboardButton(text).callbackData(text) }.toTypedArray()
+                    }.toTypedArray()
+            InlineKeyboardMarkup(*rows)
+        }
     }
 }

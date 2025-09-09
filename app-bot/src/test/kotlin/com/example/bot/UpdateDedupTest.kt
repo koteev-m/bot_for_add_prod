@@ -41,19 +41,21 @@ class UpdateDedupTest :
             testApplication {
                 application { testModule() }
                 val body = "{\"update_id\":1}"
-                val first = client.post("/webhook") {
-                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                    header("X-Telegram-Bot-Api-Secret-Token", secret)
-                    setBody(body)
-                }
+                val first =
+                    client.post("/webhook") {
+                        header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                        header("X-Telegram-Bot-Api-Secret-Token", secret)
+                        setBody(body)
+                    }
                 first.status shouldBe HttpStatusCode.OK
                 first.bodyAsText() shouldBe ""
 
-                val second = client.post("/webhook") {
-                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                    header("X-Telegram-Bot-Api-Secret-Token", secret)
-                    setBody(body)
-                }
+                val second =
+                    client.post("/webhook") {
+                        header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                        header("X-Telegram-Bot-Api-Secret-Token", secret)
+                        setBody(body)
+                    }
                 second.status shouldBe HttpStatusCode.OK
                 second.bodyAsText() shouldBe ""
             }

@@ -18,21 +18,26 @@ object InitDataValidator {
      * Parses and validates raw init data. Returns user information if valid, or null otherwise.
      */
     fun validate(initData: String, botToken: String): TelegramUser? {
-        val params = initData.split('&').map { part ->
-            val idx = part.indexOf('=')
-            if (idx == -1) {
-                part to ""
-            } else {
-                val key = part.substring(0, idx)
-                val value = part.substring(idx + 1)
-                key to URLDecoder.decode(value, StandardCharsets.UTF_8)
-            }
-        }.toMap()
+        val params =
+            initData
+                .split('&')
+                .map { part ->
+                    val idx = part.indexOf('=')
+                    if (idx == -1) {
+                        part to ""
+                    } else {
+                        val key = part.substring(0, idx)
+                        val value = part.substring(idx + 1)
+                        key to URLDecoder.decode(value, StandardCharsets.UTF_8)
+                    }
+                }.toMap()
         val hash = params["hash"] ?: return null
-        val dataCheckString = params.filterKeys { it != "hash" }
-            .toList()
-            .sortedBy { it.first }
-            .joinToString("\n") { "${it.first}=${it.second}" }
+        val dataCheckString =
+            params
+                .filterKeys { it != "hash" }
+                .toList()
+                .sortedBy { it.first }
+                .joinToString("\n") { "${it.first}=${it.second}" }
         val secretKey = MessageDigest.getInstance("SHA-256").digest(botToken.toByteArray())
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(secretKey, "HmacSHA256"))

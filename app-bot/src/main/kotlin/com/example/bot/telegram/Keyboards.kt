@@ -35,9 +35,10 @@ class Keyboards(private val texts: BotTexts) {
      * Each pair is token to display name.
      */
     fun clubsKeyboard(clubs: List<Pair<String, String>>): InlineKeyboardMarkup {
-        val rows = clubs.map { (token, name) ->
-            arrayOf(InlineKeyboardButton(name).callbackData("club:$token"))
-        }
+        val rows =
+            clubs.map { (token, name) ->
+                arrayOf(InlineKeyboardButton(name).callbackData("club:$token"))
+            }
         return InlineKeyboardMarkup(*rows.toTypedArray())
     }
 
@@ -45,9 +46,10 @@ class Keyboards(private val texts: BotTexts) {
      * Keyboard listing nights.
      */
     fun nightsKeyboard(nights: List<Pair<String, String>>): InlineKeyboardMarkup {
-        val rows = nights.map { (token, label) ->
-            arrayOf(InlineKeyboardButton(label).callbackData("night:$token"))
-        }
+        val rows =
+            nights.map { (token, label) ->
+                arrayOf(InlineKeyboardButton(label).callbackData("night:$token"))
+            }
         return InlineKeyboardMarkup(*rows.toTypedArray())
     }
 
@@ -62,23 +64,27 @@ class Keyboards(private val texts: BotTexts) {
     ): InlineKeyboardMarkup {
         val start = (page - 1) * pageSize
         val slice = tables.drop(start).take(pageSize)
-        val rows = slice.map { t ->
-            arrayOf(
-                InlineKeyboardButton("Table ${t.tableNumber} · от ${t.minDeposit}₽")
-                    .callbackData("tbl:${encode(t)}"),
-            )
-        }.toMutableList()
+        val rows =
+            slice
+                .map { t ->
+                    arrayOf(
+                        InlineKeyboardButton("Table ${t.tableNumber} · от ${t.minDeposit}₽")
+                            .callbackData("tbl:${encode(t)}"),
+                    )
+                }.toMutableList()
         val totalPages = (tables.size + pageSize - 1) / pageSize
         if (totalPages > 1) {
             val nav = mutableListOf<InlineKeyboardButton>()
             if (page > 1) {
-                nav += InlineKeyboardButton("⬅️")
-                    .callbackData("pg:${page - 1}")
+                nav +=
+                    InlineKeyboardButton("⬅️")
+                        .callbackData("pg:${page - 1}")
             }
             nav += InlineKeyboardButton("$page/$totalPages").callbackData("noop")
             if (page < totalPages) {
-                nav += InlineKeyboardButton("➡️")
-                    .callbackData("pg:${page + 1}")
+                nav +=
+                    InlineKeyboardButton("➡️")
+                        .callbackData("pg:${page + 1}")
             }
             rows += nav.toTypedArray()
         }

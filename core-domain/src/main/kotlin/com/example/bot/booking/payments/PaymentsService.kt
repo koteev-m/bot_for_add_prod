@@ -30,16 +30,17 @@ class PaymentsService(
         val total = input.minDeposit.multiply(BigDecimal(input.guestsCount))
         return when (policy.mode) {
             PaymentMode.NONE -> {
-                val req = ConfirmRequest(
-                    holdId = null,
-                    clubId = input.clubId,
-                    eventStartUtc = input.eventStartUtc,
-                    tableId = input.tableId,
-                    guestsCount = input.guestsCount,
-                    guestUserId = null,
-                    guestName = contact?.tgUsername,
-                    phoneE164 = contact?.phoneE164,
-                )
+                val req =
+                    ConfirmRequest(
+                        holdId = null,
+                        clubId = input.clubId,
+                        eventStartUtc = input.eventStartUtc,
+                        tableId = input.tableId,
+                        guestsCount = input.guestsCount,
+                        guestUserId = null,
+                        guestName = contact?.tgUsername,
+                        phoneE164 = contact?.phoneE164,
+                    )
                 when (val res = bookingService.confirm(req, idemKey)) {
                     is Either.Left -> Either.Left(res.value)
                     is Either.Right -> Either.Right(ConfirmResult.Confirmed(res.value))
@@ -56,13 +57,14 @@ class PaymentsService(
                     payload = payload,
                     idempotencyKey = idemKey,
                 )
-                val invoice = InvoiceInfo(
-                    invoiceId = payload,
-                    payload = payload,
-                    totalMinor = totalMinor,
-                    currency = policy.currency,
-                    invoiceLink = null,
-                )
+                val invoice =
+                    InvoiceInfo(
+                        invoiceId = payload,
+                        payload = payload,
+                        totalMinor = totalMinor,
+                        currency = policy.currency,
+                        invoiceLink = null,
+                    )
                 Either.Right(ConfirmResult.PendingPayment(invoice))
             }
             PaymentMode.STARS_DIGITAL -> {
@@ -76,13 +78,14 @@ class PaymentsService(
                     payload = payload,
                     idempotencyKey = idemKey,
                 )
-                val invoice = InvoiceInfo(
-                    invoiceId = payload,
-                    payload = payload,
-                    totalMinor = totalMinor,
-                    currency = "XTR",
-                    invoiceLink = null,
-                )
+                val invoice =
+                    InvoiceInfo(
+                        invoiceId = payload,
+                        payload = payload,
+                        totalMinor = totalMinor,
+                        currency = "XTR",
+                        invoiceLink = null,
+                    )
                 Either.Right(ConfirmResult.PendingPayment(invoice))
             }
         }

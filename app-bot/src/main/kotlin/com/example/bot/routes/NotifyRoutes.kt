@@ -99,13 +99,15 @@ class TxNotifyService {
 }
 
 /** Escapes text for HTML or MarkdownV2. */
-private fun sanitize(text: String, mode: ParseMode?): String = when (mode) {
-    ParseMode.HTML -> text.replace("<", "&lt;").replace(">", "&gt;")
-    ParseMode.MARKDOWNV2 ->
-        text
-            .replace("_", "\\_")
-            .replace("*", "\\*")
-    else -> text
+private fun sanitize(text: String, mode: ParseMode?): String {
+    return when (mode) {
+        ParseMode.HTML -> text.replace("<", "&lt;").replace(">", "&gt;")
+        ParseMode.MARKDOWNV2 ->
+            text
+                .replace("_", "\\_")
+                .replace("*", "\\*")
+        else -> text
+    }
 }
 
 /**

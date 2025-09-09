@@ -12,10 +12,12 @@ class BotTexts {
     /**
      * Returns menu button labels in selected language.
      */
-    fun menu(lang: String?): Menu = if (lang.isEnglish()) {
-        Menu("Choose club", "My bookings", "Ask question", "Music")
-    } else {
-        Menu("Выбрать клуб", "Мои бронирования", "Задать вопрос", "Музыка")
+    fun menu(lang: String?): Menu {
+        return if (lang.isEnglish()) {
+            Menu("Choose club", "My bookings", "Ask question", "Music")
+        } else {
+            Menu("Выбрать клуб", "Мои бронирования", "Задать вопрос", "Музыка")
+        }
     }
 
     /**

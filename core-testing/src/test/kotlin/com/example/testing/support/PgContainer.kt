@@ -24,12 +24,13 @@ abstract class PgContainer {
         fun startContainer() {
             assumeTrue(DockerClientFactory.instance().isDockerAvailable)
             container.start()
-            val config = HikariConfig().apply {
-                jdbcUrl = container.jdbcUrl
-                username = container.username
-                password = container.password
-                driverClassName = container.driverClassName
-            }
+            val config =
+                HikariConfig().apply {
+                    jdbcUrl = container.jdbcUrl
+                    username = container.username
+                    password = container.password
+                    driverClassName = container.driverClassName
+                }
             dataSource = HikariDataSource(config)
             database = Database.connect(dataSource)
         }

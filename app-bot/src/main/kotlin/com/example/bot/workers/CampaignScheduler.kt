@@ -55,13 +55,15 @@ class CampaignScheduler(
         }
     }
 
-    private fun remainingGauge(id: Long): AtomicLong = remaining.computeIfAbsent(id) {
-        AtomicLong(0).also { ref ->
-            Telemetry.registry.gauge(
-                "notify_campaign_remaining",
-                listOf(Tag.of("campaign", id.toString())),
-                ref,
-            )
+    private fun remainingGauge(id: Long): AtomicLong {
+        return remaining.computeIfAbsent(id) {
+            AtomicLong(0).also { ref ->
+                Telemetry.registry.gauge(
+                    "notify_campaign_remaining",
+                    listOf(Tag.of("campaign", id.toString())),
+                    ref,
+                )
+            }
         }
     }
 

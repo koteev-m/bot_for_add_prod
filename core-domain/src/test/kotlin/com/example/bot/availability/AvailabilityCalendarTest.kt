@@ -24,35 +24,40 @@ class AvailabilityCalendarTest {
     @Test
     fun `holiday override and base hours`() {
         org.junit.jupiter.api.Assumptions.assumeTrue(
-            org.testcontainers.DockerClientFactory.instance().isDockerAvailable,
+            org.testcontainers.DockerClientFactory
+                .instance()
+                .isDockerAvailable,
         )
         PostgreSQLContainer<Nothing>("postgres:15-alpine").use { it.start() }
-        val repo = object : AvailabilityRepository {
-            override suspend fun findClub(clubId: Long) = Club(1, "Europe/Moscow")
+        val repo =
+            object : AvailabilityRepository {
+                override suspend fun findClub(clubId: Long) = Club(1, "Europe/Moscow")
 
-            override suspend fun listClubHours(clubId: Long) = listOf(
-                ClubHour(DayOfWeek.FRIDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
-                ClubHour(DayOfWeek.SATURDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
-            )
+                override suspend fun listClubHours(clubId: Long) =
+                    listOf(
+                        ClubHour(DayOfWeek.FRIDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
+                        ClubHour(DayOfWeek.SATURDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
+                    )
 
-            override suspend fun listHolidays(clubId: Long, from: LocalDate, to: LocalDate) = listOf(
-                ClubHoliday(LocalDate.of(2025, 5, 4), true, LocalTime.of(22, 0), LocalTime.of(3, 0)),
-            )
+                override suspend fun listHolidays(clubId: Long, from: LocalDate, to: LocalDate) =
+                    listOf(
+                        ClubHoliday(LocalDate.of(2025, 5, 4), true, LocalTime.of(22, 0), LocalTime.of(3, 0)),
+                    )
 
-            override suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate) =
-                emptyList<ClubException>()
+                override suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate) =
+                    emptyList<ClubException>()
 
-            override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) =
-                emptyList<com.example.bot.time.Event>()
+                override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) =
+                    emptyList<com.example.bot.time.Event>()
 
-            override suspend fun findEvent(clubId: Long, startUtc: Instant) = null
+                override suspend fun findEvent(clubId: Long, startUtc: Instant) = null
 
-            override suspend fun listTables(clubId: Long) = emptyList<Table>()
+                override suspend fun listTables(clubId: Long) = emptyList<Table>()
 
-            override suspend fun listActiveHoldTableIds(eventId: Long, now: Instant) = emptySet<Long>()
+                override suspend fun listActiveHoldTableIds(eventId: Long, now: Instant) = emptySet<Long>()
 
-            override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
-        }
+                override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
+            }
 
         val resolver = OperatingRulesResolver(repo)
         val from = LocalDate.of(2025, 5, 2).atStartOfDay(ZoneId.of("UTC")).toInstant()
@@ -72,33 +77,39 @@ class AvailabilityCalendarTest {
     @Test
     fun `exception closes night`() {
         org.junit.jupiter.api.Assumptions.assumeTrue(
-            org.testcontainers.DockerClientFactory.instance().isDockerAvailable,
+            org.testcontainers.DockerClientFactory
+                .instance()
+                .isDockerAvailable,
         )
         PostgreSQLContainer<Nothing>("postgres:15-alpine").use { it.start() }
-        val repo = object : AvailabilityRepository {
-            override suspend fun findClub(clubId: Long) = Club(1, "Europe/Moscow")
+        val repo =
+            object : AvailabilityRepository {
+                override suspend fun findClub(clubId: Long) = Club(1, "Europe/Moscow")
 
-            override suspend fun listClubHours(clubId: Long) = listOf(
-                ClubHour(DayOfWeek.SATURDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
-            )
+                override suspend fun listClubHours(clubId: Long) =
+                    listOf(
+                        ClubHour(DayOfWeek.SATURDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
+                    )
 
-            override suspend fun listHolidays(clubId: Long, from: LocalDate, to: LocalDate) = emptyList<ClubHoliday>()
+                override suspend fun listHolidays(clubId: Long, from: LocalDate, to: LocalDate) =
+                    emptyList<ClubHoliday>()
 
-            override suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate) = listOf(
-                ClubException(LocalDate.of(2025, 5, 3), false, null, null),
-            )
+                override suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate) =
+                    listOf(
+                        ClubException(LocalDate.of(2025, 5, 3), false, null, null),
+                    )
 
-            override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) =
-                emptyList<com.example.bot.time.Event>()
+                override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) =
+                    emptyList<com.example.bot.time.Event>()
 
-            override suspend fun findEvent(clubId: Long, startUtc: Instant) = null
+                override suspend fun findEvent(clubId: Long, startUtc: Instant) = null
 
-            override suspend fun listTables(clubId: Long) = emptyList<Table>()
+                override suspend fun listTables(clubId: Long) = emptyList<Table>()
 
-            override suspend fun listActiveHoldTableIds(eventId: Long, now: Instant) = emptySet<Long>()
+                override suspend fun listActiveHoldTableIds(eventId: Long, now: Instant) = emptySet<Long>()
 
-            override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
-        }
+                override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
+            }
         val resolver = OperatingRulesResolver(repo)
         val from = LocalDate.of(2025, 5, 2).atStartOfDay(ZoneId.of("UTC")).toInstant()
         val to = LocalDate.of(2025, 5, 5).atStartOfDay(ZoneId.of("UTC")).toInstant()
