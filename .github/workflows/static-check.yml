@@ -1,0 +1,29 @@
+name: Static Check (CLI)
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Gradle staticCheck (parallel)
+        run: ./gradlew --no-daemon --parallel staticCheck
+
+      - name: Ensure detekt-baseline not modified
+        run: |
+          git update-index -q --refresh
+          if ! git diff --exit-code -- '*-detekt-baseline.xml'; then
+            echo "Baseline must not be changed in CI"; exit 1
+          fi
