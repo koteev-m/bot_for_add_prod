@@ -97,7 +97,7 @@ class OutboxRateLimitIT :
             }
 
             val scope = CoroutineScope(Dispatchers.Default)
-            val worker = OutboxWorker(scope, repo, sender, policy, config)
+            val worker = OutboxWorker(scope, OutboxWorker.Deps(repo, sender, policy, config))
             worker.start()
             scope.launch {
                 delay(4000)

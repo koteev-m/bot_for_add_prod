@@ -22,7 +22,7 @@ fun Route.guestFlowRoutes(availability: AvailabilityService, renderer: HallRende
     route("/clubs/{clubId}") {
         get("/nights") {
             val clubId = call.parameters.getOrFail("clubId").toLong()
-            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 8
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_NIGHTS_LIMIT
             val nights = availability.listOpenNights(clubId, limit)
             call.respond(nights)
         }
@@ -43,7 +43,7 @@ fun Route.guestFlowRoutes(availability: AvailabilityService, renderer: HallRende
                 MessageDigest
                     .getInstance("SHA-256")
                     .digest("$clubId|$instant|$statusVector".toByteArray())
-                    .joinToString("") { String.format("%02x", it) }
+                    .joinToString("") { java.lang.String.format(java.util.Locale.ROOT, "%02x", it) }
             val etag = "\"$hash\""
             val ifNone = call.request.headers[HttpHeaders.IfNoneMatch]
             if (ifNone == etag) {
@@ -56,3 +56,5 @@ fun Route.guestFlowRoutes(availability: AvailabilityService, renderer: HallRende
         }
     }
 }
+
+private const val DEFAULT_NIGHTS_LIMIT = 8

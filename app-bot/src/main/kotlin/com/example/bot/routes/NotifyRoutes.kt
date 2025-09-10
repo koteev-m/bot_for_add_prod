@@ -113,6 +113,7 @@ private fun sanitize(text: String, mode: ParseMode?): String {
 /**
  * Registers notification and campaign routes.
  */
+@Suppress("LongMethod", "ThrowsCount")
 fun Application.notifyRoutes(tx: TxNotifyService, campaigns: CampaignService) {
     routing {
         post("/api/notify/tx") {

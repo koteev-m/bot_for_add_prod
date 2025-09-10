@@ -20,8 +20,8 @@ class OutboxRepository(private val db: Database) {
 
     private val json = Json
 
-    suspend fun enqueue(msg: NotifyMessage, campaignId: Long? = null, priority: Int = 100, dedupKey: String? = null) =
-        newSuspendedTransaction(db = db) {
+    suspend fun enqueue(msg: NotifyMessage, campaignId: Long? = null, priority: Int = 100, dedupKey: String? = null) {
+        return newSuspendedTransaction(db = db) {
             NotificationsOutbox.insertIgnore {
                 it[targetChatId] = msg.chatId
                 it[messageThreadId] = msg.messageThreadId
@@ -38,9 +38,10 @@ class OutboxRepository(private val db: Database) {
                 it[parseMode] = msg.parseMode?.name
             }
         }
+    }
 
-    suspend fun pickBatch(now: OffsetDateTime, limit: Int): List<Record> =
-        newSuspendedTransaction(db = db) {
+    suspend fun pickBatch(now: OffsetDateTime, limit: Int): List<Record> {
+        return newSuspendedTransaction(db = db) {
             NotificationsOutbox
                 .select {
                     (NotificationsOutbox.status eq "PENDING") and
@@ -63,9 +64,10 @@ class OutboxRepository(private val db: Database) {
                     )
                 }
         }
+    }
 
-    suspend fun markSent(id: Long, messageId: Long?) =
-        newSuspendedTransaction(db = db) {
+    suspend fun markSent(id: Long, messageId: Long?) {
+        return newSuspendedTransaction(db = db) {
             NotificationsOutbox.update({ NotificationsOutbox.id eq id }) {
                 it[status] = "SENT"
                 it[lastError] = null
@@ -75,9 +77,10 @@ class OutboxRepository(private val db: Database) {
                 }
             }
         }
+    }
 
-    suspend fun markFailed(id: Long, error: String?, nextRetryAt: OffsetDateTime) =
-        newSuspendedTransaction(db = db) {
+    suspend fun markFailed(id: Long, error: String?, nextRetryAt: OffsetDateTime) {
+        return newSuspendedTransaction(db = db) {
             NotificationsOutbox.update({ NotificationsOutbox.id eq id }) {
                 it[status] = "PENDING"
                 it[lastError] = error
@@ -87,18 +90,20 @@ class OutboxRepository(private val db: Database) {
                 }
             }
         }
+    }
 
-    suspend fun postpone(id: Long, nextRetryAt: OffsetDateTime) =
-        newSuspendedTransaction(db = db) {
+    suspend fun postpone(id: Long, nextRetryAt: OffsetDateTime) {
+        return newSuspendedTransaction(db = db) {
             NotificationsOutbox.update({ NotificationsOutbox.id eq id }) {
                 it[status] = "PENDING"
                 it[lastError] = null
                 it[NotificationsOutbox.nextRetryAt] = nextRetryAt
             }
         }
+    }
 
-    suspend fun markPermanentFailure(id: Long, error: String?) =
-        newSuspendedTransaction(db = db) {
+    suspend fun markPermanentFailure(id: Long, error: String?) {
+        return newSuspendedTransaction(db = db) {
             NotificationsOutbox.update({ NotificationsOutbox.id eq id }) {
                 it[status] = "FAILED"
                 it[lastError] = error
@@ -108,9 +113,10 @@ class OutboxRepository(private val db: Database) {
                 }
             }
         }
+    }
 
-    suspend fun isSent(dedupKey: String): Boolean =
-        newSuspendedTransaction(db = db) {
+    suspend fun isSent(dedupKey: String): Boolean {
+        return newSuspendedTransaction(db = db) {
             NotificationsOutbox
                 .select {
                     (NotificationsOutbox.dedupKey eq dedupKey) and
@@ -118,4 +124,5 @@ class OutboxRepository(private val db: Database) {
                 }.empty()
                 .not()
         }
+    }
 }
