@@ -1,8 +1,10 @@
 package com.example.bot.observability
 
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import java.lang.management.ManagementFactory
+import java.sql.SQLException
 import javax.sql.DataSource
 
 @Serializable
@@ -78,8 +80,10 @@ class DefaultHealthService(
                 }
             }
             HealthCheck("db", CheckStatus.UP)
-        } catch (e: Exception) {
+        } catch (e: SQLException) {
             HealthCheck("db", CheckStatus.DOWN, mapOf("error" to (e.message ?: "error")))
+        } catch (e: TimeoutCancellationException) {
+            HealthCheck("db", CheckStatus.DOWN, mapOf("error" to (e.message ?: "timeout")))
         }
     }
 

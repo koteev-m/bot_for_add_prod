@@ -33,6 +33,7 @@ interface BookingWriteRepository {
 
     suspend fun deleteHold(id: UUID)
 
+    @Suppress("LongParameterList")
     suspend fun insertBooking(
         tableId: Long,
         eventId: Long,

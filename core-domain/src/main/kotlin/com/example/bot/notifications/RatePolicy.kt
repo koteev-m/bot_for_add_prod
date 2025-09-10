@@ -37,6 +37,7 @@ private class TokenBucket(
     private val lastRefillMs = AtomicLong(timeSource.nowMs())
     private val blockedUntilMs = AtomicLong(0L)
 
+    @Suppress("LoopWithTooManyJumpStatements")
     fun tryAcquire(n: Int, nowMs: Long): Permit {
         val blocked = blockedUntilMs.get()
         if (nowMs < blocked) {
@@ -46,19 +47,23 @@ private class TokenBucket(
         refill(nowMs)
 
         val need = n * SCALE
+        var result: Permit
         while (true) {
             val cur = current.get()
             if (cur >= need) {
                 if (current.compareAndSet(cur, cur - need)) {
-                    return Permit(true)
+                    result = Permit(true)
+                    break
                 }
             } else {
                 val shortage = need - cur
                 val retry =
                     ceil(shortage.toDouble() / (refillPerSec * SCALE) * MS.toDouble()).toLong()
-                return Permit(false, retry)
+                result = Permit(false, retry)
+                break
             }
         }
+        return result
     }
 
     fun blockUntil(untilMs: Long) {

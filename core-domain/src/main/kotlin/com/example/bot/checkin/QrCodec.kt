@@ -13,6 +13,19 @@ import javax.crypto.spec.SecretKeySpec
  * is a Base64URL-encoded HMAC-SHA256 of the base string
  * `GL1:<clubId>:<eventId>:E:<entryId>` using the provided key.
  */
+private const val PREFIX = "GL1"
+private const val ENTRY_MARK = "E"
+private const val SIG_MARK = "S"
+private const val PARTS_COUNT = 7
+private const val BASE_PARTS = 5
+private const val PREFIX_IDX = 0
+private const val CLUB_IDX = 1
+private const val EVENT_IDX = 2
+private const val ENTRY_TAG_IDX = 3
+private const val ENTRY_IDX = 4
+private const val SIG_TAG_IDX = 5
+private const val HMAC_IDX = 6
+
 class QrCodec(private val key: ByteArray) {
 
     /** Data extracted from a QR code. */
@@ -37,23 +50,26 @@ class QrCodec(private val key: ByteArray) {
      */
     fun decode(qr: String): Data? {
         val parts = qr.split(":")
-        if (parts.size != 7) return null
-        if (parts[0] != "GL1" || parts[3] != "E" || parts[5] != "S") return null
+        if (!hasValidHeader(parts)) return null
 
-        val clubId = parts[1].toLongOrNull() ?: return null
-        val eventId = parts[2].toLongOrNull() ?: return null
-        val entryId = parts[4].toLongOrNull() ?: return null
-        val hmacPart = parts[6]
-
-        val base = parts.take(5).joinToString(":")
+        val clubId = parts[CLUB_IDX].toLongOrNull()
+        val eventId = parts[EVENT_IDX].toLongOrNull()
+        val entryId = parts[ENTRY_IDX].toLongOrNull()
+        val provided = runCatching { Base64.getUrlDecoder().decode(parts[HMAC_IDX]) }.getOrNull()
+        val base = parts.take(BASE_PARTS).joinToString(":")
         val expected = mac().doFinal(base.toByteArray(StandardCharsets.UTF_8))
-        val provided =
-            try {
-                Base64.getUrlDecoder().decode(hmacPart)
-            } catch (_: IllegalArgumentException) {
-                return null
-            }
-        if (!MessageDigest.isEqual(provided, expected)) return null
-        return Data(clubId, eventId, entryId)
+        val valid =
+            clubId != null &&
+                eventId != null &&
+                entryId != null &&
+                provided != null &&
+                MessageDigest.isEqual(provided, expected)
+        return if (valid) Data(clubId!!, eventId!!, entryId!!) else null
     }
+
+    private fun hasValidHeader(parts: List<String>) =
+        parts.size == PARTS_COUNT &&
+            parts[PREFIX_IDX] == PREFIX &&
+            parts[ENTRY_TAG_IDX] == ENTRY_MARK &&
+            parts[SIG_TAG_IDX] == SIG_MARK
 }
