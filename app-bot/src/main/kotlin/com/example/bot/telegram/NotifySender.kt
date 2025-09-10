@@ -16,6 +16,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 
+private const val HTTP_BAD_REQUEST = 400
+private const val VISIBLE_TAIL = 3
+
 class NotifySender(private val bot: TelegramBot, private val registry: MeterRegistry = Telemetry.registry) {
 
     sealed interface Result {
@@ -68,6 +71,7 @@ class NotifySender(private val bot: TelegramBot, private val registry: MeterRegi
         return execute(chatId, request)
     }
 
+    @Suppress("SpreadOperator")
     suspend fun sendMediaGroup(chatId: Long, media: List<Media>, threadId: Int? = null): Result {
         val inputMedia =
             media.map { m ->
@@ -83,12 +87,7 @@ class NotifySender(private val bot: TelegramBot, private val registry: MeterRegi
         val request = SendMediaGroup(chatId, *inputMedia.toTypedArray())
         threadId?.let { request.messageThreadId(it) }
         val result = execute(chatId, request)
-        if (
-            result is Result.Failed &&
-            result.code == 400 &&
-            threadId != null &&
-            (result.description?.contains("thread", true) == true)
-        ) {
+        if (shouldFallback(result, threadId)) {
             log.info("SendMediaGroup unsupported, fallback to sequential sendPhoto for chat {}", mask(chatId))
             var finalResult: Result = Result.Ok
             for (m in media) {
@@ -105,11 +104,12 @@ class NotifySender(private val bot: TelegramBot, private val registry: MeterRegi
 
     private val sendTimer: Timer = registry.timer("notify.send.ms")
 
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun <T : BaseRequest<T, R>, R : BaseResponse> execute(
         chatId: Long,
         request: BaseRequest<T, R>,
-    ): Result {
-        return withContext(Dispatchers.IO) {
+    ): Result =
+        withContext(Dispatchers.IO) {
             val sample = Timer.start(registry)
             try {
                 val resp = bot.execute(request)
@@ -128,11 +128,16 @@ class NotifySender(private val bot: TelegramBot, private val registry: MeterRegi
                 sample.stop(sendTimer)
             }
         }
-    }
 
     private fun mask(id: Long): String {
         val s = id.toString()
-        val hidden = (s.length - 3).coerceAtLeast(0)
-        return "*".repeat(hidden) + s.takeLast(3)
+        val hidden = (s.length - VISIBLE_TAIL).coerceAtLeast(0)
+        return "*".repeat(hidden) + s.takeLast(VISIBLE_TAIL)
     }
+
+    private fun shouldFallback(result: Result, threadId: Int?): Boolean =
+        result is Result.Failed &&
+            result.code == HTTP_BAD_REQUEST &&
+            threadId != null &&
+            (result.description?.contains("thread", true) == true)
 }

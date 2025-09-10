@@ -40,6 +40,8 @@ interface AvailabilityRepository {
 /**
  * Service providing availability information.
  */
+private val OPEN_LOOKAHEAD: Duration = Duration.ofDays(30)
+
 class AvailabilityService(
     private val repository: AvailabilityRepository,
     private val rulesResolver: OperatingRulesResolver,
@@ -57,12 +59,7 @@ class AvailabilityService(
     suspend fun listOpenNights(clubId: Long, limit: Int = 8): List<NightDto> {
         nightsCache.get(clubId)?.let { return it.take(limit) }
         val now = Instant.now(clock)
-        val slots =
-            rulesResolver.resolve(
-                clubId,
-                now,
-                now.plus(Duration.ofDays(30)),
-            )
+        val slots = rulesResolver.resolve(clubId, now, now.plus(OPEN_LOOKAHEAD))
         val nights =
             slots
                 .filter { cutoffPolicy.isOnlineBookingOpen(it, now) }
@@ -79,51 +76,51 @@ class AvailabilityService(
         val key = clubId to eventStartUtc
         tablesCache.get(key)?.let { return it }
 
-        val club = repository.findClub(clubId) ?: return emptyList()
-        val zone = java.time.ZoneId.of(club.timezone)
-        val event = repository.findEvent(clubId, eventStartUtc)
-        val slot =
-            event?.let {
-                NightSlot(
-                    clubId = clubId,
-                    eventStartUtc = it.startUtc,
-                    eventEndUtc = it.endUtc,
-                    isSpecial = it.isSpecial,
-                    source = com.example.bot.time.NightSource.EVENT_MATERIALIZED,
-                    openLocal = it.startUtc.atZone(zone).toLocalDateTime(),
-                    closeLocal = it.endUtc.atZone(zone).toLocalDateTime(),
-                    zone = zone,
-                )
-            }
-                ?: rulesResolver
-                    .resolve(
-                        clubId,
-                        eventStartUtc.minus(Duration.ofDays(1)),
-                        eventStartUtc.plus(Duration.ofDays(1)),
-                    ).find { eventStartUtc == it.eventStartUtc }
-                ?: return emptyList()
-
-        val eventId = event?.id
-        val tables = repository.listTables(clubId).filter { it.active }
-        val holds = eventId?.let { repository.listActiveHoldTableIds(it, Instant.now(clock)) } ?: emptySet()
-        val bookings = eventId?.let { repository.listActiveBookingTableIds(it) } ?: emptySet()
-
-        val freeTables =
-            tables
-                .filter { t -> t.id !in holds && t.id !in bookings }
-                .map { t ->
-                    TableAvailabilityDto(
-                        tableId = t.id,
-                        tableNumber = t.number,
-                        zone = t.zone,
-                        capacity = t.capacity,
-                        minDeposit = t.minDeposit,
-                        status = TableStatus.FREE,
+        val result =
+            repository.findClub(clubId)?.let { club ->
+                val zone = java.time.ZoneId.of(club.timezone)
+                val event = repository.findEvent(clubId, eventStartUtc)
+                event?.let {
+                    NightSlot(
+                        clubId = clubId,
+                        eventStartUtc = it.startUtc,
+                        eventEndUtc = it.endUtc,
+                        isSpecial = it.isSpecial,
+                        source = com.example.bot.time.NightSource.EVENT_MATERIALIZED,
+                        openLocal = it.startUtc.atZone(zone).toLocalDateTime(),
+                        closeLocal = it.endUtc.atZone(zone).toLocalDateTime(),
+                        zone = zone,
                     )
                 }
+                    ?: rulesResolver
+                        .resolve(
+                            clubId,
+                            eventStartUtc.minus(Duration.ofDays(1)),
+                            eventStartUtc.plus(Duration.ofDays(1)),
+                        ).find { eventStartUtc == it.eventStartUtc }
+                    ?: return@let emptyList()
 
-        tablesCache.put(key, freeTables)
-        return freeTables
+                val eventId = event?.id
+                val tables = repository.listTables(clubId).filter { it.active }
+                val holds = eventId?.let { repository.listActiveHoldTableIds(it, Instant.now(clock)) } ?: emptySet()
+                val bookings = eventId?.let { repository.listActiveBookingTableIds(it) } ?: emptySet()
+
+                tables
+                    .filter { t -> t.id !in holds && t.id !in bookings }
+                    .map { t ->
+                        TableAvailabilityDto(
+                            tableId = t.id,
+                            tableNumber = t.number,
+                            zone = t.zone,
+                            capacity = t.capacity,
+                            minDeposit = t.minDeposit,
+                            status = TableStatus.FREE,
+                        )
+                    }
+            } ?: emptyList()
+
+        tablesCache.put(key, result)
+        return result
     }
 
     /**

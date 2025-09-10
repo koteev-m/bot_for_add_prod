@@ -11,6 +11,7 @@ import java.util.UUID
 import kotlin.random.Random
 
 private const val HOLD_TTL_MINUTES = 7L
+private const val QR_BYTES = 32
 
 /**
  * Service implementing table booking lifecycle: hold -> confirm -> seat/cancel.
@@ -107,6 +108,7 @@ class BookingService(
         }.getOrElse { e -> Either.Left(BookingError.Internal("confirm failed", e)) }
 
     /** Cancels an existing booking. */
+    @Suppress("UnusedParameter")
     suspend fun cancel(
         bookingId: UUID,
         actorUserId: Long,
@@ -128,6 +130,7 @@ class BookingService(
         }.getOrElse { e -> Either.Left(BookingError.Internal("cancel failed", e)) }
 
     /** Marks booking as seated using QR secret. */
+    @Suppress("UnusedParameter")
     suspend fun seatByQr(
         qrSecret: String,
         entryManagerUserId: Long,
@@ -148,6 +151,7 @@ class BookingService(
         }.getOrElse { e -> Either.Left(BookingError.Internal("seat failed", e)) }
 
     /** Marks overdue bookings as NO_SHOW based on arrivalBy. */
+    @Suppress("UnusedParameter")
     suspend fun markNoShowOverdue(now: Instant): Int =
         withContext(Dispatchers.IO) {
             // In-memory repository used in tests does not support batch update; this is noop.
@@ -169,7 +173,7 @@ class BookingService(
         )
 
     private fun randomQr(): String {
-        val bytes = Random.nextBytes(32)
+        val bytes = Random.nextBytes(QR_BYTES)
         return bytes.joinToString(separator = "") { byte -> "%02x".format(byte) }
     }
 }

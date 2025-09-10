@@ -76,7 +76,7 @@ fun Application.module() {
     val token = env("BOT_TOKEN")
     val secret = env("WEBHOOK_SECRET_TOKEN")
     val baseUrl = env("WEBHOOK_BASE_URL")
-    val maxConn = System.getenv("MAX_WEBHOOK_CONNECTIONS")?.toInt() ?: 40
+    val maxConn = System.getenv("MAX_WEBHOOK_CONNECTIONS")?.toInt() ?: DEFAULT_MAX_CONN
     val localApi = System.getenv("LOCAL_BOT_API_URL")
 
     val client = TelegramClient(token, localApi)
@@ -92,19 +92,16 @@ fun Application.module() {
     }
 }
 
-private suspend fun handleUpdate(update: com.example.bot.webhook.UpdateDto): WebhookReply? {
+private suspend fun handleUpdate(update: com.example.bot.webhook.UpdateDto): WebhookReply? =
     update.callbackQuery?.let {
-        return WebhookReply.Inline(mapOf("method" to "answerCallbackQuery", "callback_query_id" to it.id))
+        WebhookReply.Inline(mapOf("method" to "answerCallbackQuery", "callback_query_id" to it.id))
+    } ?: update.message?.takeIf { it.text == "/start" }?.let { msg ->
+        WebhookReply.Inline(
+            mapOf("method" to "sendMessage", "chat_id" to msg.chat.id, "text" to "Hello"),
+        )
     }
-    update.message?.let { msg ->
-        if (msg.text == "/start") {
-            return WebhookReply.Inline(
-                mapOf("method" to "sendMessage", "chat_id" to msg.chat.id, "text" to "Hello"),
-            )
-        }
-    }
-    return null
-}
+
+private const val DEFAULT_MAX_CONN = 40
 
 private fun env(name: String): String = System.getenv(name) ?: error("Missing $name")
 

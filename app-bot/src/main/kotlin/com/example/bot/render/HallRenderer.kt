@@ -23,6 +23,15 @@ class HallRenderer(
     /**
      * Renders hall for [clubId] using [tables] statuses and [scale].
      */
+    private val strokeWidth = 2f
+    private val labelFontSize = 14
+    private val legendFontSize = 12
+    private val legendPad = 4
+    private val freeColor = Color(0x00, 0x80, 0x00)
+    private val heldColor = Color(0xFF, 0xD7, 0x00)
+    private val bookedColor = Color(0xB2, 0x22, 0x22)
+    private val fillAlpha = 80
+
     fun render(clubId: Long, tables: List<TableAvailabilityDto>, scale: Int = 1): ByteArray {
         val base = baseImageProvider(clubId)
         val width = base.width * scale
@@ -32,7 +41,7 @@ class HallRenderer(
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
         g.drawImage(base, 0, 0, width, height, null)
-        g.stroke = BasicStroke(2f * scale)
+        g.stroke = BasicStroke(strokeWidth * scale)
         tables.forEach { table ->
             val rect = geometryProvider.geometry(clubId, table.tableId) ?: return@forEach
             val r =
@@ -44,17 +53,17 @@ class HallRenderer(
                 )
             val color =
                 when (table.status) {
-                    TableStatus.FREE -> Color(0x00, 0x80, 0x00)
-                    TableStatus.HELD -> Color(0xFF, 0xD7, 0x00)
-                    TableStatus.BOOKED -> Color(0xB2, 0x22, 0x22)
+                    TableStatus.FREE -> freeColor
+                    TableStatus.HELD -> heldColor
+                    TableStatus.BOOKED -> bookedColor
                 }
-            val fill = Color(color.red, color.green, color.blue, 80)
+            val fill = Color(color.red, color.green, color.blue, fillAlpha)
             g.color = fill
             g.fill(r)
             g.color = color
             g.draw(r)
             // label
-            g.font = Font("SansSerif", Font.BOLD, 14 * scale)
+            g.font = Font("SansSerif", Font.BOLD, labelFontSize * scale)
             val text = "#${table.tableNumber}"
             val fm = g.fontMetrics
             val tx = r.centerX - fm.stringWidth(text) / 2.0
@@ -64,9 +73,9 @@ class HallRenderer(
         }
         // legend block
         val legend = texts.legend(null)
-        g.font = Font("SansSerif", Font.PLAIN, 12 * scale)
+        g.font = Font("SansSerif", Font.PLAIN, legendFontSize * scale)
         val fm = g.fontMetrics
-        val pad = 4 * scale
+        val pad = legendPad * scale
         val legendW = fm.stringWidth(legend) + pad * 2
         val legendH = fm.height + pad * 2
         val x = pad

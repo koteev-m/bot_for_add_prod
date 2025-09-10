@@ -22,6 +22,7 @@ interface PaymentsRepository {
         val updatedAt: Instant,
     )
 
+    @Suppress("LongParameterList")
     suspend fun createInitiated(
         bookingId: UUID?,
         provider: String,

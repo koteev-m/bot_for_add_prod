@@ -5,7 +5,6 @@ import com.example.bot.booking.BookingService
 import com.example.bot.booking.ConfirmRequest
 import com.example.bot.booking.Either
 import com.example.bot.booking.PaymentPolicy
-import com.example.bot.payments.PaymentConfig
 import com.example.bot.payments.PaymentsRepository
 import java.math.BigDecimal
 import java.util.UUID
@@ -13,11 +12,9 @@ import java.util.UUID
 /**
  * Service orchestrating booking confirmation with optional payments.
  */
-class PaymentsService(
-    private val bookingService: BookingService,
-    private val paymentsRepo: PaymentsRepository,
-    private val config: PaymentConfig,
-) {
+private val MINORS_IN_MAJOR = BigDecimal(100)
+
+class PaymentsService(private val bookingService: BookingService, private val paymentsRepo: PaymentsRepository) {
     /**
      * Starts confirmation flow respecting [policy].
      */
@@ -47,47 +44,39 @@ class PaymentsService(
                 }
             }
             PaymentMode.PROVIDER_DEPOSIT -> {
-                val totalMinor = total.multiply(BigDecimal(100)).longValueExact()
-                val payload = UUID.randomUUID().toString()
-                paymentsRepo.createInitiated(
-                    bookingId = null,
-                    provider = "PROVIDER",
-                    currency = policy.currency,
-                    amountMinor = totalMinor,
-                    payload = payload,
-                    idempotencyKey = idemKey,
-                )
-                val invoice =
-                    InvoiceInfo(
-                        invoiceId = payload,
-                        payload = payload,
-                        totalMinor = totalMinor,
-                        currency = policy.currency,
-                        invoiceLink = null,
-                    )
-                Either.Right(ConfirmResult.PendingPayment(invoice))
+                val totalMinor = total.multiply(MINORS_IN_MAJOR).longValueExact()
+                Either.Right(createPendingPayment("PROVIDER", policy.currency, totalMinor, idemKey))
             }
             PaymentMode.STARS_DIGITAL -> {
                 val totalMinor = total.longValueExact()
-                val payload = UUID.randomUUID().toString()
-                paymentsRepo.createInitiated(
-                    bookingId = null,
-                    provider = "STARS",
-                    currency = "XTR",
-                    amountMinor = totalMinor,
-                    payload = payload,
-                    idempotencyKey = idemKey,
-                )
-                val invoice =
-                    InvoiceInfo(
-                        invoiceId = payload,
-                        payload = payload,
-                        totalMinor = totalMinor,
-                        currency = "XTR",
-                        invoiceLink = null,
-                    )
-                Either.Right(ConfirmResult.PendingPayment(invoice))
+                Either.Right(createPendingPayment("STARS", "XTR", totalMinor, idemKey))
             }
         }
+    }
+
+    private fun createPendingPayment(
+        provider: String,
+        currency: String,
+        amountMinor: Long,
+        idemKey: String,
+    ): ConfirmResult {
+        val payload = UUID.randomUUID().toString()
+        paymentsRepo.createInitiated(
+            bookingId = null,
+            provider = provider,
+            currency = currency,
+            amountMinor = amountMinor,
+            payload = payload,
+            idempotencyKey = idemKey,
+        )
+        val invoice =
+            InvoiceInfo(
+                invoiceId = payload,
+                payload = payload,
+                totalMinor = amountMinor,
+                currency = currency,
+                invoiceLink = null,
+            )
+        return ConfirmResult.PendingPayment(invoice)
     }
 }
