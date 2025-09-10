@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.testing.Test
+
 plugins {
 }
 
@@ -11,6 +13,9 @@ subprojects {
     pluginManager.withPlugin("org.jetbrains.kotlin.jvm") {
         apply(from = rootProject.file("gradle/detekt-cli.gradle.kts"))
         apply(from = rootProject.file("gradle/ktlint-cli.gradle.kts"))
+        tasks.withType<Test>().configureEach {
+            useJUnitPlatform()
+        }
     }
 }
 
