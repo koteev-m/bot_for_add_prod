@@ -16,7 +16,7 @@ fun Route.availabilityRoutes(service: AvailabilityService) {
     route("/clubs/{clubId}") {
         get("/nights") {
             val clubId = call.parameters.getOrFail("clubId").toLong()
-            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 8
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_NIGHTS_LIMIT
             val nights = service.listOpenNights(clubId, limit)
             call.respond(nights)
         }
@@ -30,3 +30,5 @@ fun Route.availabilityRoutes(service: AvailabilityService) {
         }
     }
 }
+
+private const val DEFAULT_NIGHTS_LIMIT = 8

@@ -20,7 +20,11 @@ fun Application.miniAppModule() {
         header("X-Frame-Options", "SAMEORIGIN")
         header(
             "Content-Security-Policy",
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src *",
+            "default-src 'self'; " +
+                "script-src 'self'; " +
+                "style-src 'self' 'unsafe-inline'; " +
+                "img-src 'self' data:; " +
+                "connect-src *",
         )
     }
     routing {

@@ -14,6 +14,9 @@ import org.slf4j.event.Level
 import java.util.concurrent.ThreadLocalRandom
 import kotlin.text.buildString
 
+private const val ID_LENGTH = 16
+private const val MAX_ID_LENGTH = 64
+
 fun Application.installLogging() {
     val startTimeKey = AttributeKey<Long>("call-start")
 
@@ -23,7 +26,7 @@ fun Application.installLogging() {
         replyToHeader(HttpHeaders.XRequestId)
         generate { randomId() }
         verify { id ->
-            id.length <= 64 && id.all { it.isLetterOrDigit() || it == '-' || it == '_' || it == '.' }
+            id.length <= MAX_ID_LENGTH && id.all { it.isLetterOrDigit() || it == '-' || it == '_' || it == '.' }
         }
     }
 
@@ -52,5 +55,5 @@ fun Application.installLogging() {
 private fun randomId(): String {
     val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_ .".replace(" ", "")
     val rnd = ThreadLocalRandom.current()
-    return buildString(16) { repeat(16) { append(chars[rnd.nextInt(chars.length)]) } }
+    return buildString(ID_LENGTH) { repeat(ID_LENGTH) { append(chars[rnd.nextInt(chars.length)]) } }
 }

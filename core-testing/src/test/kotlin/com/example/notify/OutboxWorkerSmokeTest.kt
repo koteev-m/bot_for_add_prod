@@ -58,7 +58,7 @@ class OutboxWorkerSmokeTest : PgContainer() {
                 repo.enqueue(NotifyMessage(i.toLong(), null, NotifyMethod.TEXT, "hi", null, null, null, null, null))
             }
 
-            val worker = OutboxWorker(this, repo, sender, policy, config, registry)
+            val worker = OutboxWorker(this, OutboxWorker.Deps(repo, sender, policy, config, registry))
             worker.start()
             advanceUntilIdle()
 

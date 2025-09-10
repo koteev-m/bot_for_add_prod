@@ -20,8 +20,8 @@ fun Route.musicRoutes(service: MusicService) {
             val clubId = call.request.queryParameters["clubId"]?.toLongOrNull()
             val tag = call.request.queryParameters["tag"]
             val q = call.request.queryParameters["q"]
-            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
-            val offset = call.request.queryParameters["offset"]?.toIntOrNull() ?: 0
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_MUSIC_LIMIT
+            val offset = call.request.queryParameters["offset"]?.toIntOrNull() ?: DEFAULT_OFFSET
             val filter = ItemFilter(clubId, tag, q, limit, offset)
             val items = service.listItems(filter)
             val updatedMax = items.maxOfOrNull { it.publishedAt ?: java.time.Instant.EPOCH } ?: java.time.Instant.EPOCH
@@ -30,7 +30,7 @@ fun Route.musicRoutes(service: MusicService) {
                 MessageDigest
                     .getInstance("SHA-256")
                     .digest(etagSource.toByteArray())
-                    .joinToString(separator = "") { String.format("%02x", it) }
+                    .joinToString(separator = "") { java.lang.String.format(java.util.Locale.ROOT, "%02x", it) }
             val ifNone = call.request.headers["If-None-Match"]
             val weak = "W/\"$etag\""
             if (ifNone == weak) {
@@ -49,3 +49,6 @@ fun Route.musicRoutes(service: MusicService) {
         }
     }
 }
+
+private const val DEFAULT_MUSIC_LIMIT = 20
+private const val DEFAULT_OFFSET = 0

@@ -1,3 +1,5 @@
+@file:Suppress("SpreadOperator")
+
 package com.example.bot.telegram
 
 import com.example.bot.availability.TableAvailabilityDto
@@ -99,7 +101,7 @@ class Keyboards(private val texts: BotTexts) {
         var row = mutableListOf<InlineKeyboardButton>()
         for (i in 1..capacity) {
             row += InlineKeyboardButton(i.toString()).callbackData("g:${encode(i)}")
-            if (row.size == 4) {
+            if (row.size == GUESTS_PER_ROW) {
                 rows += row.toTypedArray()
                 row = mutableListOf()
             }
@@ -108,3 +110,5 @@ class Keyboards(private val texts: BotTexts) {
         return InlineKeyboardMarkup(*rows.toTypedArray())
     }
 }
+
+private const val GUESTS_PER_ROW = 4

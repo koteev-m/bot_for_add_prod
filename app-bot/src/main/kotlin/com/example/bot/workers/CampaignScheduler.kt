@@ -11,6 +11,17 @@ import java.time.OffsetDateTime
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
+private const val CRON_PARTS = 5
+private val FULL_MINUTE_RANGE = 0..59
+private const val DAYS_IN_WEEK = 7
+private const val DEFAULT_TICK_MS: Long = 10_000
+private const val DEFAULT_BATCH_SIZE = 1_000
+private const val MIN_INDEX = 0
+private const val HOUR_INDEX = 1
+private const val DOM_INDEX = 2
+private const val MONTH_INDEX = 3
+private const val DOW_INDEX = 4
+
 /**
  * Periodically checks notification campaigns and enqueues recipients
  * into notifications_outbox in batches.
@@ -18,8 +29,8 @@ import java.util.concurrent.atomic.AtomicLong
 class CampaignScheduler(
     private val scope: CoroutineScope,
     private val api: SchedulerApi,
-    private val tickMillis: Long = 10_000,
-    private val batchSize: Int = 1_000,
+    private val tickMillis: Long = DEFAULT_TICK_MS,
+    private val batchSize: Int = DEFAULT_BATCH_SIZE,
 ) {
     private val remaining = ConcurrentHashMap<Long, AtomicLong>()
 
@@ -33,25 +44,26 @@ class CampaignScheduler(
             val now = OffsetDateTime.now()
             val campaigns = api.listActive()
             for (c in campaigns) {
-                if (c.status == SchedulerApi.Status.SCHEDULED) {
-                    if (!isDue(c, now)) continue
-                    api.markSending(c.id)
-                }
-                if (c.status == SchedulerApi.Status.PAUSED) continue
-
-                val added = api.enqueueBatch(c.id, batchSize)
-                if (added > 0) {
-                    Telemetry.registry
-                        .counter("notify_campaign_enqueued_total", "campaign", c.id.toString())
-                        .increment(added.toDouble())
-                }
-                val pr = api.progress(c.id)
-                remainingGauge(c.id).set(pr.total - pr.enqueued)
-                if (pr.enqueued >= pr.total && pr.total > 0) {
-                    api.markDone(c.id)
-                }
+                handleCampaign(c, now)
             }
             delay(tickMillis)
+        }
+    }
+
+    private suspend fun handleCampaign(c: SchedulerApi.Campaign, now: OffsetDateTime) {
+        if (c.status == SchedulerApi.Status.SCHEDULED && !isDue(c, now)) return
+        if (c.status == SchedulerApi.Status.PAUSED) return
+        if (c.status == SchedulerApi.Status.SCHEDULED) api.markSending(c.id)
+        val added = api.enqueueBatch(c.id, batchSize)
+        if (added > 0) {
+            Telemetry.registry
+                .counter("notify_campaign_enqueued_total", "campaign", c.id.toString())
+                .increment(added.toDouble())
+        }
+        val pr = api.progress(c.id)
+        remainingGauge(c.id).set(pr.total - pr.enqueued)
+        if (pr.enqueued >= pr.total && pr.total > 0) {
+            api.markDone(c.id)
         }
     }
 
@@ -67,38 +79,38 @@ class CampaignScheduler(
         }
     }
 
-    private fun isDue(c: SchedulerApi.Campaign, now: OffsetDateTime): Boolean {
-        c.startsAt?.let { if (now.isBefore(it)) return false }
-        c.scheduleCron?.let { if (!cronMatches(it, now)) return false }
-        return true
-    }
+    private fun isDue(c: SchedulerApi.Campaign, now: OffsetDateTime): Boolean =
+        (c.startsAt == null || !now.isBefore(c.startsAt)) &&
+            (c.scheduleCron == null || cronMatches(c.scheduleCron, now))
 
     private fun cronMatches(expr: String, time: OffsetDateTime): Boolean {
         val parts = expr.trim().split(" ").filter { it.isNotEmpty() }
-        if (parts.size != 5) return false
-        val (min, hour, dom, month, dow) = parts
+        if (parts.size != CRON_PARTS) return false
+        val min = parts[MIN_INDEX]
+        val hour = parts[HOUR_INDEX]
+        val dom = parts[DOM_INDEX]
+        val month = parts[MONTH_INDEX]
+        val dow = parts[DOW_INDEX]
         return match(min, time.minute) &&
             match(hour, time.hour) &&
             match(dom, time.dayOfMonth) &&
             match(month, time.monthValue) &&
-            match(dow, time.dayOfWeek.value % 7)
+            match(dow, time.dayOfWeek.value % DAYS_IN_WEEK)
     }
 
     private fun match(field: String, value: Int): Boolean {
-        if (field == "*") return true
-        if (field.contains(",")) return field.split(",").any { match(it, value) }
-        if (field.contains("/")) {
-            val (base, stepStr) = field.split("/")
-            val step = stepStr.toInt()
-            val range = if (base == "*") 0..59 else parseRange(base)
-            if (value !in range) return false
-            return (value - range.first) % step == 0
+        return when {
+            field == "*" -> true
+            field.contains(",") -> field.split(",").any { match(it, value) }
+            field.contains("/") -> {
+                val (base, stepStr) = field.split("/")
+                val step = stepStr.toInt()
+                val range = if (base == "*") FULL_MINUTE_RANGE else parseRange(base)
+                value in range && (value - range.first) % step == 0
+            }
+            field.contains("-") -> value in parseRange(field)
+            else -> field.toIntOrNull() == value
         }
-        if (field.contains("-")) {
-            val r = parseRange(field)
-            return value in r
-        }
-        return field.toIntOrNull() == value
     }
 
     private fun parseRange(s: String): IntRange {

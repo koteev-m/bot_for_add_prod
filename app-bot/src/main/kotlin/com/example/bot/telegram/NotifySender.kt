@@ -17,6 +17,8 @@ import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 
 private const val HTTP_BAD_REQUEST = 400
+private const val HTTP_TOO_MANY_REQUESTS = 429
+private const val UNKNOWN_ERROR_CODE = -1
 private const val VISIBLE_TAIL = 3
 
 class NotifySender(private val bot: TelegramBot, private val registry: MeterRegistry = Telemetry.registry) {
@@ -115,15 +117,19 @@ class NotifySender(private val bot: TelegramBot, private val registry: MeterRegi
                 val resp = bot.execute(request)
                 when {
                     resp.isOk -> Result.Ok
-                    resp.errorCode() == 429 -> {
+                    resp.errorCode() == HTTP_TOO_MANY_REQUESTS -> {
                         val retry = resp.parameters()?.retryAfter()
-                        if (retry != null) Result.RetryAfter(retry) else Result.Failed(429, resp.description())
+                        if (retry != null) {
+                            Result.RetryAfter(retry)
+                        } else {
+                            Result.Failed(HTTP_TOO_MANY_REQUESTS, resp.description())
+                        }
                     }
                     else -> Result.Failed(resp.errorCode(), resp.description())
                 }
             } catch (t: Exception) {
                 log.warn("Failed to send to chat {}: {}", mask(chatId), t.message)
-                Result.Failed(-1, t.message)
+                Result.Failed(UNKNOWN_ERROR_CODE, t.message)
             } finally {
                 sample.stop(sendTimer)
             }

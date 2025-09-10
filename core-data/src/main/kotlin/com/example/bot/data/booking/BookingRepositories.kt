@@ -38,11 +38,11 @@ class InMemoryBookingRepository :
 
     override suspend fun findBookingById(id: UUID): BookingRecord? = bookings[id]
 
-    override suspend fun findBookingByQr(qrSecret: String): BookingRecord? =
-        bookings.values.find {
-            it.qrSecret ==
-                qrSecret
+    override suspend fun findBookingByQr(qrSecret: String): BookingRecord? {
+        return bookings.values.find {
+            it.qrSecret == qrSecret
         }
+    }
 
     override suspend fun insertHold(
         tableId: Long,
@@ -81,8 +81,8 @@ class InMemoryBookingRepository :
         arrivalBy: Instant?,
         qrSecret: String,
         idempotencyKey: String,
-    ): BookingRecord =
-        synchronized(bookings) {
+    ): BookingRecord {
+        return synchronized(bookings) {
             bookingsByKey[idempotencyKey]?.let { return@synchronized it }
             if (bookings.values.any {
                     it.tableId == tableId &&
@@ -98,6 +98,7 @@ class InMemoryBookingRepository :
             bookingsByKey[idempotencyKey] = record
             return@synchronized record
         }
+    }
 
     override suspend fun updateStatus(id: UUID, status: String) {
         bookings.computeIfPresent(id) { _, rec -> rec.copy(status = status) }
