@@ -20,10 +20,22 @@ jobs:
 
       - name: Gradle staticCheck (parallel)
         run: ./gradlew --no-daemon --parallel staticCheck
-
-      - name: Ensure detekt-baseline not modified
+      - name: Ensure detekt baseline absent
         run: |
-          git update-index -q --refresh
-          if ! git diff --exit-code -- '*-detekt-baseline.xml'; then
-            echo "Baseline must not be changed in CI"; exit 1
+          if git ls-files "*-detekt-baseline.xml" | grep .; then
+            echo "Detekt baseline files must not be committed"; exit 1
           fi
+
+      - name: Upload detekt reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: detekt-reports
+          path: "**/build/reports/detekt/"
+
+      - name: Upload ktlint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ktlint-reports
+          path: "**/build/reports/ktlint/"

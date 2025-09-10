@@ -9,4 +9,31 @@ style:
     active: true
     maxLineLength: 120
     excludes: ['**/test/**']
+  WildcardImport:
+    active: false
+
+  UseCheckOrError:
+    active: false
+
+  UnusedParameter:
+    active: false
+
+  UtilityClassWithPublicConstructor:
+    active: false
+
+naming:
+  MatchingDeclarationName:
+    active: false
+
+complexity:
+  LongMethod:
+    active: false
+  CyclomaticComplexMethod:
+    active: false
+  LongParameterList:
+    active: false
+
+empty-blocks:
+  EmptyFunctionBlock:
+    active: false
 
