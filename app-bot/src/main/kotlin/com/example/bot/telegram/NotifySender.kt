@@ -108,8 +108,8 @@ class NotifySender(private val bot: TelegramBot, private val registry: MeterRegi
     private suspend fun <T : BaseRequest<T, R>, R : BaseResponse> execute(
         chatId: Long,
         request: BaseRequest<T, R>,
-    ): Result =
-        withContext(Dispatchers.IO) {
+    ): Result {
+        return withContext(Dispatchers.IO) {
             val sample = Timer.start(registry)
             try {
                 val resp = bot.execute(request)
@@ -128,6 +128,7 @@ class NotifySender(private val bot: TelegramBot, private val registry: MeterRegi
                 sample.stop(sendTimer)
             }
         }
+    }
 
     private fun mask(id: Long): String {
         val s = id.toString()
@@ -135,9 +136,10 @@ class NotifySender(private val bot: TelegramBot, private val registry: MeterRegi
         return "*".repeat(hidden) + s.takeLast(VISIBLE_TAIL)
     }
 
-    private fun shouldFallback(result: Result, threadId: Int?): Boolean =
-        result is Result.Failed &&
+    private fun shouldFallback(result: Result, threadId: Int?): Boolean {
+        return result is Result.Failed &&
             result.code == HTTP_BAD_REQUEST &&
             threadId != null &&
             (result.description?.contains("thread", true) == true)
+    }
 }

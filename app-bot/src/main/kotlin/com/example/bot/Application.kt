@@ -92,14 +92,16 @@ fun Application.module() {
     }
 }
 
-private suspend fun handleUpdate(update: com.example.bot.webhook.UpdateDto): WebhookReply? =
-    update.callbackQuery?.let {
+private suspend fun handleUpdate(update: com.example.bot.webhook.UpdateDto): WebhookReply? {
+    return update.callbackQuery?.let {
         WebhookReply.Inline(mapOf("method" to "answerCallbackQuery", "callback_query_id" to it.id))
-    } ?: update.message?.takeIf { it.text == "/start" }?.let { msg ->
-        WebhookReply.Inline(
-            mapOf("method" to "sendMessage", "chat_id" to msg.chat.id, "text" to "Hello"),
-        )
     }
+        ?: update.message?.takeIf { it.text == "/start" }?.let { msg ->
+            WebhookReply.Inline(
+                mapOf("method" to "sendMessage", "chat_id" to msg.chat.id, "text" to "Hello"),
+            )
+        }
+}
 
 private const val DEFAULT_MAX_CONN = 40
 
