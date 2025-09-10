@@ -54,7 +54,7 @@ class PaymentsService(private val bookingService: BookingService, private val pa
         }
     }
 
-    private fun createPendingPayment(
+    private suspend fun createPendingPayment(
         provider: String,
         currency: String,
         amountMinor: Long,

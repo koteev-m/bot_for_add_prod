@@ -79,9 +79,11 @@ class CampaignScheduler(
         }
     }
 
-    private fun isDue(c: SchedulerApi.Campaign, now: OffsetDateTime): Boolean =
-        (c.startsAt == null || !now.isBefore(c.startsAt)) &&
-            (c.scheduleCron == null || cronMatches(c.scheduleCron, now))
+    private fun isDue(c: SchedulerApi.Campaign, now: OffsetDateTime): Boolean {
+        val cron = c.scheduleCron
+        return (c.startsAt == null || !now.isBefore(c.startsAt)) &&
+            (cron == null || cronMatches(cron, now))
+    }
 
     private fun cronMatches(expr: String, time: OffsetDateTime): Boolean {
         val parts = expr.trim().split(" ").filter { it.isNotEmpty() }

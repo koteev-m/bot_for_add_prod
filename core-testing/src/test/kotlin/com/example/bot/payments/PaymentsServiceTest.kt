@@ -10,12 +10,12 @@ import com.example.bot.booking.payments.PaymentsService
 import com.example.bot.payments.PaymentsRepository.PaymentRecord
 import io.mockk.coEvery
 import io.mockk.mockk
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class PaymentsServiceTest {
     private val bookingService = mockk<BookingService>()
@@ -53,8 +53,7 @@ class PaymentsServiceTest {
 
             override suspend fun findByPayload(payload: String): PaymentRecord? = null
         }
-    private val config = PaymentConfig(providerToken = "test")
-    private val service = PaymentsService(bookingService, repo, config)
+    private val service = PaymentsService(bookingService, repo)
 
     @Test
     fun `provider deposit returns pending`() =
@@ -63,8 +62,9 @@ class PaymentsServiceTest {
             val policy = PaymentPolicy(mode = PaymentMode.PROVIDER_DEPOSIT)
             val res = service.startConfirmation(input, null, policy, "idem")
             assertTrue(res is Either.Right)
-            assertTrue(res.value is com.example.bot.booking.payments.ConfirmResult.PendingPayment)
-            val invoice = (res.value as com.example.bot.booking.payments.ConfirmResult.PendingPayment).invoice
+            val right = res as Either.Right
+            assertTrue(right.value is com.example.bot.booking.payments.ConfirmResult.PendingPayment)
+            val invoice = (right.value as com.example.bot.booking.payments.ConfirmResult.PendingPayment).invoice
             assertEquals(20000L, invoice.totalMinor)
         }
 
@@ -89,7 +89,8 @@ class PaymentsServiceTest {
             val policy = PaymentPolicy(mode = PaymentMode.NONE)
             val res = service.startConfirmation(input, null, policy, "idem2")
             assertTrue(res is Either.Right)
-            assertTrue(res.value is com.example.bot.booking.payments.ConfirmResult.Confirmed)
-            assertEquals(summary, (res.value as com.example.bot.booking.payments.ConfirmResult.Confirmed).booking)
+            val right = res as Either.Right
+            assertTrue(right.value is com.example.bot.booking.payments.ConfirmResult.Confirmed)
+            assertEquals(summary, (right.value as com.example.bot.booking.payments.ConfirmResult.Confirmed).booking)
         }
 }
