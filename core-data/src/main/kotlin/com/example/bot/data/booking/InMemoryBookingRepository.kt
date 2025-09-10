@@ -52,11 +52,12 @@ class InMemoryBookingRepository :
         idempotencyKey: String,
     ): HoldRecord {
         holdsByKey[idempotencyKey]?.let { return it }
-        if (holds.values.any {
+        check(
+            holds.values.none {
                 it.tableId == tableId && it.eventId == eventId && it.expiresAt.isAfter(Instant.now())
-            }
+            },
         ) {
-            throw IllegalStateException("active hold exists")
+            "active hold exists"
         }
         val record = HoldRecord(UUID.randomUUID(), tableId, eventId, guests, expiresAt)
         holds[record.id] = record
@@ -84,16 +85,27 @@ class InMemoryBookingRepository :
     ): BookingRecord {
         return synchronized(bookings) {
             bookingsByKey[idempotencyKey]?.let { return@synchronized it }
-            if (bookings.values.any {
+            check(
+                bookings.values.none {
                     it.tableId == tableId &&
                         it.eventId == eventId &&
                         it.status in setOf("CONFIRMED", "SEATED")
-                }
+                },
             ) {
-                throw IllegalStateException("active booking exists")
+                "active booking exists"
             }
             val record =
-                BookingRecord(UUID.randomUUID(), tableId, tableNumber, eventId, guests, totalDeposit, status, arrivalBy, qrSecret)
+                BookingRecord(
+                    UUID.randomUUID(),
+                    tableId,
+                    tableNumber,
+                    eventId,
+                    guests,
+                    totalDeposit,
+                    status,
+                    arrivalBy,
+                    qrSecret,
+                )
             bookings[record.id] = record
             bookingsByKey[idempotencyKey] = record
             return@synchronized record

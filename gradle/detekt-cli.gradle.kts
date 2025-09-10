@@ -29,10 +29,6 @@ fun Project.registerDetektCliTask() {
         if (configFile.exists()) {
             args("--config", configFile.absolutePath)
         }
-        val baselineFile = rootProject.file("${project.name}-detekt-baseline.xml")
-        if (baselineFile.exists()) {
-            args("--baseline", baselineFile.absolutePath)
-        }
         args(
             "--input", inputs.joinToString(",") { it.absolutePath },
             "--build-upon-default-config",
@@ -41,33 +37,6 @@ fun Project.registerDetektCliTask() {
         )
     }
 
-    tasks.register<JavaExec>("detektCliBaseline") {
-        group = "verification"
-        description = "Create/refresh detekt baseline for this module"
-        mainClass.set("io.gitlab.arturbosch.detekt.cli.Main")
-        classpath = configurations.getByName("detektCli")
-
-        val inputs = listOf(
-            project.layout.projectDirectory.dir("src/main/kotlin").asFile,
-            project.layout.projectDirectory.dir("src/test/kotlin").asFile
-        ).filter { it.exists() }
-
-        onlyIf { inputs.isNotEmpty() }
-
-        val reportsDir = project.layout.buildDirectory.dir("reports/detekt").get().asFile
-        val configFile = rootProject.file("detekt.yml")
-        if (configFile.exists()) {
-            args("--config", configFile.absolutePath)
-        }
-        val baselineFile = rootProject.file("${project.name}-detekt-baseline.xml")
-        args(
-            "--input", inputs.joinToString(",") { it.absolutePath },
-            "--build-upon-default-config",
-            "--baseline", baselineFile.absolutePath,
-            "--create-baseline",
-            "--report", "html:${File(reportsDir, "detekt-baseline.html").absolutePath}"
-        )
-    }
 }
 
 registerDetektCliTask()

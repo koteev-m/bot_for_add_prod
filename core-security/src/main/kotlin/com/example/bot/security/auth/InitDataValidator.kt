@@ -31,7 +31,11 @@ object InitDataValidator {
                         key to URLDecoder.decode(value, StandardCharsets.UTF_8)
                     }
                 }.toMap()
-        val hash = params["hash"] ?: return null
+        val hash = params["hash"]
+        val userJson = params["user"]
+        if (hash == null || userJson == null) {
+            return null
+        }
         val dataCheckString =
             params
                 .filterKeys { it != "hash" }
@@ -43,9 +47,11 @@ object InitDataValidator {
         mac.init(SecretKeySpec(secretKey, "HmacSHA256"))
         val check = mac.doFinal(dataCheckString.toByteArray())
         val hex = check.joinToString("") { "%02x".format(it) }
-        if (hex != hash) return null
-        val userJson = params["user"] ?: return null
-        return json.decodeFromString(TelegramUser.serializer(), userJson)
+        return if (hex == hash) {
+            json.decodeFromString(TelegramUser.serializer(), userJson)
+        } else {
+            null
+        }
     }
 }
 
