@@ -12,21 +12,21 @@ import org.junit.jupiter.api.Test
 
 class HealthReadyTest {
     @Test
-    fun `health and readiness`() = testApplication {
-        MigrationState.migrationsApplied = false
-        application {
-            routing {
-                healthRoute()
-                readinessRoute()
+    fun `health and readiness`() =
+        testApplication {
+            MigrationState.migrationsApplied = false
+            application {
+                routing {
+                    healthRoute()
+                    readinessRoute()
+                }
             }
+            val h1 = client.get("/health")
+            assertEquals(HttpStatusCode.ServiceUnavailable, h1.status)
+            val r1 = client.get("/ready")
+            assertEquals(HttpStatusCode.ServiceUnavailable, r1.status)
+            MigrationState.migrationsApplied = true
+            val r2 = client.get("/ready")
+            assertEquals(HttpStatusCode.OK, r2.status)
         }
-        val h1 = client.get("/health")
-        assertEquals(HttpStatusCode.ServiceUnavailable, h1.status)
-        val r1 = client.get("/ready")
-        assertEquals(HttpStatusCode.ServiceUnavailable, r1.status)
-        MigrationState.migrationsApplied = true
-        val r2 = client.get("/ready")
-        assertEquals(HttpStatusCode.OK, r2.status)
-    }
 }
-

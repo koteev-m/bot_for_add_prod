@@ -34,4 +34,3 @@ class RoutesSmokeTest {
             assertTrue(body.contains("http_server_requests"))
         }
 }
-

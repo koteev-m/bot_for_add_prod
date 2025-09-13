@@ -18,7 +18,10 @@ private val prometheusRegistry: PrometheusMeterRegistry by lazy {
 fun Application.installMetrics() {
     install(MicrometerMetrics) {
         registry = prometheusRegistry
-        timers { _, _ -> io.micrometer.core.instrument.Timer.builder("http.server.requests") }
+        timers { _, _ ->
+            io.micrometer.core.instrument.Timer
+                .builder("http.server.requests")
+        }
     }
     routing {
         metricsRoute()
@@ -30,8 +33,9 @@ fun Route.metricsRoute() {
         val scrape = prometheusRegistry.scrape()
         call.respondText(
             text = scrape,
-            contentType = io.ktor.http.ContentType.parse("text/plain; version=0.0.4; charset=utf-8")
+            contentType =
+            io.ktor.http.ContentType
+                .parse("text/plain; version=0.0.4; charset=utf-8"),
         )
     }
 }
-

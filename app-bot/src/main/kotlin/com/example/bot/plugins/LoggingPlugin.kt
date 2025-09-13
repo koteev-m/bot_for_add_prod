@@ -11,18 +11,20 @@ import io.ktor.server.request.path
 import io.ktor.server.response.header
 import io.ktor.server.response.respondText
 import io.ktor.util.pipeline.PipelineContext
-import java.util.UUID
 import org.slf4j.event.Level
+import java.util.UUID
 
 private const val REQ_ID = "X-Request-ID"
 private const val CORR_ID = "X-Correlation-ID"
+private const val REQUEST_ID_MIN_LENGTH = 8
+private const val REQUEST_ID_MAX_LENGTH = 128
 
 fun Application.installRequestLogging() {
     install(CallId) {
         header(REQ_ID)
         header(CORR_ID)
         generate { UUID.randomUUID().toString() }
-        verify { it.length in 8..128 }
+        verify { it.length in REQUEST_ID_MIN_LENGTH..REQUEST_ID_MAX_LENGTH }
         reply { call, id ->
             call.response.header(REQ_ID, id)
         }
@@ -43,4 +45,3 @@ fun Application.installRequestLogging() {
 suspend fun PipelineContext<Unit, io.ktor.server.application.ApplicationCall>.okText(text: String) {
     call.respondText(text)
 }
-

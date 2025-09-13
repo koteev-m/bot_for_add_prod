@@ -25,6 +25,7 @@ dependencies {
     implementation(projects.coreTelemetry)
     implementation(projects.coreSecurity)
     implementation(libs.exposed.jdbc)
+    implementation(libs.flyway)
     implementation(libs.micrometer.core)
     implementation(libs.micrometer.prometheus)
     implementation(libs.micrometer.tracing.bridge.otel)

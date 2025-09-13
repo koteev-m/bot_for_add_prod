@@ -27,11 +27,14 @@ class CallIdLoggingTest {
                 installRequestLogging()
                 routing { get("/ping") { call.respondText("pong") } }
             }
-            val res = client.get("/ping") { header("X-Request-ID", "abc12345"); header("X-Correlation-ID", "abc12345") }
+            val res =
+                client.get("/ping") {
+                    header("X-Request-ID", "abc12345")
+                    header("X-Correlation-ID", "abc12345")
+                }
             assertEquals("abc12345", res.headers["X-Request-ID"])
             val event = list.list.firstOrNull { it.mdcPropertyMap.containsKey("callId") }
             assertEquals("abc12345", event?.mdcPropertyMap?.get("callId"))
             logger.detachAppender(list)
         }
 }
-
