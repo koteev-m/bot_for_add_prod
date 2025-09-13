@@ -1,38 +1,60 @@
 package com.example.bot.routes
 
-import com.example.bot.observability.CheckStatus
-import com.example.bot.observability.HealthService
-import com.example.bot.observability.MetricsProvider
+import com.example.bot.plugins.DataSourceHolder
 import com.example.bot.plugins.MigrationState
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.response.respond
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
-import io.micrometer.prometheus.PrometheusMeterRegistry
+import java.sql.Connection
+import java.sql.SQLException
+import javax.sql.DataSource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
-fun Route.observabilityRoutes(metrics: MetricsProvider, health: HealthService) {
-    get("/metrics") {
-        val registry = metrics.registry as PrometheusMeterRegistry
-        call.respondText(
-            registry.scrape(),
-            ContentType.parse("text/plain; version=0.0.4; charset=utf-8"),
-        )
-    }
+private fun healthDbTimeoutMs(): Long =
+    System.getenv("HEALTH_DB_TIMEOUT_MS")?.toLongOrNull() ?: 150L
+
+fun Route.healthRoute() {
     get("/health") {
-        val report = health.health()
-        val status = if (report.status == CheckStatus.UP) HttpStatusCode.OK else HttpStatusCode.ServiceUnavailable
-        call.respond(status, report)
-    }
-    get("/ready") {
-        if (!MigrationState.migrationsApplied) {
-            call.respond(HttpStatusCode.ServiceUnavailable, "MIGRATIONS_NOT_APPLIED")
+        val ds: DataSource? = DataSourceHolder.dataSource
+        if (ds == null) {
+            call.respond(HttpStatusCode.ServiceUnavailable, "NO_DATASOURCE")
             return@get
         }
-        val report = health.readiness()
-        val status = if (report.status == CheckStatus.UP) HttpStatusCode.OK else HttpStatusCode.ServiceUnavailable
-        call.respond(status, report)
+        val ok = try {
+            withTimeout(healthDbTimeoutMs()) {
+                withContext(Dispatchers.IO) {
+                    ds.connection.use { conn: Connection ->
+                        conn.prepareStatement("SELECT 1").use { st ->
+                            st.execute()
+                        }
+                    }
+                }
+                true
+            }
+        } catch (_: SQLException) {
+            false
+        } catch (_: Exception) {
+            false
+        }
+        if (ok) {
+            call.respond(HttpStatusCode.OK, "OK")
+        } else {
+            call.respond(HttpStatusCode.ServiceUnavailable, "DB_UNAVAILABLE")
+        }
     }
 }
+
+fun Route.readinessRoute() {
+    get("/ready") {
+        if (MigrationState.migrationsApplied) {
+            call.respond(HttpStatusCode.OK, "READY")
+        } else {
+            call.respond(HttpStatusCode.ServiceUnavailable, "MIGRATIONS_NOT_APPLIED")
+        }
+    }
+}
+
