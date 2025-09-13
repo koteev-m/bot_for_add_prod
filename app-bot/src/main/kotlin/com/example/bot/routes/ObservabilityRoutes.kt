@@ -3,6 +3,7 @@ package com.example.bot.routes
 import com.example.bot.observability.CheckStatus
 import com.example.bot.observability.HealthService
 import com.example.bot.observability.MetricsProvider
+import com.example.bot.plugins.MigrationState
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
@@ -26,6 +27,10 @@ fun Route.observabilityRoutes(metrics: MetricsProvider, health: HealthService) {
         call.respond(status, report)
     }
     get("/ready") {
+        if (!MigrationState.migrationsApplied) {
+            call.respond(HttpStatusCode.ServiceUnavailable, "MIGRATIONS_NOT_APPLIED")
+            return@get
+        }
         val report = health.readiness()
         val status = if (report.status == CheckStatus.UP) HttpStatusCode.OK else HttpStatusCode.ServiceUnavailable
         call.respond(status, report)
