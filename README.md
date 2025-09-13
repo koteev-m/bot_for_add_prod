@@ -109,3 +109,15 @@ Local Bot API Server (optional):
 Разкомментируй сервис `telegram-bot-api` в `docker-compose.yml`, добавь в `.env` `TELEGRAM_API_ID`/`TELEGRAM_API_HASH`, и запусти `make up`.
 
 ---
+
+## Container Smoke Test
+
+### Local
+```bash
+make smoke
+# под капотом: docker build, запуск postgres и app, ретраи /health и /ready до 60 сек
+```
+
+CI (GitHub Actions)
+- Workflow Container Smoke автоматически собирает образ, поднимает Postgres как сервис, стартует контейнер приложения и проверяет /health и /ready с ретраями.
+- Логи приложения выгружаются в шаге Dump app logs on failure при неуспехе.
