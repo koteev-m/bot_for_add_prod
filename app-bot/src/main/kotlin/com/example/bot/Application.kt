@@ -5,8 +5,10 @@ import com.example.bot.miniapp.miniAppModule
 import com.example.bot.observability.DefaultHealthService
 import com.example.bot.observability.MetricsProvider
 import com.example.bot.observability.TracingProvider
+import com.example.bot.plugins.MigrationState
 import com.example.bot.plugins.installLogging
 import com.example.bot.plugins.installMetrics
+import com.example.bot.plugins.installMigrationsAndDatabase
 import com.example.bot.plugins.installTracing
 import com.example.bot.polling.PollingMain
 import com.example.bot.routes.observabilityRoutes
@@ -40,6 +42,8 @@ private val allowedUpdates =
 
 /** Ktor application module. */
 fun Application.module() {
+    val ds = installMigrationsAndDatabase()
+
     install(ContentNegotiation) { json() }
 
     val metricsRegistry = MetricsProvider.prometheusRegistry()
@@ -83,7 +87,7 @@ fun Application.module() {
     val dedup = UpdateDeduplicator()
 
     miniAppModule()
-    val healthService = DefaultHealthService()
+    val healthService = DefaultHealthService(dataSource = ds, migrationsApplied = { MigrationState.migrationsApplied })
 
     routing {
         observabilityRoutes(metrics, healthService)

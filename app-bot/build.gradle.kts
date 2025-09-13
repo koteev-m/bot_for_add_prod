@@ -24,6 +24,7 @@ dependencies {
     implementation(projects.coreData)
     implementation(projects.coreTelemetry)
     implementation(projects.coreSecurity)
+    implementation(libs.exposed.jdbc)
     implementation(libs.micrometer.core)
     implementation(libs.micrometer.prometheus)
     implementation(libs.micrometer.tracing.bridge.otel)
@@ -52,5 +53,5 @@ dependencies {
 }
 
 application {
-    mainClass.set("com.example.bot.app.ApplicationKt")
+    mainClass.set("com.example.bot.ApplicationKt")
 }

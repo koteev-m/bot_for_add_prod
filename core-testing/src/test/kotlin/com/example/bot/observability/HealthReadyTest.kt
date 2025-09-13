@@ -1,5 +1,6 @@
 package com.example.bot.observability
 
+import com.example.bot.plugins.MigrationState
 import com.example.bot.plugins.installMetrics
 import com.example.bot.routes.observabilityRoutes
 import io.ktor.client.request.get
@@ -20,6 +21,7 @@ class HealthReadyTest {
         testApplication {
             val registry = MetricsProvider.prometheusRegistry()
             val provider = MetricsProvider(registry)
+            MigrationState.migrationsApplied = true
             application {
                 install(ContentNegotiation) { json() }
                 installMetrics(registry)
