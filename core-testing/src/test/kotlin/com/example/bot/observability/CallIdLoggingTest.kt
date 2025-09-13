@@ -3,7 +3,7 @@ package com.example.bot.observability
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
-import com.example.bot.plugins.installLogging
+import com.example.bot.plugins.installRequestLogging
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.server.application.call
@@ -24,13 +24,14 @@ class CallIdLoggingTest {
             list.start()
             logger.addAppender(list)
             application {
-                installLogging()
+                installRequestLogging()
                 routing { get("/ping") { call.respondText("pong") } }
             }
-            val res = client.get("/ping") { header("X-Request-ID", "abc123") }
-            assertEquals("abc123", res.headers["X-Request-ID"])
+            val res = client.get("/ping") { header("X-Request-ID", "abc12345"); header("X-Correlation-ID", "abc12345") }
+            assertEquals("abc12345", res.headers["X-Request-ID"])
             val event = list.list.firstOrNull { it.mdcPropertyMap.containsKey("callId") }
-            assertEquals("abc123", event?.mdcPropertyMap?.get("callId"))
+            assertEquals("abc12345", event?.mdcPropertyMap?.get("callId"))
             logger.detachAppender(list)
         }
 }
+

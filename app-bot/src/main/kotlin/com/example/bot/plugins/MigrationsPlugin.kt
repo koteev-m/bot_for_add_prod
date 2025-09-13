@@ -6,6 +6,9 @@ import com.example.bot.data.db.HikariFactory
 import com.example.bot.data.db.MigrationRunner
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStopped
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.runInterruptible
 import org.jetbrains.exposed.sql.Database
 import org.slf4j.LoggerFactory
 import javax.sql.DataSource
@@ -15,8 +18,7 @@ object MigrationState {
     var migrationsApplied: Boolean = false
 }
 
-@Suppress("TooGenericExceptionCaught")
-fun Application.installMigrationsAndDatabase(): DataSource {
+fun Application.installMigrationsAndDatabase() {
     val log = LoggerFactory.getLogger("Migrations")
     val dbCfg = DbConfig.fromEnv()
     val flywayCfg = FlywayConfig.fromEnv()
@@ -24,8 +26,12 @@ fun Application.installMigrationsAndDatabase(): DataSource {
     val ds: DataSource = HikariFactory.dataSource(dbCfg)
 
     try {
-        val runner = MigrationRunner(ds, flywayCfg)
-        runner.run()
+        runBlocking {
+            runInterruptible(Dispatchers.IO) {
+                val runner = MigrationRunner(ds, flywayCfg)
+                runner.run()
+            }
+        }
         MigrationState.migrationsApplied = true
         log.info("Migrations completed successfully")
     } catch (e: Exception) {
@@ -34,15 +40,16 @@ fun Application.installMigrationsAndDatabase(): DataSource {
     }
 
     Database.connect(ds)
+    DataSourceHolder.dataSource = ds
 
     environment.monitor.subscribe(ApplicationStopped) {
-        (ds as? AutoCloseable)?.let {
-            try {
-                it.close()
-            } catch (_: Throwable) {
-            }
+        try {
+            (ds as? AutoCloseable)?.close()
+        } catch (_: Throwable) {
+            // ignore
+        } finally {
+            DataSourceHolder.dataSource = null
         }
     }
-
-    return ds
 }
+
