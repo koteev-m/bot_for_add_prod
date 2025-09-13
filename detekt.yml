@@ -37,3 +37,13 @@ empty-blocks:
   EmptyFunctionBlock:
     active: false
 
+exceptions:
+  TooGenericExceptionCaught:
+    active: true
+    excludes:
+      - '**/plugins/MigrationsPlugin.kt'
+      - '**/routes/ObservabilityRoutes.kt'
+    exceptionNames:
+      - 'org.flywaydb.core.api.FlywayException'
+      - 'java.lang.RuntimeException'
+

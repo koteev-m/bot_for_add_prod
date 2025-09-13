@@ -12,16 +12,16 @@ import org.junit.jupiter.api.Test
 
 class MetricsRouteTest {
     @Test
-    fun `exposes metrics`() = testApplication {
-        application {
-            installMetrics()
+    fun `exposes metrics`() =
+        testApplication {
+            application {
+                installMetrics()
+            }
+            val res = client.get("/metrics")
+            assertEquals(HttpStatusCode.OK, res.status)
+            val contentType = res.headers[HttpHeaders.ContentType]
+            assertTrue(contentType?.contains("text/plain") == true)
+            val body = res.bodyAsText()
+            assertTrue(body.contains("http_server_requests"))
         }
-        val res = client.get("/metrics")
-        assertEquals(HttpStatusCode.OK, res.status)
-        val contentType = res.headers[HttpHeaders.ContentType]
-        assertTrue(contentType?.contains("text/plain") == true)
-        val body = res.bodyAsText()
-        assertTrue(body.contains("http_server_requests"))
-    }
 }
-

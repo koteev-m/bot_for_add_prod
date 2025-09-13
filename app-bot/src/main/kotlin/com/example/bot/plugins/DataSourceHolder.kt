@@ -6,4 +6,3 @@ object DataSourceHolder {
     @Volatile
     var dataSource: DataSource? = null
 }
-

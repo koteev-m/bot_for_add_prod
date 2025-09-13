@@ -7,15 +7,19 @@ import io.ktor.server.application.call
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
-import java.sql.Connection
-import java.sql.SQLException
-import javax.sql.DataSource
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import java.sql.Connection
+import java.sql.SQLException
+import java.util.concurrent.TimeoutException
+import javax.sql.DataSource
+
+private const val HEALTH_TIMEOUT_FALLBACK_MS: Long = 150L
 
 private fun healthDbTimeoutMs(): Long =
-    System.getenv("HEALTH_DB_TIMEOUT_MS")?.toLongOrNull() ?: 150L
+    System.getenv("HEALTH_DB_TIMEOUT_MS")?.toLongOrNull() ?: HEALTH_TIMEOUT_FALLBACK_MS
 
 fun Route.healthRoute() {
     get("/health") {
@@ -24,22 +28,27 @@ fun Route.healthRoute() {
             call.respond(HttpStatusCode.ServiceUnavailable, "NO_DATASOURCE")
             return@get
         }
-        val ok = try {
-            withTimeout(healthDbTimeoutMs()) {
-                withContext(Dispatchers.IO) {
-                    ds.connection.use { conn: Connection ->
-                        conn.prepareStatement("SELECT 1").use { st ->
-                            st.execute()
+        val ok =
+            try {
+                withTimeout(healthDbTimeoutMs()) {
+                    withContext(Dispatchers.IO) {
+                        ds.connection.use { conn: Connection ->
+                            conn.prepareStatement("SELECT 1").use { st ->
+                                st.execute()
+                            }
                         }
                     }
+                    true
                 }
-                true
+            } catch (_: SQLException) {
+                false
+            } catch (_: TimeoutException) {
+                false
+            } catch (_: TimeoutCancellationException) {
+                false
+            } catch (_: IllegalStateException) {
+                false
             }
-        } catch (_: SQLException) {
-            false
-        } catch (_: Exception) {
-            false
-        }
         if (ok) {
             call.respond(HttpStatusCode.OK, "OK")
         } else {
@@ -57,4 +66,3 @@ fun Route.readinessRoute() {
         }
     }
 }
-

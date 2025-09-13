@@ -9,6 +9,7 @@ import io.ktor.server.application.ApplicationStopped
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.runInterruptible
+import org.flywaydb.core.api.FlywayException
 import org.jetbrains.exposed.sql.Database
 import org.slf4j.LoggerFactory
 import javax.sql.DataSource
@@ -34,8 +35,12 @@ fun Application.installMigrationsAndDatabase() {
         }
         MigrationState.migrationsApplied = true
         log.info("Migrations completed successfully")
-    } catch (e: Exception) {
-        log.error("Migrations failed, stopping application", e)
+    } catch (e: FlywayException) {
+        log.error("Migrations failed (FlywayException), stopping application", e)
+        throw e
+    } catch (e: RuntimeException) {
+        // включая JDBC/DS misconfig и иные runtime-ошибки старта
+        log.error("Migrations failed (RuntimeException), stopping application", e)
         throw e
     }
 
@@ -52,4 +57,3 @@ fun Application.installMigrationsAndDatabase() {
         }
     }
 }
-

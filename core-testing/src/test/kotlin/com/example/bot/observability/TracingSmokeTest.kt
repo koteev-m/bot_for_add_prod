@@ -1,6 +1,5 @@
 package com.example.bot.observability
 
-import com.example.bot.observability.TracingProvider
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
@@ -21,34 +20,35 @@ import org.slf4j.LoggerFactory
 
 class TracingSmokeTest {
     @Test
-    fun `tracing disabled`() = testApplication {
-        application {
-            installMetrics()
-            installRequestLogging()
-            routing { get("/ping") { call.respondText("pong") } }
+    fun `tracing disabled`() =
+        testApplication {
+            application {
+                installMetrics()
+                installRequestLogging()
+                routing { get("/ping") { call.respondText("pong") } }
+            }
+            assertEquals(200, client.get("/ping").status.value)
         }
-        assertEquals(200, client.get("/ping").status.value)
-    }
 
     @Test
-    fun `tracing enabled`() = testApplication {
-        val exporter = InMemorySpanExporter.create()
-        val tracer = TracingProvider.create(exporter).tracer
-        val list = ListAppender<ILoggingEvent>()
-        val logger = LoggerFactory.getLogger("io.ktor.test") as Logger
-        list.start()
-        logger.addAppender(list)
-        application {
-            installMetrics()
-            installRequestLogging()
-            installTracing(tracer)
-            routing { get("/ping") { call.respondText("pong") } }
+    fun `tracing enabled`() =
+        testApplication {
+            val exporter = InMemorySpanExporter.create()
+            val tracer = TracingProvider.create(exporter).tracer
+            val list = ListAppender<ILoggingEvent>()
+            val logger = LoggerFactory.getLogger("io.ktor.test") as Logger
+            list.start()
+            logger.addAppender(list)
+            application {
+                installMetrics()
+                installRequestLogging()
+                installTracing(tracer)
+                routing { get("/ping") { call.respondText("pong") } }
+            }
+            client.get("/ping")
+            assertTrue(exporter.finishedSpanItems.isNotEmpty(), "spans")
+            val event = list.list.firstOrNull { it.mdcPropertyMap.containsKey("traceId") }
+            assertTrue(event != null && event.mdcPropertyMap["traceId"]?.isNotEmpty() == true)
+            logger.detachAppender(list)
         }
-        client.get("/ping")
-        assertTrue(exporter.finishedSpanItems.isNotEmpty(), "spans")
-        val event = list.list.firstOrNull { it.mdcPropertyMap.containsKey("traceId") }
-        assertTrue(event != null && event.mdcPropertyMap["traceId"]?.isNotEmpty() == true)
-        logger.detachAppender(list)
-    }
 }
-
