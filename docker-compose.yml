@@ -1,0 +1,72 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bot_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: botdb
+      POSTGRES_USER: botuser
+      POSTGRES_PASSWORD: botpass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U botuser -d botdb"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks: [bot_net]
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bot_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    environment:
+      # --- Database ---
+      DATABASE_URL: jdbc:postgresql://postgres:5432/botdb
+      DATABASE_USER: botuser
+      DATABASE_PASSWORD: botpass
+
+      # --- Telegram bot (секреты задать в .env локально/в CI) ---
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set_in_.env}
+      OWNER_TELEGRAM_ID: ${OWNER_TELEGRAM_ID:-0}
+
+      # --- Webhook (optional) ---
+      WEBHOOK_BASE_URL: ${WEBHOOK_BASE_URL:-}
+      WEBHOOK_SECRET_TOKEN: ${WEBHOOK_SECRET_TOKEN:-}
+
+      # --- Workers / RatePolicy ---
+      GLOBAL_RPS: ${GLOBAL_RPS:-25}
+      CHAT_RPS: ${CHAT_RPS:-2}
+      WORKER_PARALLELISM: ${WORKER_PARALLELISM:-4}
+
+      # --- Ktor/Netty ---
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    networks: [bot_net]
+
+  # Local Bot API Server (optional for high throughput)
+  # telegram-bot-api:
+  #   image: aiogram/telegram-bot-api:latest
+  #   container_name: local_bot_api
+  #   restart: unless-stopped
+  #   environment:
+  #     TELEGRAM_API_ID: ${TELEGRAM_API_ID:?set_in_.env}
+  #     TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:?set_in_.env}
+  #     TELEGRAM_LOCAL: "true"
+  #   ports:
+  #     - "8081:8081"
+  #   networks: [bot_net]
+
+networks:
+  bot_net:
+
+volumes:
+  pg_data:
