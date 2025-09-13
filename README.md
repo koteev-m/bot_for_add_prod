@@ -78,3 +78,34 @@ Enable verbose logging:
 
 Test reports are generated under `build/reports/tests/test/index.html`.
 
+
+## Local run (Docker)
+
+1. Скопируй `.env.example` → `.env` и заполни **секреты** (минимум `TELEGRAM_BOT_TOKEN`).
+2. Подними всё:
+   ```bash
+   make up
+   ```
+3. Проверка:
+   ```bash
+   make health          # OK
+   curl -f http://localhost:8080/ready
+   ```
+4. Логи:
+   ```bash
+   make logs
+   ```
+5. Масштабирование (dev):
+   ```bash
+   docker compose up -d --scale app=2
+   docker compose ps
+   ```
+6. Подключиться к Postgres:
+   ```bash
+   make psql
+   ```
+
+Local Bot API Server (optional):  
+Разкомментируй сервис `telegram-bot-api` в `docker-compose.yml`, добавь в `.env` `TELEGRAM_API_ID`/`TELEGRAM_API_HASH`, и запусти `make up`.
+
+---
