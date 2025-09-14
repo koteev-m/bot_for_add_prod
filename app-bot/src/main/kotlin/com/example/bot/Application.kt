@@ -5,6 +5,8 @@ import com.example.bot.plugins.installHotPathLimiterDefaults
 import com.example.bot.plugins.installMetrics
 import com.example.bot.plugins.installMigrationsAndDatabase
 import com.example.bot.plugins.installRequestLogging
+import com.example.bot.render.DefaultHallRenderer
+import com.example.bot.routes.hallImageRoute
 import com.example.bot.routes.healthRoute
 import com.example.bot.routes.readinessRoute
 import com.example.bot.server.installServerTuning
@@ -25,9 +27,11 @@ fun Application.module() {
     installRequestLogging()
     installMetrics()
     // 5) Routes
+    val renderer = DefaultHallRenderer()
     routing {
         healthRoute()
         readinessRoute()
+        hallImageRoute(renderer) { _, _ -> "v1" }
         // … остальные маршруты приложения
     }
 }
