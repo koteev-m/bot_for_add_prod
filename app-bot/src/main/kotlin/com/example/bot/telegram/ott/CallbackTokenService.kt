@@ -1,0 +1,62 @@
+package com.example.bot.telegram.ott
+
+import com.pengrad.telegrambot.TelegramBot
+import com.pengrad.telegrambot.model.CallbackQuery
+import com.pengrad.telegrambot.model.Update
+import com.pengrad.telegrambot.request.AnswerCallbackQuery
+import com.pengrad.telegrambot.request.SendMessage
+
+/**
+ * Сервис, который:
+ *  - выдаёт одноразовые токены под payload;
+ *  - потребляет токен в handler’е и возвращает payload;
+ *  - умеет быстро отвечать пользователю при истёкших/повторных токенах.
+ */
+class CallbackTokenService(
+    private val store: OneTimeTokenStore = InMemoryOneTimeTokenStore()
+) {
+
+    /** Выдать токен под payload (для callback_data). */
+    fun issueToken(payload: OttPayload): String = store.issue(payload)
+
+    /** Атомарно потребить токен: вернуть payload или null, если повтор/истёк. */
+    fun consume(token: String): OttPayload? = store.consume(token)
+}
+
+/** Мини-handler `callback_query` с примером ветвления по payload. */
+class CallbackQueryHandler(
+    private val bot: TelegramBot,
+    private val tokenService: CallbackTokenService
+) {
+
+    fun handle(update: Update) {
+        val cq: CallbackQuery = update.callbackQuery() ?: return
+        val token: String = cq.data() ?: return
+        val payload: OttPayload = tokenService.consume(token) ?: run {
+            // устарело/повтор — показываем alert, ничего не делаем
+            bot.execute(
+                AnswerCallbackQuery(cq.id())
+                    .text("Кнопка устарела, обновите экран.")
+                    .showAlert(true)
+            )
+            return
+        }
+
+        when (payload) {
+            is BookTableAction -> handleBookTable(cq, payload)
+            // добавляйте другие типы payload тут
+        }
+    }
+
+    private fun handleBookTable(cq: CallbackQuery, p: BookTableAction) {
+        // Пример: отправим подтверждение в чат (минимальный сценарий)
+        val chatId = cq.message()?.chat()?.id() ?: return
+        val text = "Выбран стол #${'$'}{p.tableId} • клуб ${'$'}{p.clubId} • ночь ${'$'}{p.startUtc}"
+        val req = SendMessage(chatId, text)
+        // Если callback был в теме — можно добавить message_thread_id (не всегда доступно из callback)
+        bot.execute(req)
+        // Закрыть "часики" на кнопке
+        bot.execute(AnswerCallbackQuery(cq.id()))
+    }
+}
+
