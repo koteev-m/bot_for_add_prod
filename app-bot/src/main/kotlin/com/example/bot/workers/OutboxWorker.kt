@@ -4,13 +4,11 @@ import com.example.bot.data.repo.OutboxRepository
 import com.example.bot.notifications.NotifyConfig
 import com.example.bot.notifications.NotifyMessage
 import com.example.bot.notifications.NotifyMethod
-import com.example.bot.notifications.ParseMode
 import com.example.bot.notifications.RatePolicy
+import com.example.bot.telegram.MediaSpec
 import com.example.bot.telegram.NotifySender
+import com.example.bot.telegram.SendResult
 import com.example.bot.telemetry.Telemetry
-import com.pengrad.telegrambot.model.request.InlineKeyboardButton
-import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
-import com.pengrad.telegrambot.model.request.Keyboard
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -20,8 +18,6 @@ import java.time.OffsetDateTime
 
 private const val MS: Long = 1_000
 private const val NANOS_IN_MS: Long = 1_000_000
-private const val HTTP_BAD_REQUEST = 400
-private const val HTTP_FORBIDDEN = 403
 private const val EMPTY_BATCH_DELAY_MS: Long = 1 * MS
 
 class OutboxWorker(private val scope: CoroutineScope, private val deps: Deps) {
@@ -93,44 +89,42 @@ class OutboxWorker(private val scope: CoroutineScope, private val deps: Deps) {
         }
     }
 
-    private suspend fun send(msg: NotifyMessage): NotifySender.Result {
+    private suspend fun send(msg: NotifyMessage): SendResult {
         return when (msg.method) {
             NotifyMethod.TEXT ->
                 deps.sender.sendMessage(
                     msg.chatId,
                     msg.text.orEmpty(),
-                    toTelegramParseMode(msg.parseMode),
                     msg.messageThreadId,
-                    toKeyboard(msg),
+                    msg.dedupKey,
                 )
 
             NotifyMethod.PHOTO ->
                 deps.sender.sendPhoto(
                     msg.chatId,
-                    NotifySender.PhotoContent.Url(requireNotNull(msg.photoUrl)),
+                    requireNotNull(msg.photoUrl),
                     msg.text,
-                    toTelegramParseMode(msg.parseMode),
                     msg.messageThreadId,
+                    msg.dedupKey,
                 )
 
             NotifyMethod.ALBUM -> {
                 val media =
                     msg.album.orEmpty().map {
-                        NotifySender.Media(
-                            content = NotifySender.PhotoContent.Url(it.url),
+                        MediaSpec(
+                            fileIdOrUrl = it.url,
                             caption = it.caption,
-                            parseMode = toTelegramParseMode(it.parseMode),
                         )
                     }
-                deps.sender.sendMediaGroup(msg.chatId, media, msg.messageThreadId)
+                deps.sender.sendMediaGroup(msg.chatId, media, msg.messageThreadId, msg.dedupKey)
             }
         }
     }
 
-    private suspend fun handleResult(rec: OutboxRepository.Record, msg: NotifyMessage, result: NotifySender.Result) {
+    private suspend fun handleResult(rec: OutboxRepository.Record, msg: NotifyMessage, result: SendResult) {
         when (result) {
-            NotifySender.Result.Ok -> {
-                deps.repo.markSent(rec.id, null)
+            is SendResult.Ok -> {
+                deps.repo.markSent(rec.id, result.messageId)
                 deps.registry
                     .counter(
                         "notify.sent",
@@ -141,71 +135,51 @@ class OutboxWorker(private val scope: CoroutineScope, private val deps: Deps) {
                     ).increment()
             }
 
-            is NotifySender.Result.RetryAfter -> {
-                val delayMs = result.seconds * MS
-                deps.ratePolicy.on429(msg.chatId, delayMs)
-                deps.registry.summary("notify.retry_after.ms").record(delayMs.toDouble())
+            is SendResult.RetryAfter -> {
+                deps.ratePolicy.on429(msg.chatId, result.retryAfterMs)
+                deps.registry.summary("notify.retry_after.ms").record(result.retryAfterMs.toDouble())
                 deps.repo.markFailed(
                     rec.id,
                     "429",
-                    OffsetDateTime.now().plusNanos(delayMs * NANOS_IN_MS),
+                    OffsetDateTime.now().plusNanos(result.retryAfterMs * NANOS_IN_MS),
                 )
                 deps.registry.counter("notify.failed", "code", "429", "retryable", "true").increment()
                 deps.registry.counter("notify.retried").increment()
             }
 
-            is NotifySender.Result.Failed -> {
-                if (result.code == HTTP_BAD_REQUEST || result.code == HTTP_FORBIDDEN) {
-                    deps.repo.markPermanentFailure(rec.id, result.description)
-                    deps.registry
-                        .counter(
-                            "notify.failed",
-                            "code",
-                            result.code.toString(),
-                            "retryable",
-                            "false",
-                        ).increment()
-                } else {
-                    val delayMs = backoff(rec.attempts)
-                    deps.repo.markFailed(
-                        rec.id,
-                        result.description,
-                        OffsetDateTime.now().plusNanos(delayMs * NANOS_IN_MS),
-                    )
-                    deps.registry
-                        .counter(
-                            "notify.failed",
-                            "code",
-                            result.code.toString(),
-                            "retryable",
-                            "true",
-                        ).increment()
-                    deps.registry.counter("notify.retried").increment()
-                }
+            is SendResult.RetryableError -> {
+                val delayMs = backoff(rec.attempts)
+                deps.repo.markFailed(
+                    rec.id,
+                    result.message,
+                    OffsetDateTime.now().plusNanos(delayMs * NANOS_IN_MS),
+                )
+                deps.registry
+                    .counter(
+                        "notify.failed",
+                        "code",
+                        "RETRYABLE",
+                        "retryable",
+                        "true",
+                    ).increment()
+                deps.registry.counter("notify.retried").increment()
+            }
+
+            is SendResult.PermanentError -> {
+                deps.repo.markPermanentFailure(rec.id, result.message)
+                deps.registry
+                    .counter(
+                        "notify.failed",
+                        "code",
+                        "PERMANENT",
+                        "retryable",
+                        "false",
+                    ).increment()
             }
         }
     }
 
     private fun backoff(attempts: Int): Long =
         (deps.config.retryBaseMs * (1L shl attempts)).coerceAtMost(deps.config.retryMaxMs)
-
-    private fun toTelegramParseMode(pm: ParseMode?): com.pengrad.telegrambot.model.request.ParseMode? {
-        return when (pm) {
-            ParseMode.MARKDOWNV2 -> com.pengrad.telegrambot.model.request.ParseMode.MarkdownV2
-            ParseMode.HTML -> com.pengrad.telegrambot.model.request.ParseMode.HTML
-            null -> null
-        }
-    }
-
-    @Suppress("SpreadOperator")
-    private fun toKeyboard(msg: NotifyMessage): Keyboard? {
-        return msg.buttons?.let { spec ->
-            val rows =
-                spec.rows
-                    .map { row ->
-                        row.map { text -> InlineKeyboardButton(text).callbackData(text) }.toTypedArray()
-                    }.toTypedArray()
-            InlineKeyboardMarkup(*rows)
-        }
-    }
 }
+
