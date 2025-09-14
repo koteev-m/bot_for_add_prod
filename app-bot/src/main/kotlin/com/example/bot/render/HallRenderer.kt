@@ -1,101 +1,113 @@
 package com.example.bot.render
 
-import com.example.bot.availability.TableAvailabilityDto
-import com.example.bot.availability.TableStatus
-import com.example.bot.i18n.BotTexts
 import java.awt.BasicStroke
 import java.awt.Color
 import java.awt.Font
 import java.awt.RenderingHints
-import java.awt.geom.Rectangle2D
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-/**
- * Renders hall scheme with table statuses on top of a base image.
- */
-class HallRenderer(
-    private val baseImageProvider: (Long) -> BufferedImage,
-    private val geometryProvider: TableGeometryProvider,
-    private val texts: BotTexts,
-) {
+interface HallRenderer {
     /**
-     * Renders hall for [clubId] using [tables] statuses and [scale].
+     * Вернуть PNG-байты схемы зала.
+     * scale — множитель для Retina/увеличенного качества (например, 2.0).
      */
-    private val strokeWidth = 2f
-    private val labelFontSize = 14
-    private val legendFontSize = 12
-    private val legendPad = 4
-    private val freeColor = Color(0x00, 0x80, 0x00)
-    private val heldColor = Color(0xFF, 0xD7, 0x00)
-    private val bookedColor = Color(0xB2, 0x22, 0x22)
-    private val fillAlpha = 80
-
-    fun render(clubId: Long, tables: List<TableAvailabilityDto>, scale: Int = 1): ByteArray {
-        val base = baseImageProvider(clubId)
-        val width = base.width * scale
-        val height = base.height * scale
-        val img = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
-        val g = img.createGraphics()
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
-        g.drawImage(base, 0, 0, width, height, null)
-        g.stroke = BasicStroke(strokeWidth * scale)
-        tables.forEach { table ->
-            val rect = geometryProvider.geometry(clubId, table.tableId) ?: return@forEach
-            val r =
-                Rectangle2D.Double(
-                    rect.x * scale,
-                    rect.y * scale,
-                    rect.width * scale,
-                    rect.height * scale,
-                )
-            val color =
-                when (table.status) {
-                    TableStatus.FREE -> freeColor
-                    TableStatus.HELD -> heldColor
-                    TableStatus.BOOKED -> bookedColor
-                }
-            val fill = Color(color.red, color.green, color.blue, fillAlpha)
-            g.color = fill
-            g.fill(r)
-            g.color = color
-            g.draw(r)
-            // label
-            g.font = Font("SansSerif", Font.BOLD, labelFontSize * scale)
-            val text = "#${table.tableNumber}"
-            val fm = g.fontMetrics
-            val tx = r.centerX - fm.stringWidth(text) / 2.0
-            val ty = r.centerY + fm.ascent / 2.0
-            g.color = Color.BLACK
-            g.drawString(text, tx.toFloat(), ty.toFloat())
-        }
-        // legend block
-        val legend = texts.legend(null)
-        g.font = Font("SansSerif", Font.PLAIN, legendFontSize * scale)
-        val fm = g.fontMetrics
-        val pad = legendPad * scale
-        val legendW = fm.stringWidth(legend) + pad * 2
-        val legendH = fm.height + pad * 2
-        val x = pad
-        val y = height - legendH - pad
-        g.color = Color.WHITE
-        g.fillRect(x, y, legendW, legendH)
-        g.color = Color.BLACK
-        g.drawRect(x, y, legendW, legendH)
-        g.drawString(legend, x + pad, y + fm.ascent + pad)
-        g.dispose()
-        val out = ByteArrayOutputStream()
-        ImageIO.write(img, "PNG", out)
-        return out.toByteArray()
-    }
+    suspend fun render(
+        clubId: Long,
+        startUtc: String,
+        scale: Double,
+        stateKey: String
+    ): ByteArray
 }
 
 /**
- * Provides geometric information for tables.
+ * Демонстрационный renderer на Java2D (headless). Не требует внешних файлов.
+ * Рисует сетку, рамку, минимальные подписи.
  */
-fun interface TableGeometryProvider {
-    /** Returns rectangle describing table position for [clubId] and [tableId]. */
-    fun geometry(clubId: Long, tableId: Long): Rectangle2D?
+class DefaultHallRenderer : HallRenderer {
+
+    override suspend fun render(
+        clubId: Long,
+        startUtc: String,
+        scale: Double,
+        stateKey: String
+    ): ByteArray = withContext(Dispatchers.Default) {
+        val baseW = 800
+        val baseH = 500
+        val s = if (scale.isFinite() && scale > 0.1) scale else 1.0
+        val w = (baseW * s).toInt()
+        val h = (baseH * s).toInt()
+
+        val img = BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB)
+        val g = img.createGraphics()
+        try {
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+            // фон
+            g.color = Color(15, 17, 21)
+            g.fillRect(0, 0, w, h)
+
+            // сетка
+            g.color = Color(32, 38, 50)
+            val step = (40 * s).toInt().coerceAtLeast(20)
+            var x = 0
+            while (x < w) {
+                g.drawLine(x, 0, x, h)
+                x += step
+            }
+            var y = 0
+            while (y < h) {
+                g.drawLine(0, y, w, y)
+                y += step
+            }
+
+            // рамка зала
+            g.color = Color(96, 165, 250)
+            g.stroke = BasicStroke((3f * s).toFloat())
+            g.drawRect((20 * s).toInt(), (20 * s).toInt(), (w - 40 * s).toInt(), (h - 40 * s).toInt())
+
+            // подписи
+            g.font = Font("SansSerif", Font.BOLD, (18 * s).toInt())
+            g.color = Color(203, 213, 225)
+            g.drawString("Club #$clubId  •  Night: $startUtc", (30 * s).toInt(), (40 * s).toInt())
+            g.font = Font("SansSerif", Font.PLAIN, (14 * s).toInt())
+            g.drawString("state: $stateKey", (30 * s).toInt(), (60 * s).toInt())
+            val ver = System.getenv("HALL_BASE_IMAGE_VERSION") ?: "1"
+            g.drawString("v$ver  •  scale=${"%.1f".format(s)}", (30 * s).toInt(), (80 * s).toInt())
+
+            // легенда
+            val legendY = h - (60 * s).toInt()
+            drawLegend(g, (30 * s).toInt(), legendY, s)
+        } finally {
+            g.dispose()
+        }
+
+        val baos = ByteArrayOutputStream()
+        ImageIO.write(img, "png", baos)
+        baos.toByteArray()
+    }
+
+    private fun drawLegend(g: java.awt.Graphics2D, x: Int, y: Int, s: Double) {
+        val r = (8 * s).toInt()
+        fun dot(cx: Int, cy: Int, color: Color) {
+            g.color = color
+            g.fillOval(cx - r, cy - r, 2 * r, 2 * r)
+        }
+        var cx = x
+        val cy = y
+        g.font = Font("SansSerif", Font.PLAIN, (14 * s).toInt())
+        dot(cx, cy, Color(34, 197, 94))
+        g.color = Color(203, 213, 225)
+        g.drawString("FREE", cx + (14 * s).toInt(), cy + (5 * s).toInt())
+        cx += (80 * s).toInt()
+        dot(cx, cy, Color(234, 179, 8))
+        g.color = Color(203, 213, 225)
+        g.drawString("HOLD", cx + (14 * s).toInt(), cy + (5 * s).toInt())
+        cx += (80 * s).toInt()
+        dot(cx, cy, Color(239, 68, 68))
+        g.color = Color(203, 213, 225)
+        g.drawString("BOOKED", cx + (14 * s).toInt(), cy + (5 * s).toInt())
+    }
 }
