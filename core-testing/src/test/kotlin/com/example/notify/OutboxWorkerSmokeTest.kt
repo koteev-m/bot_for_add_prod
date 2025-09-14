@@ -9,6 +9,7 @@ import com.example.bot.notifications.Permit
 import com.example.bot.notifications.RatePolicy
 import com.example.bot.notifications.TimeSource
 import com.example.bot.telegram.NotifySender
+import com.example.bot.telegram.SendResult
 import com.example.bot.workers.OutboxWorker
 import com.example.testing.support.DbSupport
 import com.example.testing.support.PgContainer
@@ -35,9 +36,9 @@ class OutboxWorkerSmokeTest : PgContainer() {
         runTest {
             val repo = OutboxRepository(database)
             val sender = mockk<NotifySender>()
-            coEvery { sender.sendMessage(any(), any(), any(), any(), any()) } returns NotifySender.Result.Ok
-            coEvery { sender.sendPhoto(any(), any(), any(), any(), any()) } returns NotifySender.Result.Ok
-            coEvery { sender.sendMediaGroup(any(), any(), any()) } returns NotifySender.Result.Ok
+            coEvery { sender.sendMessage(any(), any(), any(), any()) } returns SendResult.Ok(messageId = null)
+            coEvery { sender.sendPhoto(any(), any(), any(), any(), any()) } returns SendResult.Ok(messageId = null)
+            coEvery { sender.sendMediaGroup(any(), any(), any(), any()) } returns SendResult.Ok(messageId = null)
             val policy =
                 object : RatePolicy {
                     override val timeSource: TimeSource =

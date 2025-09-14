@@ -2,6 +2,7 @@ package com.example.bot.notifications
 
 import com.example.bot.data.repo.OutboxRepository
 import com.example.bot.telegram.NotifySender
+import com.example.bot.telegram.SendResult
 import com.example.bot.workers.OutboxWorker
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
@@ -85,14 +86,14 @@ class OutboxRateLimitIT :
             val timestamps = ConcurrentHashMap<Long, MutableList<Long>>()
             val failOnce = AtomicBoolean(false)
             val sender = mockk<NotifySender>()
-            coEvery { sender.sendMessage(any(), any(), any(), any(), any()) } coAnswers {
+            coEvery { sender.sendMessage(any(), any(), any(), any()) } coAnswers {
                 val chat = firstArg<Long>()
                 val now = System.currentTimeMillis()
                 timestamps.computeIfAbsent(chat) { Collections.synchronizedList(mutableListOf()) }.add(now)
                 if (chat == chatA && failOnce.compareAndSet(false, true)) {
-                    NotifySender.Result.RetryAfter(1)
+                    SendResult.RetryAfter(1000)
                 } else {
-                    NotifySender.Result.Ok
+                    SendResult.Ok(messageId = null)
                 }
             }
 

@@ -1,49 +1,48 @@
 package com.example.notifications.support
 
-import com.example.bot.telegram.NotifySender
-import com.pengrad.telegrambot.model.request.Keyboard
-import com.pengrad.telegrambot.model.request.ParseMode
+import com.example.bot.telegram.MediaSpec
+import com.example.bot.telegram.SendResult
 
-/** Simple in-memory fake of [NotifySender] that records sent messages. */
+/** Simple in-memory fake of sender that records sent messages. */
 class FakeNotifySender {
     data class Sent(val timestamp: Long, val chatId: Long, val method: String)
 
     val sent = mutableListOf<Sent>()
-    private val scripted = ArrayDeque<NotifySender.Result>()
+    private val scripted = ArrayDeque<SendResult>()
 
-    fun enqueue(result: NotifySender.Result) {
+    fun enqueue(result: SendResult) {
         scripted.add(result)
     }
 
-    private fun nextResult(): NotifySender.Result = scripted.removeFirstOrNull() ?: NotifySender.Result.Ok
+    private fun nextResult(): SendResult = scripted.removeFirstOrNull() ?: SendResult.Ok(messageId = null)
 
     suspend fun sendMessage(
         chatId: Long,
         text: String,
-        parseMode: ParseMode? = null,
         threadId: Int? = null,
-        buttons: Keyboard? = null,
-    ): NotifySender.Result {
+        dedupKey: String? = null,
+    ): SendResult {
         sent += Sent(System.currentTimeMillis(), chatId, "message")
         return nextResult()
     }
 
     suspend fun sendPhoto(
         chatId: Long,
-        photo: NotifySender.PhotoContent,
+        photoUrlOrFileId: String,
         caption: String? = null,
-        parseMode: ParseMode? = null,
         threadId: Int? = null,
-    ): NotifySender.Result {
+        dedupKey: String? = null,
+    ): SendResult {
         sent += Sent(System.currentTimeMillis(), chatId, "photo")
         return nextResult()
     }
 
     suspend fun sendMediaGroup(
         chatId: Long,
-        media: List<NotifySender.Media>,
+        media: List<MediaSpec>,
         threadId: Int? = null,
-    ): NotifySender.Result {
+        dedupKey: String? = null,
+    ): SendResult {
         sent += Sent(System.currentTimeMillis(), chatId, "mediaGroup")
         return nextResult()
     }
