@@ -78,6 +78,33 @@ Enable verbose logging:
 
 Test reports are generated under `build/reports/tests/test/index.html`.
 
+## Perf smoke
+
+Сборка и запуск:
+```bash
+./gradlew :tools:perf:installDist
+
+# p95 <= 300ms, error-rate <= 1%, 8 воркеров, 30 секунд
+./tools/perf/build/install/perf/bin/perf \
+  --url=http://localhost:8080 \
+  --endpoints=/health,/ready \
+  --workers=8 \
+  --duration-sec=30 \
+  --assert-p95-ms=300 \
+  --max-error-rate=0.01
+
+Таргет RPS (например, 200 RPS суммарно):
+
+./tools/perf/build/install/perf/bin/perf \
+  --url=http://localhost:8080 \
+  --endpoints=/health,/ready \
+  --workers=16 \
+  --duration-sec=30 \
+  --target-rps=200 \
+  --assert-p95-ms=300 \
+  --max-error-rate=0.01
+```
+
 
 ## Local run (Docker)
 

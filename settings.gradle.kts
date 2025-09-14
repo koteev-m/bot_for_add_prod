@@ -15,5 +15,6 @@ include(
     "core-data",
     "core-telemetry",
     "core-security",
-    "core-testing"
+    "core-testing",
+    "tools:perf"
 )
