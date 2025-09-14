@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.JavaExec
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -55,4 +56,11 @@ dependencies {
 
 application {
     mainClass.set("com.example.bot.ApplicationKt")
+}
+
+tasks.register<JavaExec>("runMigrations") {
+    group = "application"
+    description = "Run Flyway migrations using app runtime"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.example.bot.tools.MigrateMainKt")
 }

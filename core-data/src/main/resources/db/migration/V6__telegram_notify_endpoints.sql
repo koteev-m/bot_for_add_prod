@@ -29,15 +29,11 @@ CREATE TABLE IF NOT EXISTS hq_notify (
     system_topic_id INT NULL
 );
 
+COMMENT ON TABLE hq_notify IS 'Telegram notify endpoints for HQ admin chat';
+
+DELETE FROM hq_notify WHERE id = 1;
 INSERT INTO hq_notify (id, chat_id, general_topic_id, bookings_topic_id, lists_topic_id, qa_topic_id, system_topic_id)
-VALUES (1, -1002693051031, 19, 2, 3, 6, 4)
-ON CONFLICT (id) DO UPDATE SET
-    chat_id = EXCLUDED.chat_id,
-    general_topic_id = EXCLUDED.general_topic_id,
-    bookings_topic_id = EXCLUDED.bookings_topic_id,
-    lists_topic_id = EXCLUDED.lists_topic_id,
-    qa_topic_id = EXCLUDED.qa_topic_id,
-    system_topic_id = EXCLUDED.system_topic_id;
+VALUES (1, -1002693051031, 19, 2, 3, 6, 4);
 
 -- Ensure club records exist
 INSERT INTO clubs (name, timezone)

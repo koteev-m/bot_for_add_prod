@@ -10,16 +10,15 @@ import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransacti
 
 data class HqEndpoints(
     val chatId: Long,
-    val generalTopicId: Int?,
-    val bookingsTopicId: Int?,
-    val listsTopicId: Int?,
-    val qaTopicId: Int?,
-    val systemTopicId: Int?,
+    val general: Int?,
+    val bookings: Int?,
+    val lists: Int?,
+    val qa: Int?,
+    val system: Int?,
 )
 
 data class ClubNotify(
-    val id: Int,
-    val name: String,
+    val clubId: Int,
     val adminChatId: Long?,
     val generalTopicId: Int?,
     val bookingsTopicId: Int?,
@@ -51,18 +50,17 @@ class NotifyEndpointRepository(private val db: Database) {
     private fun ResultRow.toHqEndpoints(): HqEndpoints {
         return HqEndpoints(
             chatId = this[HqNotify.chatId],
-            generalTopicId = this[HqNotify.generalTopicId],
-            bookingsTopicId = this[HqNotify.bookingsTopicId],
-            listsTopicId = this[HqNotify.listsTopicId],
-            qaTopicId = this[HqNotify.qaTopicId],
-            systemTopicId = this[HqNotify.systemTopicId],
+            general = this[HqNotify.generalTopicId],
+            bookings = this[HqNotify.bookingsTopicId],
+            lists = this[HqNotify.listsTopicId],
+            qa = this[HqNotify.qaTopicId],
+            system = this[HqNotify.systemTopicId],
         )
     }
 
     private fun ResultRow.toClubNotify(): ClubNotify {
         return ClubNotify(
-            id = this[Clubs.id].value,
-            name = this[Clubs.name],
+            clubId = this[Clubs.id].value,
             adminChatId = this[Clubs.adminChatId],
             generalTopicId = this[Clubs.generalTopicId],
             bookingsTopicId = this[Clubs.bookingsTopicId],
