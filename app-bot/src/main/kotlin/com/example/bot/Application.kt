@@ -1,7 +1,7 @@
 package com.example.bot
 
 import com.example.bot.plugins.installAppConfig
-import com.example.bot.plugins.installHotPathLimiterDefaults
+import com.example.bot.plugins.installRateLimitPluginDefaults
 import com.example.bot.plugins.installMetrics
 import com.example.bot.plugins.installMigrationsAndDatabase
 import com.example.bot.plugins.installRequestLogging
@@ -17,8 +17,8 @@ import io.ktor.server.routing.routing
 fun Application.module() {
     // 0) Тюнинг сервера (лимиты размера запроса и пр.)
     installServerTuning()
-    // 1) Лимиты на «горячие» пути (429 при переполнении)
-    installHotPathLimiterDefaults()
+    // 1) Rate limiting: IP + per-subject (429 при переполнении)
+    installRateLimitPluginDefaults()
     // 2) Migrations + DB (18.3)
     installMigrationsAndDatabase()
     // 3) AppConfig (этот шаг должен идти раньше бизнес-логики)
