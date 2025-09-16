@@ -8,40 +8,43 @@ import java.util.LinkedHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.LongAdder
 
-data class CacheEntry(
-    val etag: String,
-    val bytes: ByteArray,
-    val expiresAt: Instant
-)
+@Suppress("MagicNumber")
+private const val DEFAULT_CACHE_TTL_SECONDS: Long = 60
+
+@Suppress("MagicNumber")
+private const val DEFAULT_CACHE_MAX_ENTRIES: Int = 500
+
+@Suppress("MagicNumber")
+private const val NANOS_IN_MS: Long = 1_000_000
+
+data class CacheEntry(val etag: String, val bytes: ByteArray, val expiresAt: Instant)
 
 /**
  * Простой потокобезопасный TTL + LRU кэш на LinkedHashMap(access-order).
  * Все публичные методы синхронизированы.
  */
-class TtlLruCache<K, V>(
-    private val maxEntries: Int,
-    private val ttl: Duration
-) {
-    private val map: LinkedHashMap<K, Timed<V>> = object : LinkedHashMap<K, Timed<V>>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, Timed<V>>): Boolean {
-            val evict = size > maxEntries
-            if (evict) {
-                HallCacheMetrics.evictions.increment()
+class TtlLruCache<K, V>(private val maxEntries: Int, private val ttl: Duration) {
+    private val map: LinkedHashMap<K, Timed<V>> =
+        object : LinkedHashMap<K, Timed<V>>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, Timed<V>>): Boolean {
+                val evict = size > maxEntries
+                if (evict) {
+                    HallCacheMetrics.evictions.increment()
+                }
+                return evict
             }
-            return evict
         }
-    }
 
     data class Timed<V>(val value: V, val expiresAt: Instant)
 
     @Synchronized
     fun get(key: K): V? {
-        val t = map[key] ?: return null
-        if (Instant.now().isAfter(t.expiresAt)) {
+        val t = map[key]
+        val expired = t != null && Instant.now().isAfter(t.expiresAt)
+        if (expired) {
             map.remove(key)
-            return null
         }
-        return t.value
+        return if (expired) null else t?.value
     }
 
     @Synchronized
@@ -67,14 +70,15 @@ object HallCacheMetrics {
  * Обёртка для работы с кэшем рендера и ETag.
  */
 class HallRenderCache(
-    maxEntries: Int = System.getenv("HALL_CACHE_MAX_ENTRIES")?.toIntOrNull() ?: 500,
-    ttlSeconds: Long = System.getenv("HALL_CACHE_TTL_SECONDS")?.toLongOrNull() ?: 60L
+    maxEntries: Int = System.getenv("HALL_CACHE_MAX_ENTRIES")?.toIntOrNull() ?: DEFAULT_CACHE_MAX_ENTRIES,
+    ttlSeconds: Long = System.getenv("HALL_CACHE_TTL_SECONDS")?.toLongOrNull() ?: DEFAULT_CACHE_TTL_SECONDS,
 ) {
     private val ttl = Duration.ofSeconds(ttlSeconds)
     private val cache = TtlLruCache<String, CacheEntry>(maxEntries, ttl)
 
     sealed interface Result {
         data class NotModified(val etag: String) : Result
+
         data class Ok(val etag: String, val bytes: ByteArray) : Result
     }
 
@@ -82,35 +86,28 @@ class HallRenderCache(
      * Вернёт NotModified если ifNoneMatch совпадает с актуальным etag, иначе Ok с байтами.
      * supplier должен отрисовать новые байты при отсутствии кэша.
      */
-    suspend fun getOrRender(
-        key: String,
-        ifNoneMatch: String?,
-        supplier: suspend () -> ByteArray
-    ): Result {
+    suspend fun getOrRender(key: String, ifNoneMatch: String?, supplier: suspend () -> ByteArray): Result {
         val cached = cache.get(key)
+        val notModified: Boolean
+        val etag: String
+        val bytes: ByteArray
         if (cached != null) {
-            if (ifNoneMatch != null && equalsWeakEtag(ifNoneMatch, cached.etag)) {
-                HallCacheMetrics.hits.increment()
-                return Result.NotModified(cached.etag)
-            }
+            etag = cached.etag
+            notModified = ifNoneMatch != null && equalsWeakEtag(ifNoneMatch, etag)
+            bytes = cached.bytes
             HallCacheMetrics.hits.increment()
-            return Result.Ok(cached.etag, cached.bytes)
+        } else {
+            HallCacheMetrics.misses.increment()
+            val start = System.nanoTime()
+            val freshBytes = supplier.invoke()
+            val tookMs = (System.nanoTime() - start) / NANOS_IN_MS
+            HallCacheMetrics.rendersMs.addAndGet(tookMs)
+            etag = computeEtag(freshBytes)
+            cache.put(key, CacheEntry(etag, freshBytes, Instant.now().plus(ttl)))
+            notModified = ifNoneMatch != null && equalsWeakEtag(ifNoneMatch, etag)
+            bytes = freshBytes
         }
-
-        HallCacheMetrics.misses.increment()
-        val start = System.nanoTime()
-        val bytes = supplier.invoke()
-        val tookMs = (System.nanoTime() - start) / 1_000_000
-        HallCacheMetrics.rendersMs.addAndGet(tookMs)
-
-        val etag = computeEtag(bytes)
-        val entry = CacheEntry(etag = etag, bytes = bytes, expiresAt = Instant.now().plus(ttl))
-        cache.put(key, entry)
-
-        if (ifNoneMatch != null && equalsWeakEtag(ifNoneMatch, etag)) {
-            return Result.NotModified(etag)
-        }
-        return Result.Ok(etag, bytes)
+        return if (notModified) Result.NotModified(etag) else Result.Ok(etag, bytes)
     }
 
     companion object {

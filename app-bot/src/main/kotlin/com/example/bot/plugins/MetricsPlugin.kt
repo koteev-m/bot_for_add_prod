@@ -8,12 +8,15 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
+import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.prometheus.PrometheusConfig
 import io.micrometer.prometheus.PrometheusMeterRegistry
 
 private val prometheusRegistry: PrometheusMeterRegistry by lazy {
     PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
 }
+
+fun meterRegistry(): MeterRegistry = prometheusRegistry
 
 fun Application.installMetrics() {
     install(MicrometerMetrics) {
