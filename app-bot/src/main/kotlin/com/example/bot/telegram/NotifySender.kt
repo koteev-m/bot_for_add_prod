@@ -1,3 +1,5 @@
+@file:Suppress("SpreadOperator")
+
 package com.example.bot.telegram
 
 import com.example.bot.notifications.RatePolicy
@@ -10,24 +12,24 @@ import com.pengrad.telegrambot.request.SendPhoto
 import com.pengrad.telegrambot.response.BaseResponse
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
+import kotlinx.coroutines.delay
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.ceil
 import kotlin.math.min
-import kotlinx.coroutines.delay
 
 sealed interface SendResult {
     data class Ok(val messageId: Long?, val already: Boolean = false) : SendResult
+
     data class RetryAfter(val retryAfterMs: Long) : SendResult
+
     data class RetryableError(val message: String) : SendResult
+
     data class PermanentError(val message: String) : SendResult
 }
 
-data class MediaSpec(
-    val fileIdOrUrl: String,
-    val caption: String? = null,
-)
+data class MediaSpec(val fileIdOrUrl: String, val caption: String? = null)
 
 object NotifyMetrics {
     val ok: AtomicLong = AtomicLong()
@@ -45,16 +47,12 @@ class NotifySender(
     private val maxBackoffMs: Long = 15_000,
     private val jitterMs: Long = 100,
 ) {
-    private val timer: Timer? = registry?.let {
-        Timer.builder("tg.send.duration.ms").publishPercentiles(0.5, 0.95).register(it)
-    }
+    private val timer: Timer? =
+        registry?.let {
+            Timer.builder("tg.send.duration.ms").publishPercentiles(0.5, 0.95).register(it)
+        }
 
-    suspend fun sendMessage(
-        chatId: Long,
-        text: String,
-        threadId: Int? = null,
-        dedupKey: String? = null,
-    ): SendResult {
+    suspend fun sendMessage(chatId: Long, text: String, threadId: Int? = null, dedupKey: String? = null): SendResult {
         val req = SendMessage(chatId, text)
         threadId?.let { req.messageThreadId(it) }
         return execute(req, chatId, dedupKey)
@@ -79,15 +77,21 @@ class NotifySender(
         threadId: Int? = null,
         dedupKey: String? = null,
     ): SendResult {
-        val arr = media.map { m ->
-            val im = InputMediaPhoto(m.fileIdOrUrl)
-            m.caption?.let { im.caption(it) }
-            im
-        }.toTypedArray()
+        val arr =
+            media
+                .map { m ->
+                    val im = InputMediaPhoto(m.fileIdOrUrl)
+                    m.caption?.let { im.caption(it) }
+                    im
+                }.toTypedArray()
         val req = SendMediaGroup(chatId, *arr)
         if (threadId != null) {
             try {
-                SendMediaGroup::class.java.getMethod("messageThreadId", Int::class.javaPrimitiveType).invoke(req, threadId)
+                SendMediaGroup::class.java
+                    .getMethod(
+                        "messageThreadId",
+                        Int::class.javaPrimitiveType,
+                    ).invoke(req, threadId)
             } catch (_: Throwable) {
                 // ignore
             }
@@ -132,18 +136,19 @@ class NotifySender(
             }
 
             val start = System.nanoTime()
-            val resp = try {
-                bot.execute(request)
-            } catch (t: Throwable) {
-                timer?.record(System.nanoTime() - start, TimeUnit.NANOSECONDS)
-                if (attempt >= maxAttempts) {
-                    incRetryable()
-                    return SendResult.RetryableError("IO error: ${t.message}")
+            val resp =
+                try {
+                    bot.execute(request)
+                } catch (t: Throwable) {
+                    timer?.record(System.nanoTime() - start, TimeUnit.NANOSECONDS)
+                    if (attempt >= maxAttempts) {
+                        incRetryable()
+                        return SendResult.RetryableError("IO error: ${t.message}")
+                    }
+                    delay(backoffDelay(attempt))
+                    attempt++
+                    continue
                 }
-                delay(backoffDelay(attempt))
-                attempt++
-                continue
-            }
             timer?.record(System.nanoTime() - start, TimeUnit.NANOSECONDS)
 
             if (resp.isOk) {
@@ -212,4 +217,3 @@ class NotifySender(
             ?: NotifyMetrics.permanent.incrementAndGet()
     }
 }
-

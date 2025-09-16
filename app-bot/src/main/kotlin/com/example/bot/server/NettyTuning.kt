@@ -8,15 +8,17 @@ import io.ktor.server.request.header
 import io.ktor.server.request.receiveChannel
 import io.ktor.server.response.respondText
 import io.ktor.util.pipeline.PipelineContext
-import java.util.concurrent.Executors
-import java.util.concurrent.ThreadFactory
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.withContext
-import kotlin.io.DEFAULT_BUFFER_SIZE
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.core.readBytes
 import io.ktor.utils.io.readRemaining
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.withContext
+import java.util.concurrent.Executors
+import java.util.concurrent.ThreadFactory
+import kotlin.io.DEFAULT_BUFFER_SIZE
+
+private const val DEFAULT_MAX_REQUEST_SIZE_BYTES = 2L * 1024 * 1024
 
 /**
  * Dispatcher для CPU/рендер-операций (ограниченный пул).
@@ -26,20 +28,25 @@ object PerfDispatchers {
     val cpu: CoroutineDispatcher by lazy {
         val cores = Runtime.getRuntime().availableProcessors()
         val size = System.getenv("CPU_POOL_SIZE")?.toIntOrNull()?.coerceAtLeast(1) ?: cores
-        val tf = ThreadFactory { r ->
-            Thread(r, "cpu-dispatcher-${System.nanoTime()}").apply { isDaemon = true }
-        }
+        val tf =
+            ThreadFactory { r ->
+                Thread(r, "cpu-dispatcher-${System.nanoTime()}").apply { isDaemon = true }
+            }
         Executors.newFixedThreadPool(size, tf).asCoroutineDispatcher()
     }
 }
 
 /**
- * Установить безопасные таймауты/лимиты HTTP на уровне приложения.
- * Примечание: engine-специфичные настройки Netty (idle/read/write) обычно задаются в application.conf;
- * здесь — проверка максимального размера запроса и быстрый 413 по Content-Length.
+ * Установить безопасные лимиты HTTP на уровне приложения.
+ *
+ * @param maxRequestSizeBytes максимальный размер тела запроса в байтах
+ * Примечание: engine-таймауты Netty (idle/read/write) настраиваются в application.conf;
+ * здесь реализован fast-fail по Content-Length → 413.
  */
 fun Application.installServerTuning(
-    maxRequestSizeBytes: Long = System.getenv("MAX_REQUEST_SIZE_BYTES")?.toLongOrNull() ?: 2L * 1024 * 1024 // 2 MiB
+    maxRequestSizeBytes: Long =
+        System.getenv("MAX_REQUEST_SIZE_BYTES")?.toLongOrNull()
+            ?: DEFAULT_MAX_REQUEST_SIZE_BYTES,
 ) {
     intercept(ApplicationCallPipeline.Setup) {
         val clHeader = call.request.header("Content-Length")
@@ -47,7 +54,7 @@ fun Application.installServerTuning(
         if (length != null && length > maxRequestSizeBytes) {
             call.respondText(
                 text = "Payload too large",
-                status = HttpStatusCode.PayloadTooLarge
+                status = HttpStatusCode.PayloadTooLarge,
             )
             finish()
         }
@@ -59,13 +66,13 @@ fun Application.installServerTuning(
  * Если Content-Length отсутствует, можно дополнительно подсчитать фактический размер (при необходимости).
  */
 suspend fun PipelineContext<Unit, io.ktor.server.application.ApplicationCall>.safeReceiveBytes(
-    maxRequestSizeBytes: Long
+    maxRequestSizeBytes: Long,
 ): ByteArray? {
     val clHeader = call.request.header("Content-Length")?.toLongOrNull()
     if (clHeader != null && clHeader > maxRequestSizeBytes) {
         call.respondText(
             text = "Payload too large",
-            status = HttpStatusCode.PayloadTooLarge
+            status = HttpStatusCode.PayloadTooLarge,
         )
         return null
     }
@@ -78,4 +85,3 @@ suspend fun PipelineContext<Unit, io.ktor.server.application.ApplicationCall>.sa
 private suspend fun ByteReadChannel.toByteArray(): ByteArray {
     return readRemaining(DEFAULT_BUFFER_SIZE.toLong()).readBytes()
 }
-

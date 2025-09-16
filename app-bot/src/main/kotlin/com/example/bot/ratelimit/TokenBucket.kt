@@ -12,14 +12,12 @@ import kotlin.math.min
  *  - capacity: максимум токенов (burst)
  *  - refillPerSec: скорость пополнения в токенах/сек
  */
-class TokenBucket(
-    capacity: Double,
-    refillPerSec: Double,
-    nowNanos: Long = System.nanoTime()
-) {
+class TokenBucket(capacity: Double, refillPerSec: Double, nowNanos: Long = System.nanoTime()) {
     private val capacity = capacity.coerceAtLeast(1.0)
     private val refillPerSec = refillPerSec.coerceAtLeast(0.1)
+
     @Volatile private var tokens: Double = this.capacity
+
     @Volatile private var lastRefillNs: Long = nowNanos
 
     /**
@@ -50,26 +48,25 @@ class TokenBucket(
 /**
  * Хранилище subject-бакетов с TTL (удаляем неиспользуемые).
  */
-class SubjectBucketStore(
-    private val capacity: Double,
-    private val refillPerSec: Double,
-    private val ttl: Duration
-) {
+class SubjectBucketStore(private val capacity: Double, private val refillPerSec: Double, private val ttl: Duration) {
     private data class Entry(val bucket: TokenBucket, @Volatile var lastSeen: Instant)
+
     private val map = ConcurrentHashMap<String, Entry>()
-    private val _size = AtomicLong(0)
+    private val sizeCounter = AtomicLong(0)
 
     fun tryAcquire(subjectKey: String): Boolean {
         val now = Instant.now()
-        val entry = map.compute(subjectKey) { _, old ->
-            val e = if (old == null) {
-                Entry(TokenBucket(capacity, refillPerSec), now).also { _size.incrementAndGet() }
-            } else {
-                old.lastSeen = now
-                old
-            }
-            e
-        }!!
+        val entry =
+            map.compute(subjectKey) { _, old ->
+                val e =
+                    if (old == null) {
+                        Entry(TokenBucket(capacity, refillPerSec), now).also { sizeCounter.incrementAndGet() }
+                    } else {
+                        old.lastSeen = now
+                        old
+                    }
+                e
+            }!!
         val ok = entry.bucket.tryAcquire()
         if (!ok) {
             cleanupIfNeeded(now)
@@ -77,7 +74,7 @@ class SubjectBucketStore(
         return ok
     }
 
-    fun size(): Long = _size.get()
+    fun size(): Long = sizeCounter.get()
 
     private fun cleanupIfNeeded(now: Instant) {
         // Ленивая очистка: если карта разрослась, удалим протухшие
@@ -89,8 +86,7 @@ class SubjectBucketStore(
             }
         }
         if (removed > 0) {
-            _size.addAndGet(-removed.toLong())
+            sizeCounter.addAndGet(-removed.toLong())
         }
     }
 }
-

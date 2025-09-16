@@ -5,8 +5,8 @@ import com.example.bot.ratelimit.TokenBucket
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
-import io.ktor.server.application.createApplicationPlugin
 import io.ktor.server.application.call
+import io.ktor.server.application.createApplicationPlugin
 import io.ktor.server.application.install
 import io.ktor.server.request.header
 import io.ktor.server.request.host
@@ -32,11 +32,12 @@ class RateLimitConfig {
     var subjectRps: Double = (System.getenv("RL_SUBJECT_RPS")?.toDoubleOrNull() ?: 60.0)
     var subjectBurst: Double = (System.getenv("RL_SUBJECT_BURST")?.toDoubleOrNull() ?: 20.0)
     var subjectTtlSeconds: Long = (System.getenv("RL_SUBJECT_TTL_SECONDS")?.toLongOrNull() ?: 600L)
-    var subjectPathPrefixes: List<String> = listOf(
-        "/webhook",
-        "/api/bookings/confirm",
-        "/api/guest-lists/import"
-    )
+    var subjectPathPrefixes: List<String> =
+        listOf(
+            "/webhook",
+            "/api/bookings/confirm",
+            "/api/guest-lists/import",
+        )
 
     /**
      * Извлекает ключ для subject-лимитера (например, chatId).
@@ -64,50 +65,53 @@ private fun String?.toBooleanStrictOrNull(): Boolean? = when (this?.lowercase())
     else -> null
 }
 
-val RateLimitPlugin = createApplicationPlugin(name = "RateLimitPlugin", createConfiguration = ::RateLimitConfig) {
-    val cfg = pluginConfig
+val RateLimitPlugin =
+    createApplicationPlugin(name = "RateLimitPlugin", createConfiguration = ::RateLimitConfig) {
+        val cfg = pluginConfig
 
-    val ipBuckets = ConcurrentHashMap<String, TokenBucket>()
+        val ipBuckets = ConcurrentHashMap<String, TokenBucket>()
 
-    val subjectStore = SubjectBucketStore(
-        capacity = cfg.subjectBurst,
-        refillPerSec = cfg.subjectRps,
-        ttl = Duration.ofSeconds(cfg.subjectTtlSeconds)
-    )
+        val subjectStore =
+            SubjectBucketStore(
+                capacity = cfg.subjectBurst,
+                refillPerSec = cfg.subjectRps,
+                ttl = Duration.ofSeconds(cfg.subjectTtlSeconds),
+            )
 
-    onCall { call ->
-        val path = call.request.path()
+        onCall { call ->
+            val path = call.request.path()
 
-        // 1) IP limiting
-        if (cfg.ipEnabled) {
-            val ip = clientIp(call)
-            val bucket = ipBuckets.computeIfAbsent(ip) {
-                TokenBucket(capacity = cfg.ipBurst, refillPerSec = cfg.ipRps)
-            }
-            if (!bucket.tryAcquire()) {
-                RateLimitMetrics.ipBlocked.incrementAndGet()
-                call.response.header(HttpHeaders.RetryAfter, cfg.retryAfterSeconds.toString())
-                call.respondText("Too Many Requests (IP limit)", status = HttpStatusCode.TooManyRequests)
-                return@onCall
-            }
-        }
-
-        // 2) Subject limiting
-        if (cfg.subjectEnabled && cfg.subjectPathPrefixes.any { path.startsWith(it) }) {
-            val key = cfg.subjectKeyExtractor(call)
-            if (key != null) {
-                val ok = subjectStore.tryAcquire(key)
-                RateLimitMetrics.subjectStoreSize.set(subjectStore.size())
-                if (!ok) {
-                    RateLimitMetrics.subjectBlocked.incrementAndGet()
+            // 1) IP limiting
+            if (cfg.ipEnabled) {
+                val ip = clientIp(call)
+                val bucket =
+                    ipBuckets.computeIfAbsent(ip) {
+                        TokenBucket(capacity = cfg.ipBurst, refillPerSec = cfg.ipRps)
+                    }
+                if (!bucket.tryAcquire()) {
+                    RateLimitMetrics.ipBlocked.incrementAndGet()
                     call.response.header(HttpHeaders.RetryAfter, cfg.retryAfterSeconds.toString())
-                    call.respondText("Too Many Requests (subject limit)", status = HttpStatusCode.TooManyRequests)
+                    call.respondText("Too Many Requests (IP limit)", status = HttpStatusCode.TooManyRequests)
                     return@onCall
+                }
+            }
+
+            // 2) Subject limiting
+            if (cfg.subjectEnabled && cfg.subjectPathPrefixes.any { path.startsWith(it) }) {
+                val key = cfg.subjectKeyExtractor(call)
+                if (key != null) {
+                    val ok = subjectStore.tryAcquire(key)
+                    RateLimitMetrics.subjectStoreSize.set(subjectStore.size())
+                    if (!ok) {
+                        RateLimitMetrics.subjectBlocked.incrementAndGet()
+                        call.response.header(HttpHeaders.RetryAfter, cfg.retryAfterSeconds.toString())
+                        call.respondText("Too Many Requests (subject limit)", status = HttpStatusCode.TooManyRequests)
+                        return@onCall
+                    }
                 }
             }
         }
     }
-}
 
 private fun clientIp(call: io.ktor.server.application.ApplicationCall): String {
     val xff = call.request.header("X-Forwarded-For")
@@ -125,6 +129,8 @@ private fun clientIp(call: io.ktor.server.application.ApplicationCall): String {
 fun Application.installRateLimitPluginDefaults() {
     install(RateLimitPlugin) {
         // настройки уже берутся из ENV; путь и extractor можно переопределить при необходимости
+        // subjectKeyExtractor = { call ->
+        //     call.request.header("X-Telegram-Chat-Id") ?: call.request.queryParameters["chatId"]
+        // }
     }
 }
-

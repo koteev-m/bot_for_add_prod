@@ -1,10 +1,12 @@
 package com.example.bot
 
+import com.example.bot.metrics.AppMetricsBinder
 import com.example.bot.plugins.installAppConfig
 import com.example.bot.plugins.installMetrics
 import com.example.bot.plugins.installMigrationsAndDatabase
 import com.example.bot.plugins.installRateLimitPluginDefaults
 import com.example.bot.plugins.installRequestLogging
+import com.example.bot.plugins.meterRegistry
 import com.example.bot.render.DefaultHallRenderer
 import com.example.bot.routes.hallImageRoute
 import com.example.bot.routes.healthRoute
@@ -23,6 +25,12 @@ import io.ktor.server.routing.routing
 
 @Suppress("unused")
 fun Application.module() {
+    // demo constants (чтобы не было «магических» чисел)
+    val demoStateKey = "v1"
+    val demoClubId = 1L
+    val demoStartUtc = "2025-12-31T22:00:00Z"
+    val demoTableIds = listOf(101L, 102L, 103L)
+
     // 0) Тюнинг сервера (лимиты размера запроса и пр.)
     installServerTuning()
     // 1) Rate limiting: IP + per-subject (429 при переполнении)
@@ -34,12 +42,13 @@ fun Application.module() {
     // 4) Observability (18.4)
     installRequestLogging()
     installMetrics()
+    AppMetricsBinder.bindAll(meterRegistry())
     // 5) Routes
     val renderer = DefaultHallRenderer()
     routing {
         healthRoute()
         readinessRoute()
-        hallImageRoute(renderer) { _, _ -> "v1" }
+        hallImageRoute(renderer) { _, _ -> demoStateKey }
         // … остальные маршруты приложения
     }
 
@@ -48,26 +57,30 @@ fun Application.module() {
     val bot = TelegramBot(telegramToken)
     val ottService = CallbackTokenService()
     val callbackHandler = CallbackQueryHandler(bot, ottService)
-    bot.setUpdatesListener(object : UpdatesListener {
-        override fun process(updates: MutableList<Update>?): Int {
-            if (updates == null) return UpdatesListener.CONFIRMED_UPDATES_ALL
-            for (u in updates) {
-                if (u.callbackQuery() != null) {
-                    callbackHandler.handle(u)
-                } else if (u.message() != null && u.message().text() == "/demo") {
-                    val chatId = u.message().chat().id()
-                    val kb = KeyboardFactory.tableKeyboard(
-                        service = ottService,
-                        items = listOf(
-                            "Стол 101" to BookTableAction(1L, "2025-12-31T22:00:00Z", 101L),
-                            "Стол 102" to BookTableAction(1L, "2025-12-31T22:00:00Z", 102L),
-                            "Стол 103" to BookTableAction(1L, "2025-12-31T22:00:00Z", 103L)
-                        )
-                    )
-                    bot.execute(SendMessage(chatId, "Выберите стол:").replyMarkup(kb))
+    bot.setUpdatesListener(
+        object : UpdatesListener {
+            override fun process(updates: MutableList<Update>?): Int {
+                if (updates == null) return UpdatesListener.CONFIRMED_UPDATES_ALL
+                for (u in updates) {
+                    if (u.callbackQuery() != null) {
+                        callbackHandler.handle(u)
+                    } else if (u.message() != null && u.message().text() == "/demo") {
+                        val chatId = u.message().chat().id()
+                        val kb =
+                            KeyboardFactory.tableKeyboard(
+                                service = ottService,
+                                items =
+                                listOf(
+                                    "Стол 101" to BookTableAction(demoClubId, demoStartUtc, demoTableIds[0]),
+                                    "Стол 102" to BookTableAction(demoClubId, demoStartUtc, demoTableIds[1]),
+                                    "Стол 103" to BookTableAction(demoClubId, demoStartUtc, demoTableIds[2]),
+                                ),
+                            )
+                        bot.execute(SendMessage(chatId, "Выберите стол:").replyMarkup(kb))
+                    }
                 }
+                return UpdatesListener.CONFIRMED_UPDATES_ALL
             }
-            return UpdatesListener.CONFIRMED_UPDATES_ALL
-        }
-    })
+        },
+    )
 }

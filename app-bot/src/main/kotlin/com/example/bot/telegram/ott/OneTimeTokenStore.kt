@@ -14,11 +14,7 @@ import kotlin.math.min
 sealed interface OttPayload
 
 /** Пример payload’а: действие «забронировать стол». */
-data class BookTableAction(
-    val clubId: Long,
-    val startUtc: String,
-    val tableId: Long
-) : OttPayload
+data class BookTableAction(val clubId: Long, val startUtc: String, val tableId: Long) : OttPayload
 
 /** Простейшие метрики стора. */
 object OttMetrics {
@@ -31,7 +27,9 @@ object OttMetrics {
 /** API стора: issue — выдать новый токен; consume — атомарно получить payload и удалить. */
 interface OneTimeTokenStore {
     fun issue(payload: OttPayload): String
+
     fun consume(token: String): OttPayload?
+
     fun size(): Int
 }
 
@@ -43,7 +41,7 @@ interface OneTimeTokenStore {
  */
 class InMemoryOneTimeTokenStore(
     ttlSeconds: Long = System.getenv("OTT_TTL_SECONDS")?.toLongOrNull() ?: 300L,
-    maxEntries: Int = System.getenv("OTT_MAX_ENTRIES")?.toIntOrNull() ?: 100_000
+    maxEntries: Int = System.getenv("OTT_MAX_ENTRIES")?.toIntOrNull() ?: 100_000,
 ) : OneTimeTokenStore {
 
     private data class Entry(val payload: OttPayload, val expiresAt: Instant)
@@ -53,6 +51,7 @@ class InMemoryOneTimeTokenStore(
 
     private val map = ConcurrentHashMap<String, Entry>(16, 0.75f, 4)
     private val order = ConcurrentLinkedQueue<String>() // упрощённое LRU по порядку вставки
+    private val cleanupThreshold = min(10_000, this.maxEntries / 2)
 
     // CSPRNG для токенов
     private val random = SecureRandom()
@@ -70,10 +69,11 @@ class InMemoryOneTimeTokenStore(
 
     override fun consume(token: String): OttPayload? {
         cleanupIfNeeded()
-        val entry = map.remove(token) ?: run {
-            OttMetrics.replayed.incrementAndGet()
-            return null
-        }
+        val entry =
+            map.remove(token) ?: run {
+                OttMetrics.replayed.incrementAndGet()
+                return null
+            }
         OttMetrics.storeSize.set(map.size)
         return if (Instant.now().isAfter(entry.expiresAt)) {
             // истёк — считаем как replay/просрочку
@@ -98,27 +98,29 @@ class InMemoryOneTimeTokenStore(
     }
 
     private fun cleanupIfNeeded() {
-        // Простая эвикция по переполнению
+        if (map.isEmpty()) return
+        evictOverflowIfAny()
+        evictExpiredIfLarge()
+    }
+
+    /** Эвикция при переполнении (упрощённое LRU по порядку вставки). */
+    private fun evictOverflowIfAny() {
         while (map.size > maxEntries) {
-            val victim = order.poll() ?: break
+            val victim = order.poll() ?: return
             map.remove(victim)
         }
-        // Ленивая TTL-очистка при большом размере
-        if (map.size > min(10_000, maxEntries / 2)) {
-            val now = Instant.now()
-            var removed = 0
-            for (k in order) {
-                val e = map[k] ?: continue
-                if (now.isAfter(e.expiresAt)) {
-                    if (map.remove(k, e)) {
-                        removed++
-                    }
-                }
-            }
-            if (removed > 0) {
-                OttMetrics.storeSize.set(map.size)
-            }
+        OttMetrics.storeSize.set(map.size)
+    }
+
+    /** Ленивая TTL-очистка при заметном росте. */
+    private fun evictExpiredIfLarge() {
+        if (map.size <= cleanupThreshold) return
+        val now = Instant.now()
+        var removed = 0
+        for (k in order) {
+            val e = map[k] ?: continue
+            if (now.isAfter(e.expiresAt) && map.remove(k, e)) removed++
         }
+        if (removed > 0) OttMetrics.storeSize.set(map.size)
     }
 }
-
