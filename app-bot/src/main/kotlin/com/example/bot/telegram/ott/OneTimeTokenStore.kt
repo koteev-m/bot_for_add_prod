@@ -1,5 +1,6 @@
 package com.example.bot.telegram.ott
 
+import com.example.bot.config.BotLimits
 import java.security.SecureRandom
 import java.time.Duration
 import java.time.Instant
@@ -40,18 +41,22 @@ interface OneTimeTokenStore {
  *  - Потокобезопасность: ConcurrentHashMap + lock-free очереди.
  */
 class InMemoryOneTimeTokenStore(
-    ttlSeconds: Long = System.getenv("OTT_TTL_SECONDS")?.toLongOrNull() ?: 300L,
-    maxEntries: Int = System.getenv("OTT_MAX_ENTRIES")?.toIntOrNull() ?: 100_000,
+    ttlSeconds: Long =
+        System.getenv("OTT_TTL_SECONDS")?.toLongOrNull() ?: BotLimits.ottTokenTtl.seconds,
+    maxEntries: Int = System.getenv("OTT_MAX_ENTRIES")?.toIntOrNull() ?: BotLimits.ottMaxEntries,
 ) : OneTimeTokenStore {
 
     private data class Entry(val payload: OttPayload, val expiresAt: Instant)
 
-    private val ttl: Duration = Duration.ofSeconds(ttlSeconds.coerceAtLeast(30))
-    private val maxEntries: Int = maxEntries.coerceAtLeast(1)
+    private val ttl: Duration =
+        Duration.ofSeconds(ttlSeconds).let { duration ->
+            if (duration < BotLimits.ottTokenMinTtl) BotLimits.ottTokenMinTtl else duration
+        }
+    private val maxEntries: Int = maxEntries.coerceAtLeast(BotLimits.ottMinEntries)
 
     private val map = ConcurrentHashMap<String, Entry>(16, 0.75f, 4)
     private val order = ConcurrentLinkedQueue<String>() // упрощённое LRU по порядку вставки
-    private val cleanupThreshold = min(10_000, this.maxEntries / 2)
+    private val cleanupThreshold = min(BotLimits.ottCleanupAbsoluteThreshold, this.maxEntries / 2)
 
     // CSPRNG для токенов
     private val random = SecureRandom()
@@ -89,12 +94,18 @@ class InMemoryOneTimeTokenStore(
 
     private fun generateToken(): String {
         // 16–24 байта энтропии → base64url без паддинга; длина < 64
-        val len = 20 + random.nextInt(5) // 20..24
+        val extraBytes =
+            BotLimits.ottTokenExtraBytesRange.first + random.nextInt(BotLimits.ottTokenExtraBytesRange.count())
+        val len = BotLimits.ottTokenBaseBytes + extraBytes
         val bytes = ByteArray(len)
         random.nextBytes(bytes)
         val b64 = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
         // страховка на редкий случай длинее 64 (не случится при выбранных размерах)
-        return if (b64.length <= 64) b64 else b64.substring(0, 64)
+        return if (b64.length <= BotLimits.ottTokenMaxBase64Length) {
+            b64
+        } else {
+            b64.substring(0, BotLimits.ottTokenMaxBase64Length)
+        }
     }
 
     private fun cleanupIfNeeded() {

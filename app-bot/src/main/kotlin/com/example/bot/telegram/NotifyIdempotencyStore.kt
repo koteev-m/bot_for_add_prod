@@ -1,5 +1,6 @@
 package com.example.bot.telegram
 
+import com.example.bot.config.BotLimits
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
@@ -11,7 +12,9 @@ interface NotifyIdempotencyStore {
 }
 
 class InMemoryNotifyIdempotencyStore(
-    ttl: Duration = Duration.ofHours(System.getenv("NOTIFY_IDEMPOTENCY_TTL_HOURS")?.toLongOrNull() ?: 24L)
+    ttl: Duration =
+        System.getenv("NOTIFY_IDEMPOTENCY_TTL_HOURS")?.toLongOrNull()?.let(Duration::ofHours)
+            ?: BotLimits.notifyIdempotencyTtl,
 ) : NotifyIdempotencyStore {
 
     private data class Entry(val timestamp: Instant)
@@ -36,7 +39,7 @@ class InMemoryNotifyIdempotencyStore(
     }
 
     private fun cleanupIfNeeded() {
-        if (map.size <= 50_000 || !cleaning.compareAndSet(false, true)) return
+        if (map.size <= BotLimits.notifyIdempotencyCleanupSize || !cleaning.compareAndSet(false, true)) return
         val now = Instant.now()
         try {
             map.entries.removeIf { now.isAfter(it.value.timestamp.plus(ttl)) }
