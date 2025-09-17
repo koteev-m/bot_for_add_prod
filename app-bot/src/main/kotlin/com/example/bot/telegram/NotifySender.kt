@@ -2,6 +2,7 @@
 
 package com.example.bot.telegram
 
+import com.example.bot.config.BotLimits
 import com.example.bot.notifications.RatePolicy
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.request.InputMediaPhoto
@@ -10,14 +11,14 @@ import com.pengrad.telegrambot.request.SendMediaGroup
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.request.SendPhoto
 import com.pengrad.telegrambot.response.BaseResponse
+import io.ktor.http.HttpStatusCode
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.delay
+import java.time.Duration
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.math.ceil
-import kotlin.math.min
 
 sealed interface SendResult {
     data class Ok(val messageId: Long?, val already: Boolean = false) : SendResult
@@ -43,14 +44,22 @@ class NotifySender(
     private val ratePolicy: RatePolicy,
     private val idempotency: NotifyIdempotencyStore = InMemoryNotifyIdempotencyStore(),
     private val registry: MeterRegistry? = null,
-    private val baseBackoffMs: Long = 500,
-    private val maxBackoffMs: Long = 15_000,
-    private val jitterMs: Long = 100,
+    private val baseBackoffMs: Long = BotLimits.notifySendBaseBackoff.toMillis(),
+    private val maxBackoffMs: Long = BotLimits.notifySendMaxBackoff.toMillis(),
+    private val jitterMs: Long = BotLimits.notifySendJitter.toMillis(),
 ) {
     private val timer: Timer? =
         registry?.let {
-            Timer.builder("tg.send.duration.ms").publishPercentiles(0.5, 0.95).register(it)
+            Timer
+                .builder("tg.send.duration.ms")
+                .publishPercentiles(*BotLimits.notifyDurationPercentiles)
+                .register(it)
         }
+
+    private val baseBackoff: Duration = Duration.ofMillis(baseBackoffMs)
+    private val maxBackoff: Duration = Duration.ofMillis(maxBackoffMs)
+    private val jitter: Duration = Duration.ofMillis(jitterMs)
+    private val maxAttempts: Int = BotLimits.notifySendMaxAttempts
 
     suspend fun sendMessage(chatId: Long, text: String, threadId: Int? = null, dedupKey: String? = null): SendResult {
         val req = SendMessage(chatId, text)
@@ -121,7 +130,6 @@ class NotifySender(
         }
 
         var attempt = 0
-        val maxAttempts = 3
         while (true) {
             val now = System.currentTimeMillis()
             val g = ratePolicy.acquireGlobal(now = now)
@@ -160,14 +168,20 @@ class NotifySender(
             val code = resp.errorCode()
             val desc = resp.description() ?: "unknown"
             val retryAfterSec = resp.parameters()?.retryAfter()
+            val hasRetryAfter = retryAfterSec != null && retryAfterSec > 0
             when {
-                code == 429 || (retryAfterSec != null && retryAfterSec > 0) -> {
-                    val retryMs = ((retryAfterSec ?: 1)).toLong() * 1000L
+                code == HttpStatusCode.TooManyRequests.value || hasRetryAfter -> {
+                    val retryAfterDuration =
+                        when {
+                            hasRetryAfter -> Duration.ofSeconds(retryAfterSec!!.toLong())
+                            else -> BotLimits.notifyRetryAfterFallback
+                        }
+                    val retryMs = retryAfterDuration.toMillis()
                     ratePolicy.on429(chatId, retryMs)
                     incRetryAfter(retryMs)
                     return SendResult.RetryAfter(retryMs)
                 }
-                code in 500..599 -> {
+                isServerError(code) -> {
                     if (attempt >= maxAttempts) {
                         incRetryable()
                         return SendResult.RetryableError("code=$code desc=$desc")
@@ -176,7 +190,7 @@ class NotifySender(
                     attempt++
                     continue
                 }
-                code == 400 || code == 403 -> {
+                code == HttpStatusCode.BadRequest.value || code == HttpStatusCode.Forbidden.value -> {
                     incPermanent()
                     return SendResult.PermanentError("code=$code desc=$desc")
                 }
@@ -189,11 +203,13 @@ class NotifySender(
     }
 
     private fun backoffDelay(attempt: Int): Long {
-        val exp = 1L shl attempt.coerceAtMost(20)
-        val base = baseBackoffMs * exp
-        val capped = min(base, maxBackoffMs)
-        val jitter = ThreadLocalRandom.current().nextLong(jitterMs + 1)
-        return capped + jitter
+        val shift = attempt.coerceAtMost(BotLimits.notifyBackoffMaxShift)
+        val multiplier = 1L shl shift
+        val exponential = baseBackoff.multipliedBy(multiplier)
+        val capped = if (exponential > maxBackoff) maxBackoff else exponential
+        val jitterBoundExclusive = jitter.toMillis() + 1
+        val jitterMillis = ThreadLocalRandom.current().nextLong(jitterBoundExclusive)
+        return capped.toMillis() + jitterMillis
     }
 
     private fun incOk(already: Boolean) {
@@ -202,7 +218,9 @@ class NotifySender(
     }
 
     private fun incRetryAfter(retryAfterMs: Long) {
-        val sec = ceil(retryAfterMs / 1000.0).toLong().toString()
+        val duration = Duration.ofMillis(retryAfterMs)
+        val secondsRoundedUp = duration.seconds + if (duration.nano > 0) 1 else 0
+        val sec = secondsRoundedUp.toString()
         registry?.counter("tg.send.retry_after", "retry_after_seconds", sec)?.increment()
             ?: NotifyMetrics.retryAfter.incrementAndGet()
     }
@@ -217,3 +235,8 @@ class NotifySender(
             ?: NotifyMetrics.permanent.incrementAndGet()
     }
 }
+
+@Suppress("MagicNumber") // Верхняя граница диапазона HTTP 5xx.
+private val SERVER_ERROR_RANGE: IntRange = HttpStatusCode.InternalServerError.value..599
+
+private fun isServerError(code: Int): Boolean = code in SERVER_ERROR_RANGE
