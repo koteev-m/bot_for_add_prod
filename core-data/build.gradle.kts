@@ -1,8 +1,8 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    kotlin("jvm") version "2.2.10"
-    alias(libs.plugins.kotlin.serialization)
+    kotlin("jvm")
+    kotlin("plugin.serialization")
     id("org.flywaydb.flyway") version "10.16.0"
 }
 

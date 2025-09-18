@@ -1,21 +1,19 @@
 package com.example.bot.plugins
 
+import com.example.bot.config.BotLimits
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.createApplicationPlugin
 import io.ktor.server.application.call
 import io.ktor.server.application.install
 import io.ktor.server.request.path
+import io.ktor.server.response.ApplicationSendPipeline
 import io.ktor.server.response.header
 import io.ktor.server.response.respondText
-import io.ktor.server.response.ApplicationSendPipeline
+import java.time.Duration
 import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
-
-private const val MIN_CONFIG_PARALLELISM = 2
-private const val MIN_ENV_PARALLELISM = 4
-private const val DEFAULT_RETRY_AFTER_SECONDS = 1
 
 /**
  * Конфигурация плагина лимитирования «горячих» путей.
@@ -29,7 +27,9 @@ class HotPathLimiterConfig {
     /**
      * Максимум параллельных обработок для каждого совпадающего пути.
      */
-    var maxConcurrent: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(MIN_CONFIG_PARALLELISM)
+    var maxConcurrent: Int =
+        Runtime.getRuntime().availableProcessors()
+            .coerceAtLeast(BotLimits.RateLimit.HOT_PATH_MIN_CONFIG_PARALLELISM)
 
     /**
      * Заголовок с информацией о лимитах (например, Retry-After).
@@ -39,7 +39,7 @@ class HotPathLimiterConfig {
     /**
      * Значение Retry-After (секунды) при отказе.
      */
-    var retryAfterSeconds: Int = DEFAULT_RETRY_AFTER_SECONDS
+    var retryAfter: Duration = BotLimits.RateLimit.HOT_PATH_DEFAULT_RETRY_AFTER
 }
 
 /**
@@ -51,41 +51,41 @@ object HotPathMetrics {
     val availablePermits = AtomicInteger(0)
 }
 
+private enum class HotPathDecision { SKIP, ACQUIRE, THROTTLE }
+
 val HotPathLimiter = createApplicationPlugin(name = "HotPathLimiter", createConfiguration = ::HotPathLimiterConfig) {
     val cfg = pluginConfig
     val semaphore = Semaphore(cfg.maxConcurrent, true)
 
     onCall { call ->
         val path = call.request.path()
+        val decision =
+            when {
+                cfg.pathPrefixes.none { prefix -> path.startsWith(prefix) } -> HotPathDecision.SKIP
+                semaphore.tryAcquire() -> HotPathDecision.ACQUIRE
+                else -> HotPathDecision.THROTTLE
+            }
 
-        // Применяем лимит только для указанных префиксов
-        val hot = cfg.pathPrefixes.any { prefix -> path.startsWith(prefix) }
-        if (!hot) return@onCall
-
-        // Попытка немедленного захвата
-        val acquired = semaphore.tryAcquire()
-        if (!acquired) {
-            HotPathMetrics.throttled.incrementAndGet()
-            call.response.header(cfg.throttlingHeader, cfg.retryAfterSeconds.toString())
-            call.respondText("Too Many Requests", status = HttpStatusCode.TooManyRequests)
-            return@onCall
-        }
-
-        try {
-            HotPathMetrics.active.incrementAndGet()
-            HotPathMetrics.availablePermits.set(semaphore.availablePermits())
-        } finally {
-            // До перехода к остальной pipeline — ничего
-        }
-
-        // Когда ответ будет отправлен, освободим пермит
-        call.response.pipeline.intercept(ApplicationSendPipeline.Engine) {
-            try {
-                proceed()
-            } finally {
-                semaphore.release()
-                HotPathMetrics.active.decrementAndGet()
+        when (decision) {
+            HotPathDecision.SKIP -> Unit
+            HotPathDecision.THROTTLE -> {
+                HotPathMetrics.throttled.incrementAndGet()
+                call.response.header(cfg.throttlingHeader, cfg.retryAfter.seconds.toString())
+                call.respondText("Too Many Requests", status = HttpStatusCode.TooManyRequests)
+            }
+            HotPathDecision.ACQUIRE -> {
+                HotPathMetrics.active.incrementAndGet()
                 HotPathMetrics.availablePermits.set(semaphore.availablePermits())
+
+                call.response.pipeline.intercept(ApplicationSendPipeline.Engine) {
+                    try {
+                        proceed()
+                    } finally {
+                        semaphore.release()
+                        HotPathMetrics.active.decrementAndGet()
+                        HotPathMetrics.availablePermits.set(semaphore.availablePermits())
+                    }
+                }
             }
         }
     }
@@ -103,8 +103,11 @@ fun Application.installHotPathLimiterDefaults() {
     install(HotPathLimiter) {
         pathPrefixes = defaults
         maxConcurrent = System.getenv("HOT_PATH_MAX_CONCURRENT")?.toIntOrNull()
-            ?: Runtime.getRuntime().availableProcessors().coerceAtLeast(MIN_ENV_PARALLELISM)
-        retryAfterSeconds =
-            System.getenv("HOT_PATH_RETRY_AFTER_SEC")?.toIntOrNull() ?: DEFAULT_RETRY_AFTER_SECONDS
+            ?: Runtime.getRuntime()
+                .availableProcessors()
+                .coerceAtLeast(BotLimits.RateLimit.HOT_PATH_MIN_ENV_PARALLELISM)
+        retryAfter =
+            System.getenv("HOT_PATH_RETRY_AFTER_SEC")?.toLongOrNull()?.let(Duration::ofSeconds)
+                ?: BotLimits.RateLimit.HOT_PATH_DEFAULT_RETRY_AFTER
     }
 }
