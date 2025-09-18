@@ -1,5 +1,6 @@
 package com.example.bot.ratelimit
 
+import com.example.bot.config.BotLimits
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
@@ -7,11 +8,7 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 import kotlin.math.min
 
-private const val MIN_BUCKET_CAPACITY = 1.0
-private const val MIN_REFILL_PER_SECOND = 0.1
-private const val TOKEN_COST = 1.0
-private const val NANOS_PER_SECOND = 1_000_000_000.0
-private const val CLEANUP_THRESHOLD = 10_000
+private val ONE_SECOND_NANOS: Double = Duration.ofSeconds(1).toNanos().toDouble()
 
 /**
  * Простой потокобезопасный токен-бакет:
@@ -19,8 +16,8 @@ private const val CLEANUP_THRESHOLD = 10_000
  *  - refillPerSec: скорость пополнения в токенах/сек
  */
 class TokenBucket(capacity: Double, refillPerSec: Double, nowNanos: Long = System.nanoTime()) {
-    private val capacity = capacity.coerceAtLeast(MIN_BUCKET_CAPACITY)
-    private val refillPerSec = refillPerSec.coerceAtLeast(MIN_REFILL_PER_SECOND)
+    private val capacity = capacity.coerceAtLeast(BotLimits.RateLimit.TOKEN_BUCKET_MIN_CAPACITY)
+    private val refillPerSec = refillPerSec.coerceAtLeast(BotLimits.RateLimit.TOKEN_BUCKET_MIN_REFILL_PER_SECOND)
 
     @Volatile private var tokens: Double = this.capacity
 
@@ -33,8 +30,8 @@ class TokenBucket(capacity: Double, refillPerSec: Double, nowNanos: Long = Syste
     @Synchronized
     fun tryAcquire(nowNanos: Long = System.nanoTime()): Boolean {
         refill(nowNanos)
-        return if (tokens >= TOKEN_COST) {
-            tokens -= TOKEN_COST
+        return if (tokens >= BotLimits.RateLimit.TOKEN_BUCKET_COST) {
+            tokens -= BotLimits.RateLimit.TOKEN_BUCKET_COST
             true
         } else {
             false
@@ -45,7 +42,7 @@ class TokenBucket(capacity: Double, refillPerSec: Double, nowNanos: Long = Syste
     private fun refill(nowNanos: Long) {
         val elapsedNs = max(0L, nowNanos - lastRefillNs)
         if (elapsedNs <= 0) return
-        val elapsedSec = elapsedNs.toDouble() / NANOS_PER_SECOND
+        val elapsedSec = elapsedNs.toDouble() / ONE_SECOND_NANOS
         tokens = min(capacity, tokens + elapsedSec * refillPerSec)
         lastRefillNs = nowNanos
     }
@@ -84,10 +81,11 @@ class SubjectBucketStore(private val capacity: Double, private val refillPerSec:
 
     private fun cleanupIfNeeded(now: Instant) {
         // Ленивая очистка: если карта разрослась, удалим протухшие
-        if (map.size < CLEANUP_THRESHOLD) return
+        if (map.size < BotLimits.RateLimit.SUBJECT_CLEANUP_THRESHOLD) return
         var removed = 0
         for ((k, v) in map.entries) {
-            if (Duration.between(v.lastSeen, now).seconds >= ttl.seconds) {
+            val expired = Duration.between(v.lastSeen, now).compareTo(ttl) >= 0
+            if (expired) {
                 if (map.remove(k, v)) removed++
             }
         }

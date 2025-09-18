@@ -1,5 +1,6 @@
 package com.example.bot
 
+import com.example.bot.config.BotLimits
 import com.example.bot.metrics.AppMetricsBinder
 import com.example.bot.plugins.installAppConfig
 import com.example.bot.plugins.installMetrics
@@ -23,22 +24,13 @@ import com.pengrad.telegrambot.request.SendMessage
 import io.ktor.server.application.Application
 import io.ktor.server.routing.routing
 
-private const val DEMO_STATE_KEY = "v1"
-private const val DEMO_CLUB_ID = 1L
-private const val DEMO_START_UTC = "2025-12-31T22:00:00Z"
-private const val DEMO_TABLE_ID_1 = 101L
-private const val DEMO_TABLE_ID_2 = 102L
-private const val DEMO_TABLE_ID_3 = 103L
-private val DEMO_TABLE_IDS = listOf(DEMO_TABLE_ID_1, DEMO_TABLE_ID_2, DEMO_TABLE_ID_3)
-private const val DEMO_FALLBACK_TOKEN = "000000:DEV"
-
 @Suppress("unused")
 fun Application.module() {
     // demo constants (чтобы не было «магических» чисел)
-    val demoStateKey = DEMO_STATE_KEY
-    val demoClubId = DEMO_CLUB_ID
-    val demoStartUtc = DEMO_START_UTC
-    val demoTableIds = DEMO_TABLE_IDS
+    val demoStateKey = BotLimits.Demo.STATE_KEY
+    val demoClubId = BotLimits.Demo.CLUB_ID
+    val demoStartUtc = BotLimits.Demo.START_UTC
+    val demoTableIds = BotLimits.Demo.TABLE_IDS
 
     // 0) Тюнинг сервера (лимиты размера запроса и пр.)
     installServerTuning()
@@ -62,7 +54,7 @@ fun Application.module() {
     }
 
     // Telegram bot demo integration
-    val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN") ?: DEMO_FALLBACK_TOKEN
+    val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN") ?: BotLimits.Demo.FALLBACK_TOKEN
     val bot = TelegramBot(telegramToken)
     val ottService = CallbackTokenService()
     val callbackHandler = CallbackQueryHandler(bot, ottService)
@@ -79,11 +71,9 @@ fun Application.module() {
                             KeyboardFactory.tableKeyboard(
                                 service = ottService,
                                 items =
-                                listOf(
-                                    "Стол 101" to BookTableAction(demoClubId, demoStartUtc, demoTableIds[0]),
-                                    "Стол 102" to BookTableAction(demoClubId, demoStartUtc, demoTableIds[1]),
-                                    "Стол 103" to BookTableAction(demoClubId, demoStartUtc, demoTableIds[2]),
-                                ),
+                                    demoTableIds.map { tableId ->
+                                        "Стол $tableId" to BookTableAction(demoClubId, demoStartUtc, tableId)
+                                    },
                             )
                         bot.execute(SendMessage(chatId, "Выберите стол:").replyMarkup(kb))
                     }
