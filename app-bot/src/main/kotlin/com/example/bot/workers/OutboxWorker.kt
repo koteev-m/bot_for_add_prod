@@ -14,11 +14,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.time.Duration
 import java.time.OffsetDateTime
 
-private const val MS: Long = 1_000
-private const val NANOS_IN_MS: Long = 1_000_000
-private const val EMPTY_BATCH_DELAY_MS: Long = 1 * MS
+private val EMPTY_BATCH_DELAY: Duration = Duration.ofSeconds(1)
 
 class OutboxWorker(private val scope: CoroutineScope, private val deps: Deps) {
 
@@ -41,11 +40,9 @@ class OutboxWorker(private val scope: CoroutineScope, private val deps: Deps) {
         while (scope.isActive) {
             val batch = deps.repo.pickBatch(OffsetDateTime.now(), deps.batchSize)
             if (batch.isEmpty()) {
-                delay(EMPTY_BATCH_DELAY_MS)
-                continue
-            }
-            for (rec in batch) {
-                process(rec)
+                delay(EMPTY_BATCH_DELAY.toMillis())
+            } else {
+                batch.forEach { rec -> process(rec) }
             }
         }
     }
@@ -53,33 +50,34 @@ class OutboxWorker(private val scope: CoroutineScope, private val deps: Deps) {
     private suspend fun process(rec: OutboxRepository.Record) {
         val msg = rec.message
         val nowMs = System.currentTimeMillis()
-        if (dedup(rec)) return
-        if (!checkRateLimits(rec, msg, nowMs)) return
-        val result = send(msg)
-        handleResult(rec, msg, result)
+        val shouldSend = !dedup(rec) && checkRateLimits(rec, msg, nowMs)
+        if (shouldSend) {
+            val result = send(msg)
+            handleResult(rec, msg, result)
+        }
     }
 
     private suspend fun dedup(rec: OutboxRepository.Record): Boolean {
-        rec.dedupKey?.let {
-            if (deps.repo.isSent(it)) {
-                deps.repo.markSent(rec.id, null)
-                return true
-            }
+        val dedupKey = rec.dedupKey
+        val alreadySent = dedupKey != null && deps.repo.isSent(dedupKey)
+        if (alreadySent) {
+            deps.repo.markSent(rec.id, null)
         }
-        return false
+        return alreadySent
     }
 
     private suspend fun checkRateLimits(rec: OutboxRepository.Record, msg: NotifyMessage, nowMs: Long): Boolean {
-        val g = deps.ratePolicy.acquireGlobal(now = nowMs)
-        return if (!g.granted) {
-            deps.repo.postpone(rec.id, OffsetDateTime.now().plusNanos(g.retryAfterMs * NANOS_IN_MS))
+        val global = deps.ratePolicy.acquireGlobal(now = nowMs)
+        val granted: Boolean
+        if (!global.granted) {
+            postpone(rec.id, Duration.ofMillis(global.retryAfterMs))
             deps.registry.counter("notify.rate.throttled.global").increment()
             deps.registry.counter("notify.retried").increment()
-            false
+            granted = false
         } else {
-            val c = deps.ratePolicy.acquireChat(msg.chatId, now = nowMs)
-            if (!c.granted) {
-                deps.repo.postpone(rec.id, OffsetDateTime.now().plusNanos(c.retryAfterMs * NANOS_IN_MS))
+            val chat = deps.ratePolicy.acquireChat(msg.chatId, now = nowMs)
+            granted = if (!chat.granted) {
+                postpone(rec.id, Duration.ofMillis(chat.retryAfterMs))
                 deps.registry.counter("notify.rate.throttled.chat").increment()
                 deps.registry.counter("notify.retried").increment()
                 false
@@ -87,6 +85,7 @@ class OutboxWorker(private val scope: CoroutineScope, private val deps: Deps) {
                 true
             }
         }
+        return granted
     }
 
     private suspend fun send(msg: NotifyMessage): SendResult {
@@ -141,7 +140,7 @@ class OutboxWorker(private val scope: CoroutineScope, private val deps: Deps) {
                 deps.repo.markFailed(
                     rec.id,
                     "429",
-                    OffsetDateTime.now().plusNanos(result.retryAfterMs * NANOS_IN_MS),
+                    nowPlus(Duration.ofMillis(result.retryAfterMs)),
                 )
                 deps.registry.counter("notify.failed", "code", "429", "retryable", "true").increment()
                 deps.registry.counter("notify.retried").increment()
@@ -152,7 +151,7 @@ class OutboxWorker(private val scope: CoroutineScope, private val deps: Deps) {
                 deps.repo.markFailed(
                     rec.id,
                     result.message,
-                    OffsetDateTime.now().plusNanos(delayMs * NANOS_IN_MS),
+                    nowPlus(Duration.ofMillis(delayMs)),
                 )
                 deps.registry
                     .counter(
@@ -181,5 +180,11 @@ class OutboxWorker(private val scope: CoroutineScope, private val deps: Deps) {
 
     private fun backoff(attempts: Int): Long =
         (deps.config.retryBaseMs * (1L shl attempts)).coerceAtMost(deps.config.retryMaxMs)
+
+    private suspend fun postpone(id: Long, delay: Duration) {
+        deps.repo.postpone(id, nowPlus(delay))
+    }
+
+    private fun nowPlus(duration: Duration): OffsetDateTime = OffsetDateTime.now().plus(duration)
 }
 

@@ -1,8 +1,8 @@
 package com.example.bot.data.db
 
 import java.sql.SQLException
+import java.time.Duration
 import java.util.concurrent.ThreadLocalRandom
-import kotlin.math.min
 import kotlin.system.measureNanoTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -16,28 +16,39 @@ import org.slf4j.LoggerFactory
 private fun envInt(name: String, default: Int): Int =
     System.getenv(name)?.toIntOrNull() ?: default
 
-private fun envLong(name: String, default: Long): Long =
-    System.getenv(name)?.toLongOrNull() ?: default
+private fun envDurationMillis(name: String, default: Duration): Duration =
+    System.getenv(name)?.toLongOrNull()?.let(Duration::ofMillis) ?: default
 
-private val log = LoggerFactory.getLogger("DB.Tx")
+private const val LOGGER_NAME = "DB.Tx"
+private const val ENV_TX_MAX_RETRIES = "DB_TX_MAX_RETRIES"
+private const val ENV_TX_BASE_BACKOFF = "DB_TX_BASE_BACKOFF_MS"
+private const val ENV_TX_MAX_BACKOFF = "DB_TX_MAX_BACKOFF_MS"
+private const val ENV_TX_JITTER = "DB_TX_JITTER_MS"
+private const val ENV_SLOW_QUERY = "DB_SLOW_QUERY_MS"
 
-private val MAX_RETRIES: Int = envInt("DB_TX_MAX_RETRIES", 3)
-private val BASE_BACKOFF_MS: Long = envLong("DB_TX_BASE_BACKOFF_MS", 500)
-private val MAX_BACKOFF_MS: Long = envLong("DB_TX_MAX_BACKOFF_MS", 15_000)
-private val JITTER_MS: Long = envLong("DB_TX_JITTER_MS", 100)
-private val SLOW_QUERY_MS: Long = envLong("DB_SLOW_QUERY_MS", 200)
+private const val DEFAULT_MAX_RETRIES = 3
+private const val BACKOFF_SHIFT_GUARD = 20
+private val DEFAULT_BASE_BACKOFF: Duration = Duration.ofMillis(500)
+private val DEFAULT_MAX_BACKOFF: Duration = Duration.ofSeconds(15)
+private val DEFAULT_JITTER: Duration = Duration.ofMillis(100)
+private val DEFAULT_SLOW_QUERY_THRESHOLD: Duration = Duration.ofMillis(200)
+
+private val log = LoggerFactory.getLogger(LOGGER_NAME)
+
+private val MAX_RETRIES: Int = envInt(ENV_TX_MAX_RETRIES, DEFAULT_MAX_RETRIES)
+private val BASE_BACKOFF: Duration = envDurationMillis(ENV_TX_BASE_BACKOFF, DEFAULT_BASE_BACKOFF)
+private val MAX_BACKOFF: Duration = envDurationMillis(ENV_TX_MAX_BACKOFF, DEFAULT_MAX_BACKOFF)
+private val JITTER: Duration = envDurationMillis(ENV_TX_JITTER, DEFAULT_JITTER)
+private val SLOW_QUERY_THRESHOLD: Duration = envDurationMillis(ENV_SLOW_QUERY, DEFAULT_SLOW_QUERY_THRESHOLD)
 
 /**
  * Возвращает SQLState из цепочки причин, если есть.
  */
-private fun sqlStateOf(ex: Throwable): String? {
-    var cur: Throwable? = ex
-    while (cur != null) {
-        if (cur is SQLException) return cur.sqlState
-        cur = cur.cause
-    }
-    return null
-}
+private fun sqlStateOf(ex: Throwable): String? =
+    generateSequence(ex) { it.cause }
+        .filterIsInstance<SQLException>()
+        .firstOrNull()
+        ?.sqlState
 
 private fun isRetryableSqlState(sqlState: String?): Boolean {
     // PostgreSQL: 40P01 (deadlock detected), 40001 (serialization failure)
@@ -45,19 +56,24 @@ private fun isRetryableSqlState(sqlState: String?): Boolean {
 }
 
 /**
- * Экспоненциальный backoff с джиттером [0..JITTER_MS].
+ * Экспоненциальный backoff с джиттером [0..JITTER].
  */
 private suspend fun backoff(attempt: Int) {
-    val exp = 1L shl attempt.coerceAtMost(20) // защита от переполнения
-    val base = BASE_BACKOFF_MS * exp
-    val delayMs = min(base, MAX_BACKOFF_MS)
-    val jitter = if (JITTER_MS > 0) ThreadLocalRandom.current().nextLong(0, JITTER_MS + 1) else 0
-    delay(delayMs + jitter)
+    val exp = 1L shl attempt.coerceAtMost(BACKOFF_SHIFT_GUARD) // защита от переполнения
+    val base = BASE_BACKOFF.multipliedBy(exp)
+    val capped = if (base < MAX_BACKOFF) base else MAX_BACKOFF
+    val jitterMillis = if (JITTER.isZero || JITTER.isNegative) {
+        0L
+    } else {
+        ThreadLocalRandom.current().nextLong(0, JITTER.toMillis() + 1)
+    }
+    val totalDelay = capped.plus(Duration.ofMillis(jitterMillis))
+    delay(totalDelay.toMillis())
 }
 
 /**
  * Выполнить блок внутри Exposed-транзакции (IO), с retry на deadlock/serialization,
- * и slow-query логом по порогу SLOW_QUERY_MS.
+ * и slow-query логом по порогу SLOW_QUERY_THRESHOLD.
  */
 suspend fun <T> txRetrying(db: Database? = null, block: suspend () -> T): T {
     var attempt = 0
@@ -75,10 +91,14 @@ suspend fun <T> txRetrying(db: Database? = null, block: suspend () -> T): T {
                         block.invoke()
                     }
             }
-            val tookMs = elapsed / 1_000_000
-            if (tookMs > SLOW_QUERY_MS) {
+            val elapsedDuration = Duration.ofNanos(elapsed)
+            if (elapsedDuration > SLOW_QUERY_THRESHOLD) {
                 DbMetrics.slowQueryCount.incrementAndGet()
-                log.warn("Slow transaction detected: {} ms > {} ms", tookMs, SLOW_QUERY_MS)
+                log.warn(
+                    "Slow transaction detected: {} ms > {} ms",
+                    elapsedDuration.toMillis(),
+                    SLOW_QUERY_THRESHOLD.toMillis(),
+                )
             }
             return result
         } catch (ex: Throwable) {
