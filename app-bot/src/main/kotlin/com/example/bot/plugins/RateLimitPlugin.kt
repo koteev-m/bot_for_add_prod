@@ -1,5 +1,6 @@
 package com.example.bot.plugins
 
+import com.example.bot.config.BotLimits
 import com.example.bot.ratelimit.SubjectBucketStore
 import com.example.bot.ratelimit.TokenBucket
 import io.ktor.http.HttpHeaders
@@ -31,7 +32,9 @@ class RateLimitConfig {
     var subjectEnabled: Boolean = (System.getenv("RL_SUBJECT_ENABLED")?.toBooleanStrictOrNull() ?: true)
     var subjectRps: Double = (System.getenv("RL_SUBJECT_RPS")?.toDoubleOrNull() ?: 60.0)
     var subjectBurst: Double = (System.getenv("RL_SUBJECT_BURST")?.toDoubleOrNull() ?: 20.0)
-    var subjectTtlSeconds: Long = (System.getenv("RL_SUBJECT_TTL_SECONDS")?.toLongOrNull() ?: 600L)
+    var subjectTtl: Duration =
+        System.getenv("RL_SUBJECT_TTL_SECONDS")?.toLongOrNull()?.let(Duration::ofSeconds)
+            ?: Duration.ofSeconds(600)
     var subjectPathPrefixes: List<String> =
         listOf(
             "/webhook",
@@ -50,7 +53,9 @@ class RateLimitConfig {
     }
 
     // Ответ при ограничении
-    var retryAfterSeconds: Int = (System.getenv("RL_RETRY_AFTER_SECONDS")?.toIntOrNull() ?: 1)
+    var retryAfter: Duration =
+        System.getenv("RL_RETRY_AFTER_SECONDS")?.toLongOrNull()?.let(Duration::ofSeconds)
+            ?: BotLimits.RateLimit.HOT_PATH_DEFAULT_RETRY_AFTER
 }
 
 object RateLimitMetrics {
@@ -75,7 +80,7 @@ val RateLimitPlugin =
             SubjectBucketStore(
                 capacity = cfg.subjectBurst,
                 refillPerSec = cfg.subjectRps,
-                ttl = Duration.ofSeconds(cfg.subjectTtlSeconds),
+                ttl = cfg.subjectTtl,
             )
 
         onCall { call ->
@@ -90,7 +95,7 @@ val RateLimitPlugin =
                     }
                 if (!bucket.tryAcquire()) {
                     RateLimitMetrics.ipBlocked.incrementAndGet()
-                    call.response.header(HttpHeaders.RetryAfter, cfg.retryAfterSeconds.toString())
+                    call.response.header(HttpHeaders.RetryAfter, cfg.retryAfter.seconds.toString())
                     call.respondText("Too Many Requests (IP limit)", status = HttpStatusCode.TooManyRequests)
                     return@onCall
                 }
@@ -104,7 +109,7 @@ val RateLimitPlugin =
                     RateLimitMetrics.subjectStoreSize.set(subjectStore.size())
                     if (!ok) {
                         RateLimitMetrics.subjectBlocked.incrementAndGet()
-                        call.response.header(HttpHeaders.RetryAfter, cfg.retryAfterSeconds.toString())
+                        call.response.header(HttpHeaders.RetryAfter, cfg.retryAfter.seconds.toString())
                         call.respondText("Too Many Requests (subject limit)", status = HttpStatusCode.TooManyRequests)
                         return@onCall
                     }

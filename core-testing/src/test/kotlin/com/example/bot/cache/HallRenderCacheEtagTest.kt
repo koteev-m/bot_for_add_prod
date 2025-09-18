@@ -1,5 +1,6 @@
 package com.example.bot.cache
 
+import java.time.Duration
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -9,7 +10,7 @@ class HallRenderCacheEtagTest {
     @Test
     fun `returns 304 on If-None-Match`() =
         runBlocking {
-            val cache = HallRenderCache(maxEntries = 10, ttlSeconds = 60)
+            val cache = HallRenderCache(maxEntries = 10, ttl = Duration.ofSeconds(60))
             val key = "k"
             val first = cache.getOrRender(key, null) { "hello".toByteArray() }
             require(first is HallRenderCache.Result.Ok)

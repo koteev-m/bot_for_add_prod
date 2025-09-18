@@ -1,5 +1,6 @@
 package com.example.bot.cache
 
+import com.example.bot.config.BotLimits
 import java.security.MessageDigest
 import java.time.Duration
 import java.time.Instant
@@ -7,15 +8,6 @@ import java.util.Base64
 import java.util.LinkedHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.LongAdder
-
-@Suppress("MagicNumber")
-private const val DEFAULT_CACHE_TTL_SECONDS: Long = 60
-
-@Suppress("MagicNumber")
-private const val DEFAULT_CACHE_MAX_ENTRIES: Int = 500
-
-@Suppress("MagicNumber")
-private const val NANOS_IN_MS: Long = 1_000_000
 
 data class CacheEntry(val etag: String, val bytes: ByteArray, val expiresAt: Instant)
 
@@ -70,11 +62,14 @@ object HallCacheMetrics {
  * Обёртка для работы с кэшем рендера и ETag.
  */
 class HallRenderCache(
-    maxEntries: Int = System.getenv("HALL_CACHE_MAX_ENTRIES")?.toIntOrNull() ?: DEFAULT_CACHE_MAX_ENTRIES,
-    ttlSeconds: Long = System.getenv("HALL_CACHE_TTL_SECONDS")?.toLongOrNull() ?: DEFAULT_CACHE_TTL_SECONDS,
+    maxEntries: Int =
+        System.getenv("HALL_CACHE_MAX_ENTRIES")?.toIntOrNull() ?: BotLimits.Cache.DEFAULT_MAX_ENTRIES,
+    ttl: Duration =
+        System.getenv("HALL_CACHE_TTL_SECONDS")?.toLongOrNull()?.let(Duration::ofSeconds)
+            ?: BotLimits.Cache.DEFAULT_TTL,
 ) {
-    private val ttl = Duration.ofSeconds(ttlSeconds)
-    private val cache = TtlLruCache<String, CacheEntry>(maxEntries, ttl)
+    private val ttlDuration = ttl
+    private val cache = TtlLruCache<String, CacheEntry>(maxEntries, ttlDuration)
 
     sealed interface Result {
         data class NotModified(val etag: String) : Result
@@ -100,10 +95,10 @@ class HallRenderCache(
             HallCacheMetrics.misses.increment()
             val start = System.nanoTime()
             val freshBytes = supplier.invoke()
-            val tookMs = (System.nanoTime() - start) / NANOS_IN_MS
-            HallCacheMetrics.rendersMs.addAndGet(tookMs)
+            val took = Duration.ofNanos(System.nanoTime() - start)
+            HallCacheMetrics.rendersMs.addAndGet(took.toMillis())
             etag = computeEtag(freshBytes)
-            cache.put(key, CacheEntry(etag, freshBytes, Instant.now().plus(ttl)))
+            cache.put(key, CacheEntry(etag, freshBytes, Instant.now().plus(ttlDuration)))
             notModified = ifNoneMatch != null && equalsWeakEtag(ifNoneMatch, etag)
             bytes = freshBytes
         }
