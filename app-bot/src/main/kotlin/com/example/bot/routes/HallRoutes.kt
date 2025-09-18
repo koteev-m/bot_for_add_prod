@@ -15,6 +15,11 @@ import io.ktor.server.util.getOrFail
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+private const val DEFAULT_CACHE_MAX_ENTRIES = 500
+private const val DEFAULT_CACHE_TTL_SECONDS = 60L
+private const val MIN_SCALE = 0.1
+private const val DEFAULT_SCALE = 2.0
+
 /**
  * Роут рендера схемы зала с кэшем и ETag.
  * stateKeyProvider должен вернуть «хэш состояния» (например, хэш статусов столов на выбранную ночь).
@@ -24,15 +29,16 @@ fun Route.hallImageRoute(
     stateKeyProvider: suspend (clubId: Long, startUtc: String) -> String
 ) {
     val cache = HallRenderCache(
-        maxEntries = System.getenv("HALL_CACHE_MAX_ENTRIES")?.toIntOrNull() ?: 500,
-        ttlSeconds = System.getenv("HALL_CACHE_TTL_SECONDS")?.toLongOrNull() ?: 60L
+        maxEntries = System.getenv("HALL_CACHE_MAX_ENTRIES")?.toIntOrNull() ?: DEFAULT_CACHE_MAX_ENTRIES,
+        ttlSeconds = System.getenv("HALL_CACHE_TTL_SECONDS")?.toLongOrNull() ?: DEFAULT_CACHE_TTL_SECONDS
     )
     val baseVersion = System.getenv("HALL_BASE_IMAGE_VERSION") ?: "1"
 
     get("/api/clubs/{clubId}/nights/{startUtc}/hall.png") {
         val clubId = call.parameters.getOrFail<Long>("clubId")
         val startUtc = call.parameters.getOrFail("startUtc")
-        val scale = call.request.queryParameters["scale"]?.toDoubleOrNull()?.takeIf { it > 0.1 } ?: 2.0
+        val scale =
+            call.request.queryParameters["scale"]?.toDoubleOrNull()?.takeIf { it > MIN_SCALE } ?: DEFAULT_SCALE
         val stateKey = withContext(Dispatchers.IO) { stateKeyProvider(clubId, startUtc) }
         val cacheKey = "$clubId|$startUtc|$scale|$baseVersion|$stateKey"
 

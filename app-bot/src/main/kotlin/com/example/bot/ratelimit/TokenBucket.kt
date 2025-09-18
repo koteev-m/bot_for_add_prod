@@ -7,14 +7,20 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 import kotlin.math.min
 
+private const val MIN_BUCKET_CAPACITY = 1.0
+private const val MIN_REFILL_PER_SECOND = 0.1
+private const val TOKEN_COST = 1.0
+private const val NANOS_PER_SECOND = 1_000_000_000.0
+private const val CLEANUP_THRESHOLD = 10_000
+
 /**
  * Простой потокобезопасный токен-бакет:
  *  - capacity: максимум токенов (burst)
  *  - refillPerSec: скорость пополнения в токенах/сек
  */
 class TokenBucket(capacity: Double, refillPerSec: Double, nowNanos: Long = System.nanoTime()) {
-    private val capacity = capacity.coerceAtLeast(1.0)
-    private val refillPerSec = refillPerSec.coerceAtLeast(0.1)
+    private val capacity = capacity.coerceAtLeast(MIN_BUCKET_CAPACITY)
+    private val refillPerSec = refillPerSec.coerceAtLeast(MIN_REFILL_PER_SECOND)
 
     @Volatile private var tokens: Double = this.capacity
 
@@ -27,8 +33,8 @@ class TokenBucket(capacity: Double, refillPerSec: Double, nowNanos: Long = Syste
     @Synchronized
     fun tryAcquire(nowNanos: Long = System.nanoTime()): Boolean {
         refill(nowNanos)
-        return if (tokens >= 1.0) {
-            tokens -= 1.0
+        return if (tokens >= TOKEN_COST) {
+            tokens -= TOKEN_COST
             true
         } else {
             false
@@ -39,7 +45,7 @@ class TokenBucket(capacity: Double, refillPerSec: Double, nowNanos: Long = Syste
     private fun refill(nowNanos: Long) {
         val elapsedNs = max(0L, nowNanos - lastRefillNs)
         if (elapsedNs <= 0) return
-        val elapsedSec = elapsedNs / 1_000_000_000.0
+        val elapsedSec = elapsedNs.toDouble() / NANOS_PER_SECOND
         tokens = min(capacity, tokens + elapsedSec * refillPerSec)
         lastRefillNs = nowNanos
     }
@@ -78,7 +84,7 @@ class SubjectBucketStore(private val capacity: Double, private val refillPerSec:
 
     private fun cleanupIfNeeded(now: Instant) {
         // Ленивая очистка: если карта разрослась, удалим протухшие
-        if (map.size < 10_000) return
+        if (map.size < CLEANUP_THRESHOLD) return
         var removed = 0
         for ((k, v) in map.entries) {
             if (Duration.between(v.lastSeen, now).seconds >= ttl.seconds) {

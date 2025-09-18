@@ -25,12 +25,20 @@ class InMemoryNotifyIdempotencyStore(
 
     override fun seen(key: String): Boolean {
         cleanupIfNeeded()
-        val entry = map[key] ?: return false
-        if (Instant.now().isAfter(entry.timestamp.plus(ttl))) {
-            map.remove(key)
-            return false
-        }
-        return true
+        val entry = map[key]
+        val isSeen =
+            if (entry == null) {
+                false
+            } else {
+                val expired = Instant.now().isAfter(entry.timestamp.plus(ttl))
+                if (expired) {
+                    map.remove(key)
+                    false
+                } else {
+                    true
+                }
+            }
+        return isSeen
     }
 
     override fun mark(key: String) {

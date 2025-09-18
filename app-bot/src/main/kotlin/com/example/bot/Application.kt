@@ -23,13 +23,22 @@ import com.pengrad.telegrambot.request.SendMessage
 import io.ktor.server.application.Application
 import io.ktor.server.routing.routing
 
+private const val DEMO_STATE_KEY = "v1"
+private const val DEMO_CLUB_ID = 1L
+private const val DEMO_START_UTC = "2025-12-31T22:00:00Z"
+private const val DEMO_TABLE_ID_1 = 101L
+private const val DEMO_TABLE_ID_2 = 102L
+private const val DEMO_TABLE_ID_3 = 103L
+private val DEMO_TABLE_IDS = listOf(DEMO_TABLE_ID_1, DEMO_TABLE_ID_2, DEMO_TABLE_ID_3)
+private const val DEMO_FALLBACK_TOKEN = "000000:DEV"
+
 @Suppress("unused")
 fun Application.module() {
     // demo constants (чтобы не было «магических» чисел)
-    val demoStateKey = "v1"
-    val demoClubId = 1L
-    val demoStartUtc = "2025-12-31T22:00:00Z"
-    val demoTableIds = listOf(101L, 102L, 103L)
+    val demoStateKey = DEMO_STATE_KEY
+    val demoClubId = DEMO_CLUB_ID
+    val demoStartUtc = DEMO_START_UTC
+    val demoTableIds = DEMO_TABLE_IDS
 
     // 0) Тюнинг сервера (лимиты размера запроса и пр.)
     installServerTuning()
@@ -53,7 +62,7 @@ fun Application.module() {
     }
 
     // Telegram bot demo integration
-    val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN") ?: "000000:DEV"
+    val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN") ?: DEMO_FALLBACK_TOKEN
     val bot = TelegramBot(telegramToken)
     val ottService = CallbackTokenService()
     val callbackHandler = CallbackQueryHandler(bot, ottService)
