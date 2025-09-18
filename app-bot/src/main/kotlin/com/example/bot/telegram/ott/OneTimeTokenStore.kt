@@ -74,20 +74,23 @@ class InMemoryOneTimeTokenStore(
 
     override fun consume(token: String): OttPayload? {
         cleanupIfNeeded()
-        val entry =
-            map.remove(token) ?: run {
+        val entry = map.remove(token)
+        val result =
+            if (entry == null) {
                 OttMetrics.replayed.incrementAndGet()
-                return null
+                null
+            } else {
+                OttMetrics.storeSize.set(map.size)
+                if (Instant.now().isAfter(entry.expiresAt)) {
+                    // истёк — считаем как replay/просрочку
+                    OttMetrics.replayed.incrementAndGet()
+                    null
+                } else {
+                    OttMetrics.consumed.incrementAndGet()
+                    entry.payload
+                }
             }
-        OttMetrics.storeSize.set(map.size)
-        return if (Instant.now().isAfter(entry.expiresAt)) {
-            // истёк — считаем как replay/просрочку
-            OttMetrics.replayed.incrementAndGet()
-            null
-        } else {
-            OttMetrics.consumed.incrementAndGet()
-            entry.payload
-        }
+        return result
     }
 
     override fun size(): Int = map.size
@@ -117,7 +120,10 @@ class InMemoryOneTimeTokenStore(
     /** Эвикция при переполнении (упрощённое LRU по порядку вставки). */
     private fun evictOverflowIfAny() {
         while (map.size > maxEntries) {
-            val victim = order.poll() ?: return
+            val victim = order.poll()
+            if (victim == null) {
+                break
+            }
             map.remove(victim)
         }
         OttMetrics.storeSize.set(map.size)
@@ -129,8 +135,10 @@ class InMemoryOneTimeTokenStore(
         val now = Instant.now()
         var removed = 0
         for (k in order) {
-            val e = map[k] ?: continue
-            if (now.isAfter(e.expiresAt) && map.remove(k, e)) removed++
+            val entry = map[k]
+            if (entry != null && now.isAfter(entry.expiresAt) && map.remove(k, entry)) {
+                removed++
+            }
         }
         if (removed > 0) OttMetrics.storeSize.set(map.size)
     }

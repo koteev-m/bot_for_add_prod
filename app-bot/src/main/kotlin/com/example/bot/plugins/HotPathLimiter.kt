@@ -13,6 +13,10 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
+private const val MIN_CONFIG_PARALLELISM = 2
+private const val MIN_ENV_PARALLELISM = 4
+private const val DEFAULT_RETRY_AFTER_SECONDS = 1
+
 /**
  * Конфигурация плагина лимитирования «горячих» путей.
  */
@@ -25,7 +29,7 @@ class HotPathLimiterConfig {
     /**
      * Максимум параллельных обработок для каждого совпадающего пути.
      */
-    var maxConcurrent: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(2)
+    var maxConcurrent: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(MIN_CONFIG_PARALLELISM)
 
     /**
      * Заголовок с информацией о лимитах (например, Retry-After).
@@ -35,7 +39,7 @@ class HotPathLimiterConfig {
     /**
      * Значение Retry-After (секунды) при отказе.
      */
-    var retryAfterSeconds: Int = 1
+    var retryAfterSeconds: Int = DEFAULT_RETRY_AFTER_SECONDS
 }
 
 /**
@@ -99,7 +103,8 @@ fun Application.installHotPathLimiterDefaults() {
     install(HotPathLimiter) {
         pathPrefixes = defaults
         maxConcurrent = System.getenv("HOT_PATH_MAX_CONCURRENT")?.toIntOrNull()
-            ?: Runtime.getRuntime().availableProcessors().coerceAtLeast(4)
-        retryAfterSeconds = System.getenv("HOT_PATH_RETRY_AFTER_SEC")?.toIntOrNull() ?: 1
+            ?: Runtime.getRuntime().availableProcessors().coerceAtLeast(MIN_ENV_PARALLELISM)
+        retryAfterSeconds =
+            System.getenv("HOT_PATH_RETRY_AFTER_SEC")?.toIntOrNull() ?: DEFAULT_RETRY_AFTER_SECONDS
     }
 }

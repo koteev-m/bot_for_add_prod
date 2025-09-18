@@ -15,10 +15,16 @@ import io.ktor.http.HttpStatusCode
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
 import java.time.Duration
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+
+private const val RETRY_AFTER_POSITIVE_THRESHOLD = 0
+private const val JITTER_INCLUSIVE_OFFSET = 1L
 
 sealed interface SendResult {
     data class Ok(val messageId: Long?, val already: Boolean = false) : SendResult
@@ -60,6 +66,12 @@ class NotifySender(
     private val maxBackoff: Duration = Duration.ofMillis(maxBackoffMs)
     private val jitter: Duration = Duration.ofMillis(jitterMs)
     private val maxAttempts: Int = BotLimits.notifySendMaxAttempts
+
+    private sealed interface SendOutcome {
+        data object Success : SendOutcome
+        data class Retry(val delayMs: Long) : SendOutcome
+        data class Fail(val result: SendResult) : SendOutcome
+    }
 
     suspend fun sendMessage(chatId: Long, text: String, threadId: Int? = null, dedupKey: String? = null): SendResult {
         val req = SendMessage(chatId, text)
@@ -105,18 +117,22 @@ class NotifySender(
                 // ignore
             }
         }
-        val res = execute(req, chatId, dedupKey)
-        return when (res) {
-            is SendResult.Ok -> res
-            is SendResult.RetryAfter -> res
-            is SendResult.RetryableError, is SendResult.PermanentError -> {
-                for (m in media) {
-                    val r = sendPhoto(chatId, m.fileIdOrUrl, m.caption, threadId, null)
-                    if (r !is SendResult.Ok) return r
+        val initialResult = execute(req, chatId, dedupKey)
+        val finalResult =
+            when (initialResult) {
+                is SendResult.Ok, is SendResult.RetryAfter -> initialResult
+                is SendResult.RetryableError, is SendResult.PermanentError -> {
+                    val fallbackFailure =
+                        media
+                            .asFlow()
+                            .map { spec ->
+                                sendPhoto(chatId, spec.fileIdOrUrl, spec.caption, threadId, null)
+                            }
+                            .firstOrNull { it !is SendResult.Ok }
+                    fallbackFailure ?: SendResult.Ok(messageId = null)
                 }
-                SendResult.Ok(messageId = null)
             }
-        }
+        return finalResult
     }
 
     suspend fun <R : BaseResponse> execute(
@@ -124,82 +140,109 @@ class NotifySender(
         chatId: Long,
         dedupKey: String? = null,
     ): SendResult {
-        if (dedupKey != null && idempotency.seen(dedupKey)) {
-            incOk(already = true)
-            return SendResult.Ok(messageId = null, already = true)
-        }
+        val deduplicatedResult =
+            if (dedupKey != null && idempotency.seen(dedupKey)) {
+                incOk(already = true)
+                SendResult.Ok(messageId = null, already = true)
+            } else {
+                null
+            }
 
+        var result: SendResult? = deduplicatedResult
         var attempt = 0
-        while (true) {
-            val now = System.currentTimeMillis()
-            val g = ratePolicy.acquireGlobal(now = now)
-            if (!g.granted) {
-                incRetryAfter(g.retryAfterMs)
-                return SendResult.RetryAfter(g.retryAfterMs)
+        while (result == null) {
+            when (val outcome = attemptSend(request, chatId, dedupKey, attempt)) {
+                SendOutcome.Success -> result = SendResult.Ok(messageId = null)
+                is SendOutcome.Retry -> {
+                    delay(outcome.delayMs)
+                    attempt++
+                }
+                is SendOutcome.Fail -> result = outcome.result
             }
-            val c = ratePolicy.acquireChat(chatId, now = now)
-            if (!c.granted) {
-                incRetryAfter(c.retryAfterMs)
-                return SendResult.RetryAfter(c.retryAfterMs)
-            }
+        }
+        return result
+    }
 
-            val start = System.nanoTime()
-            val resp =
+    private suspend fun <R : BaseResponse> attemptSend(
+        request: BaseRequest<*, R>,
+        chatId: Long,
+        dedupKey: String?,
+        attempt: Int,
+    ): SendOutcome {
+        fun performRequest(): SendOutcome {
+            val startAttempt = System.nanoTime()
+            val response: R =
                 try {
                     bot.execute(request)
                 } catch (t: Throwable) {
-                    timer?.record(System.nanoTime() - start, TimeUnit.NANOSECONDS)
-                    if (attempt >= maxAttempts) {
+                    timer?.record(System.nanoTime() - startAttempt, TimeUnit.NANOSECONDS)
+                    return if (attempt >= maxAttempts) {
                         incRetryable()
-                        return SendResult.RetryableError("IO error: ${t.message}")
+                        SendOutcome.Fail(SendResult.RetryableError("IO error: ${t.message}"))
+                    } else {
+                        SendOutcome.Retry(backoffDelay(attempt))
                     }
-                    delay(backoffDelay(attempt))
-                    attempt++
-                    continue
                 }
-            timer?.record(System.nanoTime() - start, TimeUnit.NANOSECONDS)
+            timer?.record(System.nanoTime() - startAttempt, TimeUnit.NANOSECONDS)
 
-            if (resp.isOk) {
-                if (dedupKey != null) idempotency.mark(dedupKey)
+            return if (response.isOk) {
+                dedupKey?.let(idempotency::mark)
                 incOk(already = false)
-                return SendResult.Ok(messageId = null)
-            }
-
-            val code = resp.errorCode()
-            val desc = resp.description() ?: "unknown"
-            val retryAfterSec = resp.parameters()?.retryAfter()
-            val hasRetryAfter = retryAfterSec != null && retryAfterSec > 0
-            when {
-                code == HttpStatusCode.TooManyRequests.value || hasRetryAfter -> {
-                    val retryAfterDuration =
-                        when {
-                            hasRetryAfter -> Duration.ofSeconds(retryAfterSec!!.toLong())
-                            else -> BotLimits.notifyRetryAfterFallback
-                        }
-                    val retryMs = retryAfterDuration.toMillis()
-                    ratePolicy.on429(chatId, retryMs)
-                    incRetryAfter(retryMs)
-                    return SendResult.RetryAfter(retryMs)
-                }
-                isServerError(code) -> {
-                    if (attempt >= maxAttempts) {
-                        incRetryable()
-                        return SendResult.RetryableError("code=$code desc=$desc")
+                SendOutcome.Success
+            } else {
+                val code = response.errorCode()
+                val desc = response.description() ?: "unknown"
+                val retryAfterSec = response.parameters()?.retryAfter()
+                val hasRetryAfter =
+                    retryAfterSec != null && retryAfterSec > RETRY_AFTER_POSITIVE_THRESHOLD
+                when {
+                    code == HttpStatusCode.TooManyRequests.value || hasRetryAfter -> {
+                        val retryAfterDuration =
+                            when {
+                                hasRetryAfter -> Duration.ofSeconds(retryAfterSec!!.toLong())
+                                else -> BotLimits.notifyRetryAfterFallback
+                            }
+                        val retryMs = retryAfterDuration.toMillis()
+                        ratePolicy.on429(chatId, retryMs)
+                        incRetryAfter(retryMs)
+                        SendOutcome.Fail(SendResult.RetryAfter(retryMs))
                     }
-                    delay(backoffDelay(attempt))
-                    attempt++
-                    continue
-                }
-                code == HttpStatusCode.BadRequest.value || code == HttpStatusCode.Forbidden.value -> {
-                    incPermanent()
-                    return SendResult.PermanentError("code=$code desc=$desc")
-                }
-                else -> {
-                    incPermanent()
-                    return SendResult.PermanentError("code=$code desc=$desc")
+                    isServerError(code) -> {
+                        if (attempt >= maxAttempts) {
+                            incRetryable()
+                            SendOutcome.Fail(SendResult.RetryableError("code=${code} desc=${desc}"))
+                        } else {
+                            SendOutcome.Retry(backoffDelay(attempt))
+                        }
+                    }
+                    code == HttpStatusCode.BadRequest.value || code == HttpStatusCode.Forbidden.value -> {
+                        incPermanent()
+                        SendOutcome.Fail(SendResult.PermanentError("code=${code} desc=${desc}"))
+                    }
+                    else -> {
+                        incPermanent()
+                        SendOutcome.Fail(SendResult.PermanentError("code=${code} desc=${desc}"))
+                    }
                 }
             }
         }
+
+        val now = System.currentTimeMillis()
+        val globalPermit = ratePolicy.acquireGlobal(now = now)
+        val rateLimitOutcome: SendOutcome? =
+            if (!globalPermit.granted) {
+                incRetryAfter(globalPermit.retryAfterMs)
+                SendOutcome.Fail(SendResult.RetryAfter(globalPermit.retryAfterMs))
+            } else {
+                val chatPermit = ratePolicy.acquireChat(chatId, now = now)
+                if (!chatPermit.granted) {
+                    incRetryAfter(chatPermit.retryAfterMs)
+                    SendOutcome.Fail(SendResult.RetryAfter(chatPermit.retryAfterMs))
+                } else {
+                    null
+                }
+            }
+        return rateLimitOutcome ?: performRequest()
     }
 
     private fun backoffDelay(attempt: Int): Long {
@@ -207,7 +250,7 @@ class NotifySender(
         val multiplier = 1L shl shift
         val exponential = baseBackoff.multipliedBy(multiplier)
         val capped = if (exponential > maxBackoff) maxBackoff else exponential
-        val jitterBoundExclusive = jitter.toMillis() + 1
+        val jitterBoundExclusive = jitter.toMillis() + JITTER_INCLUSIVE_OFFSET
         val jitterMillis = ThreadLocalRandom.current().nextLong(jitterBoundExclusive)
         return capped.toMillis() + jitterMillis
     }

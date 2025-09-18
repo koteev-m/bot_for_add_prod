@@ -114,16 +114,15 @@ val RateLimitPlugin =
     }
 
 private fun clientIp(call: io.ktor.server.application.ApplicationCall): String {
-    val xff = call.request.header("X-Forwarded-For")
-    if (!xff.isNullOrBlank()) {
-        val first = xff.split(',').first().trim()
-        if (first.isNotEmpty()) return first
-    }
-    val real = call.request.header("X-Real-IP")
-    if (!real.isNullOrBlank()) {
-        return real
-    }
-    return call.request.host() + ":" + call.request.port()
+    val forwarded =
+        call.request.header("X-Forwarded-For")
+            ?.split(',')
+            ?.firstOrNull()
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+    val real = call.request.header("X-Real-IP")?.takeIf { it.isNotBlank() }
+    val hostWithPort = "${call.request.host()}:${call.request.port()}"
+    return forwarded ?: real ?: hostWithPort
 }
 
 fun Application.installRateLimitPluginDefaults() {

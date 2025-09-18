@@ -30,21 +30,28 @@ class CallbackQueryHandler(
 ) {
 
     fun handle(update: Update) {
-        val cq: CallbackQuery = update.callbackQuery() ?: return
-        val token: String = cq.data() ?: return
-        val payload: OttPayload = tokenService.consume(token) ?: run {
-            // устарело/повтор — показываем alert, ничего не делаем
-            bot.execute(
-                AnswerCallbackQuery(cq.id())
-                    .text("Кнопка устарела, обновите экран.")
-                    .showAlert(true)
-            )
-            return
-        }
+        val callbackQuery: CallbackQuery? = update.callbackQuery()
+        val token: String? = callbackQuery?.data()
+        val payload: OttPayload? = token?.let(tokenService::consume)
 
-        when (payload) {
-            is BookTableAction -> handleBookTable(cq, payload)
-            // добавляйте другие типы payload тут
+        return when {
+            callbackQuery == null -> Unit
+            token == null -> Unit
+            payload == null -> {
+                // устарело/повтор — показываем alert, ничего не делаем
+                bot.execute(
+                    AnswerCallbackQuery(callbackQuery.id())
+                        .text("Кнопка устарела, обновите экран.")
+                        .showAlert(true)
+                )
+                Unit
+            }
+            else -> {
+                when (payload) {
+                    is BookTableAction -> handleBookTable(callbackQuery, payload)
+                    // добавляйте другие типы payload тут
+                }
+            }
         }
     }
 
