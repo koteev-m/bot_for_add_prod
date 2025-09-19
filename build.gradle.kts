@@ -65,3 +65,9 @@ tasks.register("formatAll") {
         subprojects.mapNotNull { it.tasks.findByName("ktlintFormatCli") }
     )
 }
+
+tasks.register("flywayMigrate") {
+    group = "database"
+    description = "Run Flyway migrations via :core-data module"
+    dependsOn(":core-data:flywayMigrate")
+}

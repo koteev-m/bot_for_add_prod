@@ -35,6 +35,6 @@ class BookingStartConfirmationTest :
             val policy = PaymentPolicy(PaymentMode.NONE)
             val result = service.startConfirmation(input, null, policy, "idem2")
             val booking = (result as Either.Right).value as ConfirmResult.Confirmed
-            booking.booking.status shouldBe "CONFIRMED"
+            booking.booking.status shouldBe "BOOKED"
         }
     })

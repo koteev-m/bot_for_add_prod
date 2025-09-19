@@ -1,6 +1,7 @@
 package com.example.notify
 
-import com.example.bot.data.notifications.NotificationsOutbox
+import com.example.bot.data.notifications.NotificationsOutboxTable
+import com.example.bot.data.notifications.OutboxStatus
 import com.example.bot.data.repo.OutboxRepository
 import com.example.bot.notifications.NotifyConfig
 import com.example.bot.notifications.NotifyMessage
@@ -65,7 +66,7 @@ class OutboxWorkerSmokeTest : PgContainer() {
 
             val sent =
                 newSuspendedTransaction(db = database) {
-                    NotificationsOutbox.select { NotificationsOutbox.status eq "SENT" }.count()
+                    NotificationsOutboxTable.select { NotificationsOutboxTable.status eq OutboxStatus.SENT.name }.count()
                 }
             assertEquals(10, sent)
             assertEquals(10.0, registry.counter("notify.sent", "method", "TEXT", "threaded", "false").count())

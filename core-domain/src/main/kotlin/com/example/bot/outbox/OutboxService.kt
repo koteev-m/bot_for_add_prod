@@ -20,6 +20,6 @@ data class OutboxRecord(
     val chatId: Long,
     val threadId: Long?,
     val payload: String,
-    val status: String = "PENDING",
-    val nextRetryAt: Instant = Instant.now(),
+    val status: String = "NEW",
+    val nextAttemptAt: Instant = Instant.now(),
 )

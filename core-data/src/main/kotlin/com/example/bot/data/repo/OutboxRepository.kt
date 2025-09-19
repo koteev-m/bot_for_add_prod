@@ -1,6 +1,7 @@
 package com.example.bot.data.repo
 
-import com.example.bot.data.notifications.NotificationsOutbox
+import com.example.bot.data.notifications.NotificationsOutboxTable
+import com.example.bot.data.notifications.OutboxStatus
 import com.example.bot.notifications.NotifyMessage
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
@@ -22,18 +23,18 @@ class OutboxRepository(private val db: Database) {
 
     suspend fun enqueue(msg: NotifyMessage, campaignId: Long? = null, priority: Int = 100, dedupKey: String? = null) {
         return newSuspendedTransaction(db = db) {
-            NotificationsOutbox.insertIgnore {
+            NotificationsOutboxTable.insertIgnore {
                 it[targetChatId] = msg.chatId
                 it[messageThreadId] = msg.messageThreadId
                 it[kind] = msg.method.name
                 it[payload] = json.encodeToJsonElement(NotifyMessage.serializer(), msg)
-                it[status] = "PENDING"
-                it[nextRetryAt] = OffsetDateTime.now()
+                it[status] = OutboxStatus.NEW.name
+                it[nextAttemptAt] = OffsetDateTime.now()
                 it[recipientType] = "chat"
                 it[recipientId] = msg.chatId
-                it[NotificationsOutbox.dedupKey] = dedupKey ?: msg.dedupKey
-                it[NotificationsOutbox.priority] = priority
-                it[NotificationsOutbox.campaignId] = campaignId
+                it[NotificationsOutboxTable.dedupKey] = dedupKey ?: msg.dedupKey
+                it[NotificationsOutboxTable.priority] = priority
+                it[NotificationsOutboxTable.campaignId] = campaignId
                 it[method] = msg.method.name
                 it[parseMode] = msg.parseMode?.name
             }
@@ -42,25 +43,25 @@ class OutboxRepository(private val db: Database) {
 
     suspend fun pickBatch(now: OffsetDateTime, limit: Int): List<Record> {
         return newSuspendedTransaction(db = db) {
-            NotificationsOutbox
+            NotificationsOutboxTable
                 .select {
-                    (NotificationsOutbox.status eq "PENDING") and
-                        (NotificationsOutbox.nextRetryAt lessEq now)
+                    (NotificationsOutboxTable.status eq OutboxStatus.NEW.name) and
+                        (NotificationsOutboxTable.nextAttemptAt lessEq now)
                 }.orderBy(
-                    NotificationsOutbox.priority to SortOrder.ASC,
-                    NotificationsOutbox.createdAt to SortOrder.ASC,
+                    NotificationsOutboxTable.priority to SortOrder.ASC,
+                    NotificationsOutboxTable.createdAt to SortOrder.ASC,
                 ).forUpdate()
                 .limit(limit)
                 .map {
                     Record(
-                        id = it[NotificationsOutbox.id],
+                        id = it[NotificationsOutboxTable.id],
                         message =
                         json.decodeFromJsonElement(
                             NotifyMessage.serializer(),
-                            it[NotificationsOutbox.payload],
+                            it[NotificationsOutboxTable.payload],
                         ),
-                        dedupKey = it[NotificationsOutbox.dedupKey],
-                        attempts = it[NotificationsOutbox.attempts],
+                        dedupKey = it[NotificationsOutboxTable.dedupKey],
+                        attempts = it[NotificationsOutboxTable.attempts],
                     )
                 }
         }
@@ -68,10 +69,10 @@ class OutboxRepository(private val db: Database) {
 
     suspend fun markSent(id: Long, messageId: Long?) {
         return newSuspendedTransaction(db = db) {
-            NotificationsOutbox.update({ NotificationsOutbox.id eq id }) {
-                it[status] = "SENT"
+            NotificationsOutboxTable.update({ NotificationsOutboxTable.id eq id }) {
+                it[status] = OutboxStatus.SENT.name
                 it[lastError] = null
-                it[nextRetryAt] = null
+                it[nextAttemptAt] = null
                 with(org.jetbrains.exposed.sql.SqlExpressionBuilder) {
                     it[attempts] = attempts + 1
                 }
@@ -81,10 +82,10 @@ class OutboxRepository(private val db: Database) {
 
     suspend fun markFailed(id: Long, error: String?, nextRetryAt: OffsetDateTime) {
         return newSuspendedTransaction(db = db) {
-            NotificationsOutbox.update({ NotificationsOutbox.id eq id }) {
-                it[status] = "PENDING"
+            NotificationsOutboxTable.update({ NotificationsOutboxTable.id eq id }) {
+                it[status] = OutboxStatus.NEW.name
                 it[lastError] = error
-                it[NotificationsOutbox.nextRetryAt] = nextRetryAt
+                it[NotificationsOutboxTable.nextAttemptAt] = nextRetryAt
                 with(org.jetbrains.exposed.sql.SqlExpressionBuilder) {
                     it[attempts] = attempts + 1
                 }
@@ -94,20 +95,20 @@ class OutboxRepository(private val db: Database) {
 
     suspend fun postpone(id: Long, nextRetryAt: OffsetDateTime) {
         return newSuspendedTransaction(db = db) {
-            NotificationsOutbox.update({ NotificationsOutbox.id eq id }) {
-                it[status] = "PENDING"
+            NotificationsOutboxTable.update({ NotificationsOutboxTable.id eq id }) {
+                it[status] = OutboxStatus.NEW.name
                 it[lastError] = null
-                it[NotificationsOutbox.nextRetryAt] = nextRetryAt
+                it[NotificationsOutboxTable.nextAttemptAt] = nextRetryAt
             }
         }
     }
 
     suspend fun markPermanentFailure(id: Long, error: String?) {
         return newSuspendedTransaction(db = db) {
-            NotificationsOutbox.update({ NotificationsOutbox.id eq id }) {
-                it[status] = "FAILED"
+            NotificationsOutboxTable.update({ NotificationsOutboxTable.id eq id }) {
+                it[status] = OutboxStatus.FAILED.name
                 it[lastError] = error
-                it[NotificationsOutbox.nextRetryAt] = null
+                it[NotificationsOutboxTable.nextAttemptAt] = null
                 with(org.jetbrains.exposed.sql.SqlExpressionBuilder) {
                     it[attempts] = attempts + 1
                 }
@@ -117,10 +118,10 @@ class OutboxRepository(private val db: Database) {
 
     suspend fun isSent(dedupKey: String): Boolean {
         return newSuspendedTransaction(db = db) {
-            NotificationsOutbox
+            NotificationsOutboxTable
                 .select {
-                    (NotificationsOutbox.dedupKey eq dedupKey) and
-                        (NotificationsOutbox.status eq "SENT")
+                    (NotificationsOutboxTable.dedupKey eq dedupKey) and
+                        (NotificationsOutboxTable.status eq OutboxStatus.SENT.name)
                 }.empty()
                 .not()
         }

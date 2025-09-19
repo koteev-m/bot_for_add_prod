@@ -3,6 +3,7 @@ package com.example.bot.data.notifications
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.javatime.CurrentTimestamp
 import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
 import org.jetbrains.exposed.sql.json.jsonb
 
@@ -40,16 +41,22 @@ object UserSubscriptions : Table("user_subscriptions") {
     override val primaryKey = PrimaryKey(userId, clubId, topic)
 }
 
-object NotificationsOutbox : Table("notifications_outbox") {
+enum class OutboxStatus {
+    NEW,
+    SENT,
+    FAILED,
+}
+
+object NotificationsOutboxTable : Table("notifications_outbox") {
     val id = long("id").autoIncrement()
     val clubId = long("club_id").nullable()
     val targetChatId = long("target_chat_id")
     val messageThreadId = integer("message_thread_id").nullable()
     val kind = text("kind")
     val payload = jsonb<JsonElement>("payload", Json)
-    val status = text("status")
+    val status = text("status").default(OutboxStatus.NEW.name)
     val attempts = integer("attempts").default(0)
-    val nextRetryAt = timestampWithTimeZone("next_retry_at").nullable()
+    val nextAttemptAt = timestampWithTimeZone("next_attempt_at").nullable()
     val lastError = text("last_error").nullable()
     val recipientType = text("recipient_type")
     val recipientId = long("recipient_id")
@@ -60,11 +67,11 @@ object NotificationsOutbox : Table("notifications_outbox") {
     val parseMode = text("parse_mode").nullable()
     val attachments = jsonb<JsonElement>("attachments", Json).nullable()
     val language = text("language").nullable()
-    val createdAt = timestampWithTimeZone("created_at")
+    val createdAt = timestampWithTimeZone("created_at").defaultExpression(CurrentTimestamp())
     override val primaryKey = PrimaryKey(id)
 
     init {
-        index("idx_notifications_outbox_status_retry", false, status, nextRetryAt)
+        index("idx_notifications_outbox_status_attempt", false, status, nextAttemptAt)
         index("idx_notifications_outbox_campaign_id", false, campaignId)
         index("idx_notifications_outbox_priority_created_at", false, priority, createdAt)
     }
