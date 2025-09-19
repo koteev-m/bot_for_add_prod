@@ -4,6 +4,8 @@ import java.lang.StringBuilder
 
 enum class AppProfile { DEV, STAGE, PROD }
 
+enum class BotRunMode { WEBHOOK, POLLING }
+
 data class BotConfig(val token: String, val username: String?, val ownerId: Long) {
     fun safe(): String = "BotConfig(token=${maskSecret(token)}, username=$username, ownerId=$ownerId)"
 }
@@ -58,6 +60,7 @@ data class ClubEndpoints(
 
 data class AppConfig(
     val profile: AppProfile,
+    val runMode: BotRunMode,
     val bot: BotConfig,
     val webhook: WebhookConfig,
     val db: DbConfig,
@@ -75,6 +78,11 @@ data class AppConfig(
 
         fun fromEnv(): AppConfig {
             val profile = env("APP_PROFILE")?.let { AppProfile.valueOf(it.uppercase()) } ?: AppProfile.DEV
+            val runMode =
+                env("RUN_MODE")
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let(::parseRunMode)
+                    ?: BotRunMode.WEBHOOK
             val bot =
                 BotConfig(
                     token = envRequired("TELEGRAM_BOT_TOKEN"),
@@ -161,13 +169,20 @@ data class AppConfig(
                         system = env("CLUB4_SYSTEM_THREAD_ID")?.toIntOrNull(),
                     ),
                 )
-            return AppConfig(profile, bot, webhook, db, workers, health, localApi, hq, clubs)
+            return AppConfig(profile, runMode, bot, webhook, db, workers, health, localApi, hq, clubs)
         }
+
+        private fun parseRunMode(raw: String): BotRunMode =
+            when (raw.lowercase()) {
+                "webhook" -> BotRunMode.WEBHOOK
+                "polling" -> BotRunMode.POLLING
+                else -> error("ENV RUN_MODE must be either webhook or polling")
+            }
     }
 
     fun toSafeString(): String {
         val sb = StringBuilder()
-        sb.appendLine("AppConfig(profile=$profile)")
+        sb.appendLine("AppConfig(profile=$profile, runMode=$runMode)")
         sb.appendLine("  ${bot.safe()}")
         sb.appendLine("  ${webhook.safe()}")
         sb.appendLine("  ${db.safe()}")
