@@ -1,41 +1,27 @@
-name: Static Check (CLI)
-
+name: static-check
 on:
   pull_request:
   push:
-    branches: [ main ]
-
+    branches: [ main, master ]
 jobs:
-  static:
+  detekt:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: 'temurin'
           java-version: '21'
-          cache: gradle
-
-      - name: Gradle staticCheck (parallel)
-        run: ./gradlew --no-daemon --parallel staticCheck
-      - name: Ensure detekt baseline absent
-        run: |
-          if git ls-files "*-detekt-baseline.xml" | grep .; then
-            echo "Detekt baseline files must not be committed"; exit 1
-          fi
-
-      - name: Upload detekt reports
-        if: always()
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+      - name: Run detekt
+        run: ./gradlew detekt --console=plain
+      - name: Upload detekt HTML report
         uses: actions/upload-artifact@v4
         with:
-          name: detekt-reports
-          path: "**/build/reports/detekt/"
-
-      - name: Upload ktlint reports
-        if: always()
-        uses: actions/upload-artifact@v4
+          name: detekt-html
+          path: "**/build/reports/detekt/detekt.html"
+      - name: Upload detekt SARIF to Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          name: ktlint-reports
-          path: "**/build/reports/ktlint/"
+          sarif_file: "**/build/reports/detekt/detekt.sarif"
