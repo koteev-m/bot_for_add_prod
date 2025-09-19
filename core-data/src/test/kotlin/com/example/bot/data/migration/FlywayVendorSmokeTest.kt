@@ -5,13 +5,17 @@ import com.zaxxer.hikari.HikariDataSource
 import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.DockerClientFactory
 import org.testcontainers.containers.PostgreSQLContainer
 import java.math.BigDecimal
 import java.sql.Connection
 import java.util.UUID
+import testing.RequiresDocker
 
+@RequiresDocker
+@Tag("it")
 class FlywayVendorSmokeTest {
     private val resourcesToClose = mutableListOf<AutoCloseable>()
 

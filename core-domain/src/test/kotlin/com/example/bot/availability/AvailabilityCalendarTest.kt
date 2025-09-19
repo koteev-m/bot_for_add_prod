@@ -9,6 +9,7 @@ import com.example.bot.time.OperatingRulesResolver
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Testcontainers
@@ -17,7 +18,10 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import testing.RequiresDocker
 
+@RequiresDocker
+@Tag("it")
 @Testcontainers
 class AvailabilityCalendarTest {
 

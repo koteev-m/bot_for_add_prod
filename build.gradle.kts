@@ -39,8 +39,17 @@ subprojects {
     pluginManager.withPlugin("org.jetbrains.kotlin.jvm") {
         apply(from = rootProject.file("gradle/detekt-cli.gradle.kts"))
         apply(from = rootProject.file("gradle/ktlint-cli.gradle.kts"))
-        tasks.withType<Test>().configureEach {
-            useJUnitPlatform()
+    }
+
+    tasks.withType<Test>().configureEach {
+        useJUnitPlatform()
+        val isCi = project.providers.environmentVariable("CI").orElse("false").map { it.equals("true", true) }
+        val runIt = project.providers.gradleProperty("runIT").orElse("false").map { it.equals("true", true) }
+        doFirst {
+            if (!isCi.get() && !runIt.get()) {
+                logger.lifecycle("Excluding @Tag(\"it\") tests (no CI and -PrunIT not set)")
+                systemProperty("junit.jupiter.tags.exclude", "it")
+            }
         }
     }
 }

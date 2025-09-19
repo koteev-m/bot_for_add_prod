@@ -5,10 +5,14 @@ import kotlinx.coroutines.runBlocking
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.sql.Database
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.containers.PostgreSQLContainer
 import java.time.Instant
+import testing.RequiresDocker
 
+@RequiresDocker
+@Tag("it")
 class RepositoryTest {
     @Test
     fun `create and list`() =

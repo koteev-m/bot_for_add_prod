@@ -16,8 +16,12 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import testing.RequiresDocker
 
+@RequiresDocker
+@Tag("it")
 class BookingRepositoryIT : PostgresIntegrationTest() {
     private val clock = Clock.fixed(Instant.parse("2025-01-01T00:00:00Z"), ZoneOffset.UTC)
     private val bookingRepo by lazy { BookingRepository(database, clock) }

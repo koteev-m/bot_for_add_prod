@@ -22,6 +22,8 @@ dependencies {
     implementation(projects.coreDomain)
     implementation(projects.coreData)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.junit.jupiter)
+    implementation(libs.testcontainers.junit)
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.kotest.runner)
     testImplementation(libs.kotest.assertions)

@@ -23,9 +23,13 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import testing.RequiresDocker
 import kotlin.test.assertEquals
 
+@RequiresDocker
+@Tag("it")
 class OutboxWorkerSmokeTest : PgContainer() {
     @BeforeEach
     fun prepare() {

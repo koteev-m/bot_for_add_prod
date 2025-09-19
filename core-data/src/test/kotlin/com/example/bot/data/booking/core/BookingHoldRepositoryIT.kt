@@ -16,8 +16,12 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import testing.RequiresDocker
 
+@RequiresDocker
+@Tag("it")
 class BookingHoldRepositoryIT : PostgresIntegrationTest() {
     @Test
     fun `create hold respects ttl`() = runBlocking {
