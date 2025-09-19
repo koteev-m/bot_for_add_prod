@@ -1,14 +1,13 @@
 -- Add telegram notification endpoints for clubs and HQ
 
 -- Extend clubs with chat and topic identifiers
-ALTER TABLE clubs
-    ADD COLUMN IF NOT EXISTS admin_chat_id BIGINT,
-    ADD COLUMN IF NOT EXISTS general_topic_id INT,
-    ADD COLUMN IF NOT EXISTS bookings_topic_id INT,
-    ADD COLUMN IF NOT EXISTS lists_topic_id INT,
-    ADD COLUMN IF NOT EXISTS qa_topic_id INT,
-    ADD COLUMN IF NOT EXISTS media_topic_id INT,
-    ADD COLUMN IF NOT EXISTS system_topic_id INT;
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS admin_chat_id BIGINT;
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS general_topic_id INT;
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS bookings_topic_id INT;
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS lists_topic_id INT;
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS qa_topic_id INT;
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS media_topic_id INT;
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS system_topic_id INT;
 
 COMMENT ON COLUMN clubs.admin_chat_id IS 'Telegram chat id of admin supergroup';
 COMMENT ON COLUMN clubs.general_topic_id IS 'Topic id for general discussions';
@@ -20,7 +19,7 @@ COMMENT ON COLUMN clubs.system_topic_id IS 'Topic id for system messages';
 
 -- HQ notification table
 CREATE TABLE IF NOT EXISTS hq_notify (
-    id SMALLINT PRIMARY KEY DEFAULT 1,
+    id SMALLINT DEFAULT 1 PRIMARY KEY,
     chat_id BIGINT NOT NULL,
     general_topic_id INT NULL,
     bookings_topic_id INT NULL,

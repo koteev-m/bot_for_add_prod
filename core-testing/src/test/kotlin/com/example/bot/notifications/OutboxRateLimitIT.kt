@@ -1,5 +1,6 @@
 package com.example.bot.notifications
 
+import com.example.bot.data.notifications.OutboxStatus
 import com.example.bot.data.repo.OutboxRepository
 import com.example.bot.telegram.NotifySender
 import com.example.bot.telegram.SendResult
@@ -28,7 +29,7 @@ class OutboxRateLimitIT :
             data class State(
                 val msg: NotifyMessage,
                 var attempts: Int = 0,
-                var status: String = "PENDING",
+                var status: OutboxStatus = OutboxStatus.NEW,
                 var next: OffsetDateTime = OffsetDateTime.now(),
             )
             val records = ConcurrentHashMap<Long, State>()
@@ -48,7 +49,7 @@ class OutboxRateLimitIT :
                 val now: OffsetDateTime = arg(0)
                 val limit: Int = arg(1)
                 records.entries
-                    .filter { it.value.status == "PENDING" && !it.value.next.isAfter(now) }
+                    .filter { it.value.status == OutboxStatus.NEW && !it.value.next.isAfter(now) }
                     .sortedBy { it.key }
                     .take(limit)
                     .map { (id, st) -> OutboxRepository.Record(id, st.msg, null, st.attempts) }
@@ -56,7 +57,7 @@ class OutboxRateLimitIT :
             coEvery { repo.markSent(any(), any()) } coAnswers {
                 val id: Long = arg(0)
                 records[id]?.apply {
-                    status = "SENT"
+                    status = OutboxStatus.SENT
                     attempts++
                 }
                 1
@@ -65,7 +66,7 @@ class OutboxRateLimitIT :
                 val id: Long = arg(0)
                 val next: OffsetDateTime = arg(2)
                 records[id]?.apply {
-                    status = "PENDING"
+                    status = OutboxStatus.NEW
                     this.next = next
                     attempts++
                 }
@@ -75,7 +76,7 @@ class OutboxRateLimitIT :
                 val id: Long = arg(0)
                 val next: OffsetDateTime = arg(1)
                 records[id]?.apply {
-                    status = "PENDING"
+                    status = OutboxStatus.NEW
                     this.next = next
                 }
                 1

@@ -28,7 +28,7 @@ cp .env.example .env
 
 Required variables:
 
-- `BOT_TOKEN`
+- `TELEGRAM_BOT_TOKEN`
 - `WEBHOOK_SECRET_TOKEN`
 - `DATABASE_URL`
 - `DATABASE_USER`
@@ -37,6 +37,30 @@ Required variables:
 
 The application reads secrets only from the environment. To switch between
 configurations set `APP_ENV` (`dev` is default, set `prod` for production).
+
+## Database migrations
+
+Flyway migrations run via the root `flywayMigrate` task, which delegates to `:core-data`.
+Provide the database connection through environment variables (or Gradle properties
+with the same names) before invoking the task. The migration plugin auto-detects the
+database vendor from `DATABASE_URL`; override the detection explicitly with
+`-PdbVendor=postgresql` or `-PdbVendor=h2` when needed.
+
+Example for a local PostgreSQL instance:
+
+```bash
+DATABASE_URL=jdbc:postgresql://localhost:5432/postgres \
+DATABASE_USER=postgres DATABASE_PASSWORD=postgres \
+./gradlew flywayMigrate --console=plain
+```
+
+Example for the in-memory H2 development database:
+
+```bash
+DATABASE_URL=jdbc:h2:mem:bot;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false \
+DATABASE_USER=sa DATABASE_PASSWORD= \
+./gradlew flywayMigrate --console=plain
+```
 
 ## Telegram bot modes
 

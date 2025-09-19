@@ -42,7 +42,7 @@ class PaymentsServiceUnitTest {
     fun `should confirm without payment when mode none`() =
         runTest {
             val summary =
-                BookingSummary(UUID.randomUUID(), 1, 1, 1, 1, 1, BigDecimal(50), "CONFIRMED", Instant.now(), "qr")
+                BookingSummary(UUID.randomUUID(), 1, 1, 1, 1, 1, BigDecimal(50), "BOOKED", Instant.now(), "qr")
             coEvery { bookingService.confirm(any(), any()) } returns Either.Right(summary)
             val input = ConfirmInput(1, Instant.now(), 1, 1, 1, BigDecimal(50))
             val policy = PaymentPolicy(mode = PaymentMode.NONE)

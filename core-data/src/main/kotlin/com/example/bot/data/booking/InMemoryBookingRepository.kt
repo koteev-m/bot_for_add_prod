@@ -89,7 +89,7 @@ class InMemoryBookingRepository :
                 bookings.values.none {
                     it.tableId == tableId &&
                         it.eventId == eventId &&
-                        it.status in setOf("CONFIRMED", "SEATED")
+                        it.status in setOf("BOOKED", "SEATED")
                 },
             ) {
                 "active booking exists"

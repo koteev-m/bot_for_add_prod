@@ -2,7 +2,41 @@ package com.example.bot.config
 
 import java.util.Locale
 
-internal fun env(name: String): String? = System.getenv(name)
+private val envOverrides = ThreadLocal<Map<String, String?>>()
+
+internal fun env(name: String): String? {
+    val overrides = envOverrides.get()
+    if (overrides != null && overrides.containsKey(name)) {
+        return overrides[name]
+    }
+    return System.getenv(name)
+}
+
+internal inline fun <T> withEnv(vararg overrides: Pair<String, String?>, block: () -> T): T {
+    val map = linkedMapOf<String, String?>()
+    overrides.forEach { (key, value) -> map[key] = value }
+    return withEnv(map, block)
+}
+
+internal inline fun <T> withEnv(overrides: Map<String, String?>, block: () -> T): T {
+    val previous = envOverrides.get()
+    val merged =
+        if (previous != null) {
+            previous.toMutableMap().apply { putAll(overrides) }
+        } else {
+            overrides.toMutableMap()
+        }
+    envOverrides.set(merged)
+    return try {
+        block()
+    } finally {
+        if (previous == null) {
+            envOverrides.remove()
+        } else {
+            envOverrides.set(previous)
+        }
+    }
+}
 
 internal fun envRequired(name: String): String =
     env(name) ?: error("ENV $name is required")

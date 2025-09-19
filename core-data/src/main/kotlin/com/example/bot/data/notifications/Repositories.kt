@@ -1,6 +1,8 @@
 package com.example.bot.data.notifications
 
 import kotlinx.serialization.json.JsonElement
+import com.example.bot.data.notifications.NotificationsOutboxTable
+import com.example.bot.data.notifications.OutboxStatus
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -168,22 +170,23 @@ data class OutboxRecord(
 class NotificationsOutboxRepository(private val db: Database) {
     suspend fun insert(record: OutboxRecord) {
         return newSuspendedTransaction(db = db) {
-            NotificationsOutbox.insert {
-                it[NotificationsOutbox.recipientType] = record.recipientType
-                it[NotificationsOutbox.recipientId] = record.recipientId
-                it[NotificationsOutbox.dedupKey] = record.dedupKey
-                it[NotificationsOutbox.priority] = record.priority
-                it[NotificationsOutbox.campaignId] = record.campaignId
-                it[NotificationsOutbox.method] = record.method
-                it[NotificationsOutbox.payload] = record.payload
+            NotificationsOutboxTable.insert {
+                it[NotificationsOutboxTable.recipientType] = record.recipientType
+                it[NotificationsOutboxTable.recipientId] = record.recipientId
+                it[NotificationsOutboxTable.dedupKey] = record.dedupKey
+                it[NotificationsOutboxTable.priority] = record.priority
+                it[NotificationsOutboxTable.campaignId] = record.campaignId
+                it[NotificationsOutboxTable.method] = record.method
+                it[NotificationsOutboxTable.payload] = record.payload
+                it[NotificationsOutboxTable.status] = OutboxStatus.NEW.name
             }
         }
     }
 
     suspend fun find(id: Long): OutboxRecord? {
         return newSuspendedTransaction(db = db) {
-            NotificationsOutbox
-                .select { NotificationsOutbox.id eq id }
+            NotificationsOutboxTable
+                .select { NotificationsOutboxTable.id eq id }
                 .map { toOutbox(it) }
                 .singleOrNull()
         }
@@ -191,15 +194,15 @@ class NotificationsOutboxRepository(private val db: Database) {
 
     private fun toOutbox(row: ResultRow): OutboxRecord {
         return OutboxRecord(
-            id = row[NotificationsOutbox.id],
-            recipientType = row[NotificationsOutbox.recipientType],
-            recipientId = row[NotificationsOutbox.recipientId],
-            dedupKey = row[NotificationsOutbox.dedupKey],
-            priority = row[NotificationsOutbox.priority],
-            campaignId = row[NotificationsOutbox.campaignId],
-            method = row[NotificationsOutbox.method],
-            payload = row[NotificationsOutbox.payload],
-            createdAt = row[NotificationsOutbox.createdAt],
+            id = row[NotificationsOutboxTable.id],
+            recipientType = row[NotificationsOutboxTable.recipientType],
+            recipientId = row[NotificationsOutboxTable.recipientId],
+            dedupKey = row[NotificationsOutboxTable.dedupKey],
+            priority = row[NotificationsOutboxTable.priority],
+            campaignId = row[NotificationsOutboxTable.campaignId],
+            method = row[NotificationsOutboxTable.method],
+            payload = row[NotificationsOutboxTable.payload],
+            createdAt = row[NotificationsOutboxTable.createdAt],
         )
     }
 }

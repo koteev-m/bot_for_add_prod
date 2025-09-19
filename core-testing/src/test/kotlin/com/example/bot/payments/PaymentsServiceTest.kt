@@ -81,7 +81,7 @@ class PaymentsServiceTest {
                     tableNumber = 1,
                     guestsCount = 1,
                     totalDeposit = BigDecimal(50),
-                    status = "CONFIRMED",
+                    status = "BOOKED",
                     arrivalBy = Instant.now(),
                     qrSecret = "qr",
                 )

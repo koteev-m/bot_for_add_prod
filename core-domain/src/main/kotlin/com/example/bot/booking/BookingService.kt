@@ -94,7 +94,7 @@ class BookingService(
                             tableNumber = table.number,
                             guests = req.guestsCount,
                             totalDeposit = totalDeposit,
-                            status = "CONFIRMED",
+                            status = "BOOKED",
                             arrivalBy = event.endUtc,
                             qrSecret = qr,
                             idempotencyKey = idemKey,
@@ -120,7 +120,7 @@ class BookingService(
                 val booking =
                     readRepo.findBookingById(bookingId)
                         ?: return@withContext Either.Left(BookingError.NotFound("booking not found"))
-                if (booking.status != "CONFIRMED") {
+                if (booking.status != "BOOKED") {
                     return@withContext Either.Left(BookingError.Validation("cannot cancel in status ${booking.status}"))
                 }
                 writeRepo.updateStatus(bookingId, "CANCELLED")
@@ -141,7 +141,7 @@ class BookingService(
                 val booking =
                     readRepo.findBookingByQr(qrSecret)
                         ?: return@withContext Either.Left(BookingError.NotFound("booking not found"))
-                if (booking.status != "CONFIRMED") {
+                if (booking.status != "BOOKED") {
                     return@withContext Either.Left(BookingError.Validation("cannot seat in status ${booking.status}"))
                 }
                 writeRepo.updateStatus(booking.id, "SEATED")
