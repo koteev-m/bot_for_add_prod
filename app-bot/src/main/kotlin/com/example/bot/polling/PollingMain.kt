@@ -1,5 +1,6 @@
 package com.example.bot.polling
 
+import com.example.bot.config.AppConfig
 import com.example.bot.dedup.UpdateDeduplicator
 import com.example.bot.telegram.TelegramClient
 import com.pengrad.telegrambot.model.Update
@@ -45,13 +46,12 @@ object PollingMain {
     @JvmStatic
     fun main(args: Array<String>) {
         runBlocking {
-            val token = env("BOT_TOKEN")
-            val apiUrl = System.getenv("LOCAL_BOT_API_URL")
+            val config = AppConfig.fromEnv()
+            val token = config.bot.token
+            val apiUrl = config.localApi.baseUrl.takeIf { config.localApi.enabled }
             val client = TelegramClient(token, apiUrl)
             val runner = PollingRunner(client, handler = { /* integrate domain handlers here */ })
             while (true) runner.runOnce()
         }
     }
-
-    private fun env(name: String): String = System.getenv(name) ?: error("Missing $name")
 }

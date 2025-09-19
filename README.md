@@ -28,7 +28,7 @@ cp .env.example .env
 
 Required variables:
 
-- `BOT_TOKEN`
+- `TELEGRAM_BOT_TOKEN`
 - `WEBHOOK_SECRET_TOKEN`
 - `DATABASE_URL`
 - `DATABASE_USER`
