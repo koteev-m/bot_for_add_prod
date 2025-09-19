@@ -17,6 +17,7 @@ object AuditLogTable : Table("audit_log") {
     val resourceId = text("resource_id").nullable()
     val clubId = long("club_id").nullable()
     val ip = varchar("ip", 64).nullable()
+    val result = text("result")
     val meta = jsonb<JsonElement>("meta", Json)
     override val primaryKey = PrimaryKey(id)
 }
