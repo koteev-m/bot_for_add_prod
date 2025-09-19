@@ -51,6 +51,8 @@ jobs:
           echo "postgres not ready" && exit 1
 
       - name: Run unit & integration tests
+        env:
+          CI: "true"
         run: ./gradlew clean test --console=plain
 
       - name: Upload test reports

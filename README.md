@@ -102,6 +102,12 @@ Enable verbose logging:
 
 Test reports are generated under `build/reports/tests/test/index.html`.
 
+## Запуск интеграционных тестов
+
+- Локально без Docker: `./gradlew clean build detekt` — интеграционные тесты автоматически пропустятся.
+- Локально с Docker: `./gradlew clean build test detekt -PrunIT=true`.
+- В CI интеграционные тесты запускаются автоматически (`CI=true`).
+
 ## Perf smoke
 
 Сборка и запуск:

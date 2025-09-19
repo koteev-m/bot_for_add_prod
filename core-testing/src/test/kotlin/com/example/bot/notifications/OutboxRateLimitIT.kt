@@ -15,11 +15,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.junit.jupiter.api.Tag
 import java.time.OffsetDateTime
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import testing.RequiresDocker
 
+@RequiresDocker
+@Tag("it")
 class OutboxRateLimitIT :
     StringSpec({
         "worker respects rate limits" {

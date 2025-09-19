@@ -11,8 +11,12 @@ import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import testing.RequiresDocker
 
+@RequiresDocker
+@Tag("it")
 class OutboxRepositoryIT : PostgresIntegrationTest() {
     @Test
     fun `enqueue pick and update outbox`() = runBlocking {

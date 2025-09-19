@@ -31,6 +31,7 @@ dependencies {
     testImplementation(libs.kotest.runner)
     testImplementation(libs.kotest.assertions)
     testImplementation(libs.mockk)
+    testImplementation(projects.coreTesting)
     testImplementation(libs.testcontainers.junit)
     testImplementation(libs.testcontainers.postgresql)
 }
