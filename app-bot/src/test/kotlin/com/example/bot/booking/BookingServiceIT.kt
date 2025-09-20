@@ -10,6 +10,17 @@ import com.example.bot.data.booking.core.BookingRepository
 import com.example.bot.data.booking.core.OutboxRepository
 import com.example.bot.data.booking.core.BookingOutboxTable
 import com.example.bot.data.db.Clubs
+import com.example.bot.data.promo.PromoAttributionRepositoryImpl
+import com.example.bot.data.promo.PromoLinkRepositoryImpl
+import com.example.bot.data.security.ExposedUserRepository
+import com.example.bot.data.security.ExposedUserRoleRepository
+import com.example.bot.promo.InMemoryPromoAttributionStore
+import com.example.bot.promo.PromoAttributionCoordinator
+import com.example.bot.promo.PromoAttributionService
+import com.example.bot.promo.PromoLinkIssueResult
+import com.example.bot.promo.PromoLinkToken
+import com.example.bot.promo.PromoLinkTokenCodec
+import com.example.bot.promo.PromoStartResult
 import com.example.bot.testing.PostgresAppTest
 import com.example.bot.workers.OutboxWorker
 import com.example.bot.workers.SendOutcome
@@ -20,6 +31,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+import java.util.Base64
 import java.util.UUID
 import kotlin.random.Random
 import kotlinx.coroutines.async
@@ -32,6 +44,8 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -43,12 +57,14 @@ class BookingServiceIT : PostgresAppTest() {
     private val fixedNow: Instant = Instant.parse("2025-04-01T10:00:00Z")
     private val clock: Clock = Clock.fixed(fixedNow, ZoneOffset.UTC)
 
-    private fun newService(): BookingService {
+    private fun newService(
+        promoAttribution: PromoAttributionCoordinator = PromoAttributionCoordinator.Noop,
+    ): BookingService {
         val bookingRepo = BookingRepository(database, clock)
         val holdRepo = BookingHoldRepository(database, clock)
         val outboxRepo = OutboxRepository(database, clock)
         val auditRepo = AuditLogRepository(database, clock)
-        return BookingService(bookingRepo, holdRepo, outboxRepo, auditRepo)
+        return BookingService(bookingRepo, holdRepo, outboxRepo, auditRepo, promoAttribution)
     }
 
     @Test
@@ -154,6 +170,54 @@ class BookingServiceIT : PostgresAppTest() {
             }
         assertEquals("SENT", outboxStatus)
         assertTrue(sentMessages.isNotEmpty())
+    }
+
+    @Test
+    fun `promo deep-link attaches on finalize`() = runBlocking {
+        val promoLinkRepository = PromoLinkRepositoryImpl(database, clock)
+        val promoAttributionRepository = PromoAttributionRepositoryImpl(database, clock)
+        val userRepository = ExposedUserRepository(database)
+        val userRoleRepository = ExposedUserRoleRepository(database)
+        val promoStore = InMemoryPromoAttributionStore(clock = clock)
+        val promoService =
+            PromoAttributionService(
+                promoLinkRepository = promoLinkRepository,
+                promoAttributionRepository = promoAttributionRepository,
+                userRepository = userRepository,
+                userRoleRepository = userRoleRepository,
+                store = promoStore,
+                clock = clock,
+            )
+        val service = newService(promoService)
+        val seed = seedData()
+        val promoterTelegramId = 1_000_001L
+        val guestTelegramId = 2_000_002L
+
+        val issued = promoService.issuePromoLink(promoterTelegramId)
+        assertTrue(issued is PromoLinkIssueResult.Success)
+        issued as PromoLinkIssueResult.Success
+
+        val startResult = promoService.registerStart(guestTelegramId, issued.token)
+        assertEquals(PromoStartResult.Stored, startResult)
+
+        val bookingId = confirmBooking(service, seed)
+
+        service.finalize(bookingId, guestTelegramId)
+        service.finalize(bookingId, guestTelegramId)
+
+        val stored = promoAttributionRepository.findByBooking(bookingId)
+        assertNotNull(stored)
+        stored!!
+        assertEquals(issued.promoLink.id, stored.promoLinkId)
+        assertEquals(issued.promoLink.promoterUserId, stored.promoterUserId)
+
+        val count =
+            transaction(database) {
+                exec("SELECT COUNT(*) FROM promo_attribution") { rs ->
+                    if (rs.next()) rs.getLong(1) else 0L
+                } ?: 0L
+            }
+        assertEquals(1L, count)
     }
 
     @Test
@@ -272,4 +336,39 @@ class BookingServiceIT : PostgresAppTest() {
         val slotStart: Instant,
         val slotEnd: Instant,
     )
+}
+
+class PromoLinkTokenCodecTest {
+    @Test
+    fun `encode decode roundtrip with club`() {
+        val original = PromoLinkToken(42, 7)
+        val encoded = PromoLinkTokenCodec.encode(original)
+        assertEquals(original, PromoLinkTokenCodec.decode(encoded))
+        assertTrue(encoded.length <= 64)
+    }
+
+    @Test
+    fun `encode decode roundtrip without club`() {
+        val original = PromoLinkToken(123456789L, null)
+        val encoded = PromoLinkTokenCodec.encode(original)
+        assertEquals(original, PromoLinkTokenCodec.decode(encoded))
+        assertTrue(encoded.length <= 64)
+    }
+
+    @Test
+    fun `decode returns null for invalid base64`() {
+        assertNull(PromoLinkTokenCodec.decode("!invalid!"))
+    }
+
+    @Test
+    fun `decode returns null for malformed payload`() {
+        val encoded = Base64.getUrlEncoder().withoutPadding().encodeToString("abc:def".toByteArray())
+        assertNull(PromoLinkTokenCodec.decode(encoded))
+    }
+
+    @Test
+    fun `max token length is within limit`() {
+        val encoded = PromoLinkTokenCodec.encode(PromoLinkToken(Long.MAX_VALUE, Long.MAX_VALUE))
+        assertTrue(encoded.length <= 64)
+    }
 }

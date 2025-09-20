@@ -5,7 +5,15 @@ import com.example.bot.data.booking.core.AuditLogRepository
 import com.example.bot.data.booking.core.BookingHoldRepository
 import com.example.bot.data.booking.core.BookingRepository
 import com.example.bot.data.booking.core.OutboxRepository
+import com.example.bot.data.promo.PromoAttributionRepositoryImpl
+import com.example.bot.data.promo.PromoLinkRepositoryImpl
+import com.example.bot.data.security.ExposedUserRepository
+import com.example.bot.data.security.ExposedUserRoleRepository
 import com.example.bot.plugins.DataSourceHolder
+import com.example.bot.promo.InMemoryPromoAttributionStore
+import com.example.bot.promo.PromoAttributionCoordinator
+import com.example.bot.promo.PromoAttributionService
+import com.example.bot.promo.PromoAttributionStore
 import com.example.bot.workers.OutboxWorker
 import com.example.bot.workers.SendOutcome
 import com.example.bot.workers.SendPort
@@ -22,8 +30,15 @@ val bookingModule = module {
     single { BookingHoldRepository(get()) }
     single { OutboxRepository(get()) }
     single { AuditLogRepository(get()) }
+    single { PromoLinkRepositoryImpl(get()) }
+    single { PromoAttributionRepositoryImpl(get()) }
+    single { ExposedUserRepository(get()) }
+    single { ExposedUserRoleRepository(get()) }
+    single<PromoAttributionStore> { InMemoryPromoAttributionStore() }
+    single { PromoAttributionService(get(), get(), get(), get(), get()) }
+    single<PromoAttributionCoordinator> { get<PromoAttributionService>() }
     single<SendPort> { DummySendPort }
-    single { BookingService(get(), get(), get(), get()) }
+    single { BookingService(get(), get(), get(), get(), get()) }
     single { OutboxWorker(get(), get()) }
 }
 
