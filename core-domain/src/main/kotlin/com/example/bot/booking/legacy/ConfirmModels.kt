@@ -1,4 +1,4 @@
-package com.example.bot.booking
+package com.example.bot.booking.legacy
 
 import java.math.BigDecimal
 import java.time.Instant

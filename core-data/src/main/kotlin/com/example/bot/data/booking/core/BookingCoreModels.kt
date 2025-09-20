@@ -56,11 +56,15 @@ data class BookingRecord(
 
 data class BookingHold(
     val id: UUID,
+    val clubId: Long,
     val tableId: Long,
     val eventId: Long,
     val slotStart: Instant,
     val slotEnd: Instant,
     val expiresAt: Instant,
+    val guests: Int,
+    val minDeposit: BigDecimal,
+    val idempotencyKey: String,
 )
 
 data class OutboxMessage(

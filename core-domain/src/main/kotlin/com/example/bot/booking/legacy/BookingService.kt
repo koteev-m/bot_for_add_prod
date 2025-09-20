@@ -1,5 +1,8 @@
-package com.example.bot.booking
+package com.example.bot.booking.legacy
 
+import com.example.bot.booking.BookingReadRepository
+import com.example.bot.booking.BookingRecord
+import com.example.bot.booking.BookingWriteRepository
 import com.example.bot.outbox.OutboxService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

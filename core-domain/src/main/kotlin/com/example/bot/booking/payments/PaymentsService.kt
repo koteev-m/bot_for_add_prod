@@ -1,10 +1,10 @@
 package com.example.bot.booking.payments
 
-import com.example.bot.booking.BookingError
-import com.example.bot.booking.BookingService
-import com.example.bot.booking.ConfirmRequest
-import com.example.bot.booking.Either
 import com.example.bot.booking.PaymentPolicy
+import com.example.bot.booking.legacy.BookingError
+import com.example.bot.booking.legacy.BookingService
+import com.example.bot.booking.legacy.ConfirmRequest
+import com.example.bot.booking.legacy.Either
 import com.example.bot.payments.PaymentsRepository
 import java.math.BigDecimal
 import java.util.UUID

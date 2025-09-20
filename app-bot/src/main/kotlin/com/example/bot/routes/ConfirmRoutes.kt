@@ -1,6 +1,7 @@
 package com.example.bot.routes
 
 import com.example.bot.booking.PaymentPolicy
+import com.example.bot.booking.legacy.Either
 import com.example.bot.booking.payments.ConfirmInput
 import com.example.bot.booking.payments.PaymentMode
 import com.example.bot.booking.payments.PaymentsService
@@ -21,8 +22,8 @@ fun Route.confirmRoutes(payments: PaymentsService) {
         val idem = call.request.headers["Idempotency-Key"] ?: UUID.randomUUID().toString()
         val policy = PaymentPolicy(mode = PaymentMode.PROVIDER_DEPOSIT)
         when (val res = payments.startConfirmation(input, null, policy, idem)) {
-            is com.example.bot.booking.Either.Left -> call.respond(HttpStatusCode.InternalServerError, res.value)
-            is com.example.bot.booking.Either.Right -> call.respond(res.value)
+            is Either.Left -> call.respond(HttpStatusCode.InternalServerError, res.value)
+            is Either.Right -> call.respond(res.value)
         }
     }
 }

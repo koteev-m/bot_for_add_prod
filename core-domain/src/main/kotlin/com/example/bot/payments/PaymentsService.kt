@@ -1,9 +1,9 @@
 package com.example.bot.payments
 
-import com.example.bot.booking.ConfirmInput
-import com.example.bot.booking.InvoiceInfo
 import com.example.bot.booking.PaymentMode
 import com.example.bot.booking.PaymentPolicy
+import com.example.bot.booking.legacy.ConfirmInput
+import com.example.bot.booking.legacy.InvoiceInfo
 import java.math.BigDecimal
 import java.util.UUID
 

@@ -47,6 +47,9 @@ dependencies {
     implementation(libs.logback)
     implementation(libs.logstash.encoder)
     implementation(libs.pengrad.telegram)
+    implementation(libs.koin.core)
+    implementation(libs.koin.ktor)
+    implementation(libs.koin.logger.slf4j)
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.kotest.runner)
@@ -56,6 +59,7 @@ dependencies {
     testImplementation(libs.postgres)
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.testcontainers.junit)
+    testImplementation(projects.coreTesting)
 }
 
 application {

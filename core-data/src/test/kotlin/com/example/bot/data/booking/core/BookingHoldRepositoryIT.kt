@@ -29,9 +29,20 @@ class BookingHoldRepositoryIT : PostgresIntegrationTest() {
         val clock = Clock.fixed(context.now, ZoneOffset.UTC)
         val repo = BookingHoldRepository(database, clock)
         val ttl = Duration.ofMinutes(30)
-        val result = repo.createHold(context.tableId, context.slotStart, context.slotEnd, ttl)
+        val result =
+            repo.createHold(
+                context.tableId,
+                context.slotStart,
+                context.slotEnd,
+                guestsCount = 2,
+                ttl = ttl,
+                idempotencyKey = "hold-ttl",
+            )
         val hold = (result as BookingCoreResult.Success).value
         assertEquals(context.now.plus(ttl), hold.expiresAt)
+        assertEquals(2, hold.guests)
+        assertEquals(context.clubId, hold.clubId)
+        assertEquals("hold-ttl", hold.idempotencyKey)
     }
 
     @Test
@@ -44,7 +55,9 @@ class BookingHoldRepositoryIT : PostgresIntegrationTest() {
                 context.tableId,
                 context.slotStart,
                 context.slotEnd,
-                Duration.ofMinutes(10),
+                guestsCount = 3,
+                ttl = Duration.ofMinutes(10),
+                idempotencyKey = "hold-prolong",
             ) as BookingCoreResult.Success
         val newClock = Clock.fixed(context.now.plusSeconds(300), ZoneOffset.UTC)
         val repoProlong = BookingHoldRepository(database, newClock)
@@ -62,7 +75,9 @@ class BookingHoldRepositoryIT : PostgresIntegrationTest() {
                 context.tableId,
                 context.slotStart,
                 context.slotEnd,
-                Duration.ofMinutes(5),
+                guestsCount = 2,
+                ttl = Duration.ofMinutes(5),
+                idempotencyKey = "hold-consume",
             ) as BookingCoreResult.Success
         val consumed = repo.consumeHold(created.value.id) as BookingCoreResult.Success
         assertEquals(created.value.id, consumed.value.id)
@@ -83,14 +98,18 @@ class BookingHoldRepositoryIT : PostgresIntegrationTest() {
             context.tableId,
             context.slotStart,
             context.slotEnd,
-            Duration.ofMinutes(1),
+            guestsCount = 1,
+            ttl = Duration.ofMinutes(1),
+            idempotencyKey = "hold-expired",
         )
         val active =
             repo.createHold(
                 context.tableId,
                 context.slotStart,
                 context.slotEnd,
-                Duration.ofHours(1),
+                guestsCount = 1,
+                ttl = Duration.ofHours(1),
+                idempotencyKey = "hold-active",
             ) as BookingCoreResult.Success
         val removed = repo.cleanupExpired(context.now.plusSeconds(600))
         assertEquals(1, removed)
@@ -132,6 +151,7 @@ class BookingHoldRepositoryIT : PostgresIntegrationTest() {
             }
             SeedContext(
                 now = now,
+                clubId = clubId,
                 tableId = tableId,
                 slotStart = slotStart,
                 slotEnd = slotEnd,
@@ -141,6 +161,7 @@ class BookingHoldRepositoryIT : PostgresIntegrationTest() {
 
     private data class SeedContext(
         val now: Instant,
+        val clubId: Long,
         val tableId: Long,
         val slotStart: Instant,
         val slotEnd: Instant,

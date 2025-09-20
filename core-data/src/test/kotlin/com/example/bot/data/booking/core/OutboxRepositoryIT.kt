@@ -38,8 +38,9 @@ class OutboxRepositoryIT : PostgresIntegrationTest() {
             }
         assertEquals("SENT", sentRow[BookingOutboxTable.status])
         assertEquals(1, sentRow[BookingOutboxTable.attempts])
-        val markFailed = repo.markFailedWithRetry(id2, "temporary") as BookingCoreResult.Success
         val expectedNext = fixedNow.plus(BotLimits.notifySendBaseBackoff)
+        val markFailed =
+            repo.markFailedWithRetry(id2, "temporary", expectedNext) as BookingCoreResult.Success
         assertEquals(expectedNext, markFailed.value.nextAttemptAt)
         assertEquals(1, markFailed.value.attempts)
         val stored =

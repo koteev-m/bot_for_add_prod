@@ -1,9 +1,9 @@
 package com.example.bot.payments
 
-import com.example.bot.booking.BookingService
-import com.example.bot.booking.BookingSummary
-import com.example.bot.booking.Either
 import com.example.bot.booking.PaymentPolicy
+import com.example.bot.booking.legacy.BookingService
+import com.example.bot.booking.legacy.BookingSummary
+import com.example.bot.booking.legacy.Either
 import com.example.bot.booking.payments.ConfirmInput
 import com.example.bot.booking.payments.PaymentMode
 import com.example.bot.booking.payments.PaymentsService
