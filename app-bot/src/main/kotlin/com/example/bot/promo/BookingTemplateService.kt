@@ -3,13 +3,19 @@ package com.example.bot.promo
 import com.example.bot.booking.BookingCmdResult
 import com.example.bot.booking.BookingService
 import com.example.bot.booking.HoldRequest
+import com.example.bot.data.notifications.NotificationsOutboxRepository
 import com.example.bot.data.security.Role
 import com.example.bot.data.security.UserRepository
 import com.example.bot.data.security.UserRoleRepository
+import kotlin.math.min
 import java.time.Duration
 import java.time.Instant
 import java.util.LinkedHashMap
 import java.util.UUID
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import org.slf4j.LoggerFactory
+import org.slf4j.MDC
 
 private val DEFAULT_HOLD_TTL: Duration = Duration.ofMinutes(15)
 
@@ -59,12 +65,49 @@ class BookingTemplateService(
     private val bookingService: BookingService,
     private val userRepository: UserRepository,
     private val userRoleRepository: UserRoleRepository,
+    private val notificationsOutbox: NotificationsOutboxRepository,
 ) {
+    private val logger = LoggerFactory.getLogger(BookingTemplateService::class.java)
+
     suspend fun resolveActor(telegramUserId: Long): TemplateActor? {
         val user = userRepository.getByTelegramId(telegramUserId) ?: return null
         val roles = userRoleRepository.listRoles(user.id)
         val clubIds = userRoleRepository.listClubIdsFor(user.id)
         return TemplateActor(userId = user.id, telegramUserId = user.telegramId, roles = roles, clubIds = clubIds)
+    }
+
+    suspend fun listMine(promoterId: Long, page: Int, size: Int): List<BookingTemplate> {
+        require(page > 0) { "page must be positive" }
+        require(size > 0) { "size must be positive" }
+        val templates = repository.listByOwner(promoterId)
+        if (templates.isEmpty()) return emptyList()
+        val fromIndex = min((page - 1) * size, templates.size)
+        val toIndex = min(fromIndex + size, templates.size)
+        return if (fromIndex >= toIndex) emptyList() else templates.subList(fromIndex, toIndex)
+    }
+
+    suspend fun create(
+        promoterId: Long,
+        clubId: Long,
+        tableCapacityMin: Int,
+        notes: String?,
+    ): BookingTemplate {
+        return repository.create(promoterId, clubId, tableCapacityMin, notes)
+    }
+
+    suspend fun toggleActive(id: Long, active: Boolean) {
+        val template = repository.get(id) ?: throw TemplateNotFoundException("template $id not found")
+        val result = repository.update(id, template.tableCapacityMin, template.notes, active)
+        if (result !is BookingTemplateResult.Success) {
+            throw TemplateNotFoundException("template $id not found")
+        }
+    }
+
+    suspend fun delete(id: Long) {
+        when (repository.deactivate(id)) {
+            is BookingTemplateResult.Success -> Unit
+            is BookingTemplateResult.Failure -> throw TemplateNotFoundException("template $id not found")
+        }
     }
 
     suspend fun createTemplate(actor: TemplateActor, request: TemplateCreateRequest): BookingTemplate {
@@ -134,31 +177,80 @@ class BookingTemplateService(
         if (request.clubId != template.clubId) {
             throw TemplateAccessException("template $templateId cannot be applied to club ${request.clubId}")
         }
-        val guests = request.guestsOverride ?: template.tableCapacityMin
-        val holdIdempotency = "tpl-hold-${templateId}-${UUID.randomUUID()}"
-        val holdResult =
-            bookingService.hold(
-                HoldRequest(
-                    clubId = template.clubId,
-                    tableId = request.tableId,
-                    slotStart = request.slotStart,
-                    slotEnd = request.slotEnd,
-                    guestsCount = guests,
-                    ttl = request.holdTtl,
-                ),
-                holdIdempotency,
+        val idempotency =
+            templateIdempotencyKey(
+                template.id,
+                template.promoterUserId,
+                request.slotStart,
+                request.tableId,
             )
-        if (holdResult !is BookingCmdResult.HoldCreated) {
-            return holdResult
-        }
-        val confirmKey = "tpl-confirm-${templateId}-${UUID.randomUUID()}"
-        return when (val confirmed = bookingService.confirm(holdResult.holdId, confirmKey)) {
-            is BookingCmdResult.Booked -> {
-                bookingService.finalize(confirmed.bookingId, actor.telegramUserId)
+        MDC.put(MDC_IDEMPOTENCY_KEY, idempotency)
+        MDC.put(MDC_TEMPLATE_ID, templateId.toString())
+        return try {
+            val guests = request.guestsOverride ?: template.tableCapacityMin
+            val holdResult =
+                bookingService.hold(
+                    HoldRequest(
+                        clubId = template.clubId,
+                        tableId = request.tableId,
+                        slotStart = request.slotStart,
+                        slotEnd = request.slotEnd,
+                        guestsCount = guests,
+                        ttl = request.holdTtl,
+                    ),
+                    "$idempotency:hold",
+                )
+            if (holdResult !is BookingCmdResult.HoldCreated) {
+                logger.debug("applyTemplate hold result {}", holdResult)
+                return holdResult
             }
-            is BookingCmdResult.AlreadyBooked -> confirmed
-            else -> confirmed
+            when (val confirmed = bookingService.confirm(holdResult.holdId, "$idempotency:confirm")) {
+                is BookingCmdResult.Booked -> finalizeAndNotify(
+                    confirmed.bookingId,
+                    actor,
+                    template,
+                    request,
+                    idempotency,
+                )
+                else -> confirmed
+            }
+        } finally {
+            MDC.remove(MDC_IDEMPOTENCY_KEY)
+            MDC.remove(MDC_TEMPLATE_ID)
         }
+    }
+
+    private suspend fun finalizeAndNotify(
+        bookingId: UUID,
+        actor: TemplateActor,
+        template: BookingTemplate,
+        request: TemplateBookingRequest,
+        idempotency: String,
+    ): BookingCmdResult {
+        val finalized = bookingService.finalize(bookingId, actor.telegramUserId)
+        if (finalized is BookingCmdResult.Booked) {
+            val payload =
+                buildJsonObject {
+                    put("bookingId", bookingId.toString())
+                    put("templateId", template.id)
+                    put("clubId", template.clubId)
+                    put("tableId", request.tableId)
+                    put("slotStart", request.slotStart.toString())
+                    put("slotEnd", request.slotEnd.toString())
+                }
+            notificationsOutbox.enqueue(
+                kind = PROMO_TEMPLATE_BOOKED_TOPIC,
+                payload = payload,
+                recipientType = "PROMOTER",
+                recipientId = template.promoterUserId,
+                clubId = template.clubId,
+                targetChatId = 0,
+                method = "EVENT",
+                dedupKey = idempotency,
+            )
+            logger.info("promo template {} booked booking {}", template.id, bookingId)
+        }
+        return finalized
     }
 
     private fun ensureCanCreate(actor: TemplateActor, promoterId: Long, clubId: Long) {
@@ -211,4 +303,19 @@ class BookingTemplateService(
     }
 
     private fun TemplateActor.hasRole(vararg target: Role): Boolean = roles.any { it in target }
+
+    companion object {
+        private const val PROMO_TEMPLATE_BOOKED_TOPIC = "promo.template.booked"
+        private const val MDC_IDEMPOTENCY_KEY = "Idempotency-Key"
+        private const val MDC_TEMPLATE_ID = "templateId"
+    }
+}
+
+internal fun templateIdempotencyKey(
+    templateId: Long,
+    promoterId: Long,
+    slotStart: Instant,
+    tableId: Long,
+): String {
+    return "tpl:$templateId:$promoterId:${slotStart.toString()}:$tableId"
 }

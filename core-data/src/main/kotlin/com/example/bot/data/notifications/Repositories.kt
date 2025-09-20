@@ -168,6 +168,38 @@ data class OutboxRecord(
 )
 
 class NotificationsOutboxRepository(private val db: Database) {
+    suspend fun enqueue(
+        kind: String,
+        payload: JsonElement,
+        recipientType: String,
+        recipientId: Long,
+        clubId: Long? = null,
+        targetChatId: Long = 0,
+        messageThreadId: Int? = null,
+        method: String = "EVENT",
+        priority: Int = 100,
+        dedupKey: String? = null,
+        campaignId: Long? = null,
+        language: String? = null,
+    ): Long {
+        return newSuspendedTransaction(db = db) {
+            NotificationsOutboxTable.insert { row ->
+                row[NotificationsOutboxTable.clubId] = clubId
+                row[NotificationsOutboxTable.targetChatId] = targetChatId
+                row[NotificationsOutboxTable.messageThreadId] = messageThreadId
+                row[NotificationsOutboxTable.kind] = kind
+                row[NotificationsOutboxTable.payload] = payload
+                row[NotificationsOutboxTable.recipientType] = recipientType
+                row[NotificationsOutboxTable.recipientId] = recipientId
+                row[NotificationsOutboxTable.dedupKey] = dedupKey
+                row[NotificationsOutboxTable.priority] = priority
+                row[NotificationsOutboxTable.campaignId] = campaignId
+                row[NotificationsOutboxTable.method] = method
+                row[NotificationsOutboxTable.language] = language
+            }[NotificationsOutboxTable.id]
+        }
+    }
+
     suspend fun insert(record: OutboxRecord) {
         return newSuspendedTransaction(db = db) {
             NotificationsOutboxTable.insert {
