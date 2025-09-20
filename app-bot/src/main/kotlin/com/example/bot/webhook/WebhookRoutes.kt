@@ -1,16 +1,22 @@
 package com.example.bot.webhook
 
-import com.example.bot.dedup.UpdateDeduplicator
+import com.example.bot.security.webhook.WebhookSecurity
+import com.example.bot.security.webhook.WebhookSecurityConfig
+import com.example.bot.security.webhook.webhookRawBody
+import com.example.bot.security.webhook.webhookUpdateId
+import com.example.bot.security.webhook.hasWebhookPayload
 import com.example.bot.telegram.TelegramClient
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
-import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.route
 import io.ktor.server.routing.post
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 
 private val logger = LoggerFactory.getLogger("WebhookRoutes")
@@ -19,26 +25,38 @@ private val logger = LoggerFactory.getLogger("WebhookRoutes")
  * Registers the `/webhook` route that processes updates sent by Telegram.
  */
 fun Route.webhookRoute(
-    secretToken: String,
-    deduplicator: UpdateDeduplicator,
+    security: WebhookSecurityConfig.() -> Unit,
     handler: suspend (UpdateDto) -> WebhookReply?,
     client: TelegramClient,
+    json: Json = Json { ignoreUnknownKeys = true },
 ) {
-    post("/webhook") {
-        call.verifyWebhookSecret(secretToken)
-        val update = call.receive<UpdateDto>()
-        if (deduplicator.isDuplicate(update.updateId)) {
-            logger.debug("Duplicate update {}", update.updateId)
-            call.respond(HttpStatusCode.OK)
-            return@post
+    route("/webhook") {
+        install(WebhookSecurity) {
+            this.json = json
+            security(this)
         }
 
-        when (val reply = handler(update)) {
-            null -> call.respond(HttpStatusCode.OK)
-            is WebhookReply.Inline -> call.respond(reply.payload)
-            is WebhookReply.Async -> {
-                call.application.launch { client.send(reply.request) }
-                call.respond(HttpStatusCode.OK)
+        post {
+            if (!call.hasWebhookPayload()) {
+                return@post
+            }
+            val payload = call.webhookRawBody().decodeToString()
+            val update =
+                try {
+                    json.decodeFromString(UpdateDto.serializer(), payload)
+                } catch (ex: SerializationException) {
+                    logger.warn("Failed to decode update {}: {}", call.webhookUpdateId(), ex.message)
+                    call.respond(HttpStatusCode.BadRequest)
+                    return@post
+                }
+
+            when (val reply = handler(update)) {
+                null -> call.respond(HttpStatusCode.OK)
+                is WebhookReply.Inline -> call.respond(reply.payload)
+                is WebhookReply.Async -> {
+                    call.application.launch { client.send(reply.request) }
+                    call.respond(HttpStatusCode.OK)
+                }
             }
         }
     }

@@ -78,11 +78,11 @@ data class AppConfig(
 
         fun fromEnv(): AppConfig {
             val profile = env("APP_PROFILE")?.let { AppProfile.valueOf(it.uppercase()) } ?: AppProfile.DEV
-            val runMode =
-                env("RUN_MODE")
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let(::parseRunMode)
-                    ?: BotRunMode.WEBHOOK
+            val runMode = if (envBool("TELEGRAM_USE_POLLING", false)) {
+                BotRunMode.POLLING
+            } else {
+                BotRunMode.WEBHOOK
+            }
             val bot =
                 BotConfig(
                     token = envRequired("TELEGRAM_BOT_TOKEN"),
@@ -172,12 +172,6 @@ data class AppConfig(
             return AppConfig(profile, runMode, bot, webhook, db, workers, health, localApi, hq, clubs)
         }
 
-        private fun parseRunMode(raw: String): BotRunMode =
-            when (raw.lowercase()) {
-                "webhook" -> BotRunMode.WEBHOOK
-                "polling" -> BotRunMode.POLLING
-                else -> error("ENV RUN_MODE must be either webhook or polling")
-            }
     }
 
     fun toSafeString(): String {

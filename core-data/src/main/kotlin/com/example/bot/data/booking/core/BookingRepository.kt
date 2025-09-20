@@ -29,6 +29,8 @@ import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransacti
 import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.SortOrder
 
+private val ACTIVE_STATUSES = listOf(BookingStatus.BOOKED.name, BookingStatus.SEATED.name)
+
 class BookingRepository(
     private val db: Database,
     private val clock: Clock = Clock.systemUTC(),
@@ -271,9 +273,6 @@ class BookingRepository(
         )
     }
 
-    companion object {
-        private val ACTIVE_STATUSES = listOf(BookingStatus.BOOKED.name, BookingStatus.SEATED.name)
-    }
 }
 
 class BookingHoldRepository(
