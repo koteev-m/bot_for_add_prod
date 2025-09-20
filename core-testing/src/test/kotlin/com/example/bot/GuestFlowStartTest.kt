@@ -1,6 +1,7 @@
 package com.example.bot
 
 import com.example.bot.i18n.BotTexts
+import com.example.bot.promo.PromoAttributionService
 import com.example.bot.telegram.GuestFlowHandler
 import com.example.bot.telegram.Keyboards
 import com.google.gson.Gson
@@ -18,11 +19,12 @@ class GuestFlowStartTest :
         val texts = BotTexts()
         val keyboards = Keyboards(texts)
         val sent = mutableListOf<Any>()
+        val promoService = mockk<PromoAttributionService>(relaxed = true)
         val handler =
             GuestFlowHandler({ req ->
                 sent += req
                 mockk<BaseResponse>(relaxed = true)
-            }, texts, keyboards)
+            }, texts, keyboards, promoService)
 
         "start command sends menu with four buttons" {
             val json = """{"update_id":1,"message":{"message_id":1,"chat":{"id":42},"from":{"id":1,"language_code":"en"},"text":"/start"}}"""
