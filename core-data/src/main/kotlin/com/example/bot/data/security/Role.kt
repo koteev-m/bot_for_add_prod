@@ -1,9 +1,9 @@
-package com.example.bot.security.rbac
+package com.example.bot.data.security
 
 /**
- * Enumeration of all supported roles in the system.
+ * System-wide roles used for RBAC enforcement.
  */
-enum class RoleCode {
+enum class Role {
     OWNER,
     GLOBAL_ADMIN,
     HEAD_MANAGER,

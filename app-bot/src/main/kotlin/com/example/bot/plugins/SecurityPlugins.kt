@@ -1,35 +1,41 @@
 package com.example.bot.plugins
 
-import com.example.bot.security.auth.AuthProviders.telegramWebAppAuth
-import com.example.bot.security.auth.AuthProviders.telegramWebhookAuth
-import com.example.bot.security.rbac.AuthorizationException
-import com.example.bot.security.rbac.RoleCache
-import com.example.bot.security.rbac.RoleRepository
+import com.example.bot.data.booking.core.AuditLogRepository
+import com.example.bot.data.security.ExposedUserRepository
+import com.example.bot.data.security.ExposedUserRoleRepository
+import com.example.bot.security.auth.TelegramPrincipal
+import com.example.bot.security.rbac.RbacPlugin
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
-import io.ktor.server.auth.Authentication
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.statuspages.StatusPages
+import io.ktor.server.request.header
 import io.ktor.server.response.respond
+import org.jetbrains.exposed.sql.Database
 
 /**
- * Installs authentication and basic error handling.
+ * Installs RBAC security and basic error handling.
  */
 fun Application.configureSecurity() {
-    val repository =
-        object : RoleRepository {
-            override suspend fun findRoles(userId: Long) = emptySet<com.example.bot.security.rbac.RoleAssignment>()
+    val dataSource = DataSourceHolder.dataSource ?: error("DataSource is not initialised")
+    val database = Database.connect(dataSource)
+    val userRepository = ExposedUserRepository(database)
+    val userRoleRepository = ExposedUserRoleRepository(database)
+    val auditLogRepository = AuditLogRepository(database)
+
+    install(RbacPlugin) {
+        this.userRepository = userRepository
+        this.userRoleRepository = userRoleRepository
+        this.auditLogRepository = auditLogRepository
+        principalExtractor = { call ->
+            call.request.header("X-Telegram-Id")?.toLongOrNull()?.let { id ->
+                TelegramPrincipal(id, call.request.header("X-Telegram-Username"))
+            }
         }
-    val cache = RoleCache(repository)
-    install(Authentication) {
-        telegramWebhookAuth("secret") { cache.rolesFor(it) }
-        telegramWebAppAuth("token") { cache.rolesFor(it) }
     }
+
     install(StatusPages) {
-        exception<AuthorizationException> { call, cause ->
-            call.respond(HttpStatusCode.Forbidden, mapOf("error" to cause.message))
-        }
         exception<BadRequestException> { call, cause ->
             call.respond(HttpStatusCode.BadRequest, mapOf("error" to cause.message))
         }

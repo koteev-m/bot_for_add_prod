@@ -2,9 +2,8 @@ package com.example.bot.routes
 
 import com.example.bot.notifications.NotifyMessage
 import com.example.bot.notifications.ParseMode
-import com.example.bot.security.rbac.RoleCode
-import com.example.bot.security.rbac.anyOf
-import com.example.bot.security.rbac.globalAuthorize
+import com.example.bot.data.security.Role
+import com.example.bot.security.rbac.authorize
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
@@ -122,7 +121,7 @@ fun Application.notifyRoutes(tx: TxNotifyService, campaigns: CampaignService) {
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "queued"))
         }
 
-        globalAuthorize(anyOf(RoleCode.OWNER, RoleCode.GLOBAL_ADMIN, RoleCode.CLUB_ADMIN, RoleCode.MANAGER)) {
+        authorize(Role.OWNER, Role.GLOBAL_ADMIN, Role.CLUB_ADMIN, Role.MANAGER) {
             route("/api/campaigns") {
                 post {
                     val req = call.receive<CampaignCreateRequest>()
@@ -186,6 +185,6 @@ fun Application.notifyRoutes(tx: TxNotifyService, campaigns: CampaignService) {
                     }
                 } // end route("/{id}")
             } // end route("/api/campaigns")
-        } // end globalAuthorize
+        }
     } // end routing
 }
