@@ -3,7 +3,10 @@ package com.example.bot.data.club
 import com.example.bot.club.BulkImportResult
 import com.example.bot.club.GuestList
 import com.example.bot.club.GuestListEntry
+import com.example.bot.club.GuestListEntryPage
+import com.example.bot.club.GuestListEntrySearch
 import com.example.bot.club.GuestListEntryStatus
+import com.example.bot.club.GuestListEntryView
 import com.example.bot.club.GuestListOwnerType
 import com.example.bot.club.GuestListRepository
 import com.example.bot.club.GuestListStatus
@@ -14,12 +17,21 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.andWhere
 import org.jetbrains.exposed.sql.batchInsert
+import org.jetbrains.exposed.sql.count
+import org.jetbrains.exposed.sql.innerJoin
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.lowerCase
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
@@ -233,6 +245,70 @@ class GuestListRepositoryImpl(
         }
     }
 
+    override suspend fun searchEntries(
+        filter: GuestListEntrySearch,
+        page: Int,
+        size: Int,
+    ): GuestListEntryPage {
+        require(page >= 0) { "page must be non-negative" }
+        require(size > 0) { "size must be positive" }
+        val offset = page.toLong() * size
+        require(offset <= Int.MAX_VALUE) { "page too large" }
+        return withTxRetry {
+            transaction(database) {
+                var condition: Op<Boolean> = Op.TRUE
+                filter.clubIds?.takeIf { it.isNotEmpty() }?.let { clubs ->
+                    condition = condition and (GuestListsTable.clubId inList clubs)
+                }
+                filter.listIds?.takeIf { it.isNotEmpty() }?.let { ids ->
+                    condition = condition and (GuestListsTable.id inList ids)
+                }
+                filter.ownerUserId?.let { ownerId ->
+                    condition = condition and (GuestListsTable.ownerUserId eq ownerId)
+                }
+                filter.status?.let { status ->
+                    condition = condition and (GuestListEntriesTable.status eq status.name)
+                }
+                filter.createdFrom?.let { from ->
+                    condition =
+                        condition and (GuestListsTable.createdAt greaterEq from.atOffset(ZoneOffset.UTC))
+                }
+                filter.createdTo?.let { to ->
+                    condition =
+                        condition and (GuestListsTable.createdAt lessEq to.atOffset(ZoneOffset.UTC))
+                }
+                filter.nameQuery?.trim()?.takeIf { it.isNotEmpty() }?.let { name ->
+                    val like = "%${escapeLike(name.lowercase())}%"
+                    condition =
+                        condition and
+                            (GuestListEntriesTable.fullName.lowerCase() like like)
+                }
+                filter.phoneQuery?.trim()?.takeIf { it.isNotEmpty() }?.let { phone ->
+                    val normalized = sanitizePhoneQuery(phone)
+                    if (normalized.isNotEmpty()) {
+                        val like = "%${escapeLike(normalized)}%"
+                        condition = condition and (GuestListEntriesTable.phone like like)
+                    }
+                }
+
+                val joined =
+                    GuestListEntriesTable.innerJoin(
+                        otherTable = GuestListsTable,
+                        onColumn = { GuestListEntriesTable.guestListId },
+                        otherColumn = { GuestListsTable.id },
+                    )
+                val total = joined.select { condition }.count()
+                val rows =
+                    joined
+                        .select { condition }
+                        .orderBy(GuestListEntriesTable.id, SortOrder.ASC)
+                        .limit(size, offset)
+                        .map { it.toEntryView() }
+                GuestListEntryPage(rows, total)
+            }
+        }
+    }
+
     private fun ResultRow.toGuestList(): GuestList {
         return GuestList(
             id = this[GuestListsTable.id],
@@ -262,4 +338,31 @@ class GuestListRepositoryImpl(
             checkedInBy = this[GuestListEntriesTable.checkedInBy],
         )
     }
+
+    private fun ResultRow.toEntryView(): GuestListEntryView {
+        return GuestListEntryView(
+            id = this[GuestListEntriesTable.id],
+            listId = this[GuestListEntriesTable.guestListId],
+            listTitle = this[GuestListsTable.title],
+            clubId = this[GuestListsTable.clubId],
+            ownerType = GuestListOwnerType.valueOf(this[GuestListsTable.ownerType]),
+            ownerUserId = this[GuestListsTable.ownerUserId],
+            fullName = this[GuestListEntriesTable.fullName],
+            phone = this[GuestListEntriesTable.phone],
+            guestsCount = this[GuestListEntriesTable.plusOnesAllowed] + MIN_GUESTS_PER_ENTRY,
+            notes = this[GuestListEntriesTable.comment],
+            status = GuestListEntryStatus.valueOf(this[GuestListEntriesTable.status]),
+            listCreatedAt = this[GuestListsTable.createdAt].toInstant(),
+        )
+    }
+}
+
+private fun escapeLike(value: String): String {
+    return value
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+}
+
+private fun sanitizePhoneQuery(raw: String): String {
+    return raw.filter { it.isDigit() || it == '+' }
 }
