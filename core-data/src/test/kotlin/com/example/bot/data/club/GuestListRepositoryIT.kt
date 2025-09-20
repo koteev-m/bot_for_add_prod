@@ -1,5 +1,6 @@
 package com.example.bot.data.club
 
+import com.example.bot.club.GuestListEntrySearch
 import com.example.bot.club.GuestListEntryStatus
 import com.example.bot.club.GuestListOwnerType
 import com.example.bot.club.GuestListRepository
@@ -14,6 +15,8 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.transactions.transaction
 
 class GuestListRepositoryIT : PostgresClubIntegrationTest() {
     private val fixedClock: Clock = Clock.fixed(Instant.parse("2024-05-01T10:15:30Z"), ZoneOffset.UTC)
@@ -237,5 +240,108 @@ class GuestListRepositoryIT : PostgresClubIntegrationTest() {
 
         val checkedIn = repository.listEntries(list.id, page = 0, size = 10, statusFilter = GuestListEntryStatus.CHECKED_IN)
         assertEquals(listOf(pageOne[1]), checkedIn)
+    }
+
+    @Test
+    fun `search entries supports filters`() = runBlocking {
+        val clubA = insertClub(name = "Aurora")
+        val clubB = insertClub(name = "Nebula")
+        val eventA = insertEvent(
+            clubId = clubA,
+            title = "Launch",
+            startAt = Instant.parse("2024-07-01T18:00:00Z"),
+            endAt = Instant.parse("2024-07-02T02:00:00Z"),
+        )
+        val eventB = insertEvent(
+            clubId = clubB,
+            title = "Afterparty",
+            startAt = Instant.parse("2024-07-05T18:00:00Z"),
+            endAt = Instant.parse("2024-07-06T02:00:00Z"),
+        )
+        val manager = insertUser(username = "manager1", displayName = "Manager One")
+        val promoter = insertUser(username = "promoter1", displayName = "Promoter One")
+
+        val managerList =
+            repository.createList(
+                clubId = clubA,
+                eventId = eventA,
+                ownerType = GuestListOwnerType.MANAGER,
+                ownerUserId = manager,
+                title = "Managers",
+                capacity = 30,
+                arrivalWindowStart = null,
+                arrivalWindowEnd = null,
+                status = GuestListStatus.ACTIVE,
+            )
+        val promoterList =
+            repository.createList(
+                clubId = clubB,
+                eventId = eventB,
+                ownerType = GuestListOwnerType.PROMOTER,
+                ownerUserId = promoter,
+                title = "Promos",
+                capacity = 25,
+                arrivalWindowStart = null,
+                arrivalWindowEnd = null,
+                status = GuestListStatus.ACTIVE,
+            )
+
+        transaction(database) {
+            GuestListsTable.update({ GuestListsTable.id eq managerList.id }) {
+                it[createdAt] = Instant.parse("2024-07-01T10:00:00Z").atOffset(ZoneOffset.UTC)
+            }
+            GuestListsTable.update({ GuestListsTable.id eq promoterList.id }) {
+                it[createdAt] = Instant.parse("2024-07-05T12:00:00Z").atOffset(ZoneOffset.UTC)
+            }
+        }
+
+        repository.addEntry(managerList.id, "Eve Adams", "+1 555 1000", guestsCount = 2, notes = "vip")
+        repository.addEntry(managerList.id, "Mallory Stone", "+1 555 1001", guestsCount = 1, notes = null)
+        val promoEntry =
+            repository.addEntry(promoterList.id, "Bob Promo", "+1 555 2000", guestsCount = 3, notes = "friends")
+        repository.setEntryStatus(promoEntry.id, GuestListEntryStatus.CHECKED_IN)
+
+        val managerResult =
+            repository.searchEntries(
+                GuestListEntrySearch(clubIds = setOf(clubA)),
+                page = 0,
+                size = 10,
+            )
+        assertEquals(2, managerResult.total)
+        assertTrue(managerResult.items.all { it.clubId == clubA })
+
+        val nameFilter =
+            repository.searchEntries(
+                GuestListEntrySearch(
+                    clubIds = setOf(clubA),
+                    nameQuery = "eve",
+                    status = GuestListEntryStatus.PLANNED,
+                ),
+                page = 0,
+                size = 10,
+            )
+        assertEquals(1, nameFilter.items.size)
+        assertEquals("Eve Adams", nameFilter.items.single().fullName)
+
+        val promoterResult =
+            repository.searchEntries(
+                GuestListEntrySearch(ownerUserId = promoter),
+                page = 0,
+                size = 10,
+            )
+        assertEquals(1, promoterResult.items.size)
+        assertEquals(promoterList.id, promoterResult.items.single().listId)
+
+        val dateFiltered =
+            repository.searchEntries(
+                GuestListEntrySearch(
+                    createdFrom = Instant.parse("2024-07-04T00:00:00Z"),
+                    createdTo = Instant.parse("2024-07-06T23:59:59Z"),
+                ),
+                page = 0,
+                size = 10,
+            )
+        assertEquals(1, dateFiltered.items.size)
+        assertEquals(promoterList.id, dateFiltered.items.single().listId)
     }
 }

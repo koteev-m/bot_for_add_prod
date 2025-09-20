@@ -220,6 +220,13 @@ internal sealed interface RbacResolution {
     data class Failure(val reason: FailureReason) : RbacResolution
 }
 
+data class RbacContext(
+    val principal: TelegramPrincipal,
+    val user: User,
+    val roles: Set<Role>,
+    val clubIds: Set<Long>,
+)
+
 enum class FailureReason { MissingPrincipal, UserNotFound }
 
 internal data class AccessLogState(
@@ -447,5 +454,19 @@ private fun JsonPrimitive.safeLongOrNull(): Long? {
         this.long
     } catch (_: Throwable) {
         this.content.toLongOrNull()
+    }
+}
+
+fun ApplicationCall.rbacContext(): RbacContext {
+    val resolution = attributes[rbacResolutionKey]
+    return when (resolution) {
+        is RbacResolution.Success ->
+            RbacContext(
+                principal = resolution.principal,
+                user = resolution.user,
+                roles = resolution.roles,
+                clubIds = resolution.clubIds,
+            )
+        is RbacResolution.Failure -> error("RBAC resolution failure: ${resolution.reason}")
     }
 }

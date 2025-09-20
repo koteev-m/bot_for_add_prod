@@ -47,6 +47,12 @@ interface GuestListRepository {
     ): List<GuestListEntry>
 
     suspend fun bulkImport(listId: Long, rows: List<ParsedGuest>, dryRun: Boolean): BulkImportResult
+
+    suspend fun searchEntries(
+        filter: GuestListEntrySearch,
+        page: Int,
+        size: Int,
+    ): GuestListEntryPage
 }
 
 enum class GuestListOwnerType {
@@ -103,3 +109,31 @@ data class ParsedGuest(
 data class RejectedRow(val line: Int, val reason: String)
 
 data class BulkImportResult(val acceptedCount: Int, val rejected: List<RejectedRow>)
+
+data class GuestListEntrySearch(
+    val clubIds: Set<Long>? = null,
+    val listIds: Set<Long>? = null,
+    val ownerUserId: Long? = null,
+    val nameQuery: String? = null,
+    val phoneQuery: String? = null,
+    val status: GuestListEntryStatus? = null,
+    val createdFrom: Instant? = null,
+    val createdTo: Instant? = null,
+)
+
+data class GuestListEntryView(
+    val id: Long,
+    val listId: Long,
+    val listTitle: String,
+    val clubId: Long,
+    val ownerType: GuestListOwnerType,
+    val ownerUserId: Long,
+    val fullName: String,
+    val phone: String?,
+    val guestsCount: Int,
+    val notes: String?,
+    val status: GuestListEntryStatus,
+    val listCreatedAt: Instant,
+)
+
+data class GuestListEntryPage(val items: List<GuestListEntryView>, val total: Long)
