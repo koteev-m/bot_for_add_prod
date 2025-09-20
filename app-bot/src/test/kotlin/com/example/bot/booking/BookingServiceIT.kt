@@ -371,4 +371,12 @@ class PromoLinkTokenCodecTest {
         val encoded = PromoLinkTokenCodec.encode(PromoLinkToken(Long.MAX_VALUE, Long.MAX_VALUE))
         assertTrue(encoded.length <= 64)
     }
+
+    @Test
+    fun `decode returns null when token exceeds limit`() {
+        val oversizedPayload = "9".repeat(49)
+        val encoded = Base64.getUrlEncoder().withoutPadding().encodeToString(oversizedPayload.toByteArray())
+        assertTrue(encoded.length > 64)
+        assertNull(PromoLinkTokenCodec.decode(encoded))
+    }
 }
