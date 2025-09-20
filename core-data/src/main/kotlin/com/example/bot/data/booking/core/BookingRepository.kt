@@ -14,7 +14,6 @@ import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
-import kotlin.math.min
 import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.sql.Database
@@ -285,7 +284,9 @@ class BookingHoldRepository(
         tableId: Long,
         slotStart: Instant,
         slotEnd: Instant,
+        guestsCount: Int,
         ttl: java.time.Duration,
+        idempotencyKey: String,
     ): BookingCoreResult<BookingHold> {
         val start = slotStart.toOffsetDateTime()
         val end = slotEnd.toOffsetDateTime()
@@ -293,19 +294,52 @@ class BookingHoldRepository(
             withTxRetry {
                 newSuspendedTransaction(context = Dispatchers.IO, db = db) {
                     val now = Instant.now(clock)
-                    val activeExists =
+                    val existingByKey =
                         BookingHoldsTable
+                            .select { BookingHoldsTable.idempotencyKey eq idempotencyKey }
+                            .limit(1)
+                            .firstOrNull()
+                    if (existingByKey != null) {
+                        return@newSuspendedTransaction BookingCoreResult.Success(
+                            existingByKey.toBookingHold(),
+                        )
+                    }
+                    val existingBooking =
+                        BookingsTable
                             .select {
-                                (BookingHoldsTable.tableId eq tableId) and
-                                    (BookingHoldsTable.slotStart eq start) and
-                                    (BookingHoldsTable.slotEnd eq end) and
-                                    (BookingHoldsTable.expiresAt greater now.toOffsetDateTime())
+                                (BookingsTable.tableId eq tableId) and
+                                    (BookingsTable.slotStart eq start) and
+                                    (BookingsTable.slotEnd eq end) and
+                                    (BookingsTable.status inList ACTIVE_STATUSES)
                             }.empty()
                             .not()
-                    if (activeExists) {
-                        BookingCoreResult.Failure(BookingCoreError.ActiveHoldExists)
+                    if (existingBooking) {
+                        BookingCoreResult.Failure(BookingCoreError.DuplicateActiveBooking)
                     } else {
-                        BookingCoreResult.Success(insertHold(tableId, start, end, ttl, now))
+                        val activeExists =
+                            BookingHoldsTable
+                                .select {
+                                    (BookingHoldsTable.tableId eq tableId) and
+                                        (BookingHoldsTable.slotStart eq start) and
+                                        (BookingHoldsTable.slotEnd eq end) and
+                                        (BookingHoldsTable.expiresAt greater now.toOffsetDateTime())
+                                }.empty()
+                                .not()
+                        if (activeExists) {
+                            BookingCoreResult.Failure(BookingCoreError.ActiveHoldExists)
+                        } else {
+                            BookingCoreResult.Success(
+                                insertHold(
+                                    tableId,
+                                    start,
+                                    end,
+                                    guestsCount,
+                                    ttl,
+                                    now,
+                                    idempotencyKey,
+                                ),
+                            )
+                        }
                     }
                 }
             }
@@ -348,6 +382,18 @@ class BookingHoldRepository(
         }
     }
 
+    suspend fun findHoldByIdempotencyKey(idempotencyKey: String): BookingHold? {
+        return withTxRetry {
+            newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+                BookingHoldsTable
+                    .select { BookingHoldsTable.idempotencyKey eq idempotencyKey }
+                    .limit(1)
+                    .firstOrNull()
+                    ?.toBookingHold()
+            }
+        }
+    }
+
     suspend fun cleanupExpired(now: Instant): Int {
         val cutoff = now.toOffsetDateTime()
         return withTxRetry {
@@ -361,8 +407,10 @@ class BookingHoldRepository(
         tableId: Long,
         slotStart: OffsetDateTime,
         slotEnd: OffsetDateTime,
+        guestsCount: Int,
         ttl: java.time.Duration,
         now: Instant,
+        idempotencyKey: String,
     ): BookingHold {
         val tableRow =
             TablesTable
@@ -387,20 +435,46 @@ class BookingHoldRepository(
             it[BookingHoldsTable.eventId] = eventRow[EventsTable.id]
             it[BookingHoldsTable.tableId] = tableId
             it[BookingHoldsTable.holderUserId] = null
-            it[BookingHoldsTable.guestsCount] = 1
+            it[BookingHoldsTable.guestsCount] = guestsCount
             it[BookingHoldsTable.minDeposit] = tableRow[TablesTable.minDeposit]
             it[BookingHoldsTable.slotStart] = slotStart
             it[BookingHoldsTable.slotEnd] = slotEnd
             it[BookingHoldsTable.expiresAt] = expiresAt
-            it[BookingHoldsTable.idempotencyKey] = UUID.randomUUID().toString()
+            it[BookingHoldsTable.idempotencyKey] = idempotencyKey
         }
         return BookingHold(
             id = id,
+            clubId = tableRow[TablesTable.clubId],
             tableId = tableId,
             eventId = eventRow[EventsTable.id],
             slotStart = slotStart.toInstant(),
             slotEnd = slotEnd.toInstant(),
             expiresAt = expiresAt.toInstant(),
+            guests = guestsCount,
+            minDeposit = tableRow[TablesTable.minDeposit],
+            idempotencyKey = idempotencyKey,
+        )
+    }
+
+    private fun ResultRow.toBookingHold(): BookingHold {
+        val tableId = this[BookingHoldsTable.tableId]
+        val tableRow =
+            TablesTable
+                .select { TablesTable.id eq tableId }
+                .limit(1)
+                .firstOrNull()
+                ?: throw IllegalStateException("table $tableId not found")
+        return BookingHold(
+            id = this[BookingHoldsTable.id],
+            clubId = tableRow[TablesTable.clubId],
+            tableId = tableId,
+            eventId = this[BookingHoldsTable.eventId],
+            slotStart = this[BookingHoldsTable.slotStart].toInstant(),
+            slotEnd = this[BookingHoldsTable.slotEnd].toInstant(),
+            expiresAt = this[BookingHoldsTable.expiresAt].toInstant(),
+            guests = this[BookingHoldsTable.guestsCount],
+            minDeposit = this[BookingHoldsTable.minDeposit],
+            idempotencyKey = this[BookingHoldsTable.idempotencyKey],
         )
     }
 
@@ -422,16 +496,8 @@ class BookingHoldRepository(
                 BookingHoldsTable.update({ BookingHoldsTable.id eq id }) {
                     it[BookingHoldsTable.expiresAt] = newExpiry
                 }
-                BookingCoreResult.Success(
-                    BookingHold(
-                        id = id,
-                        tableId = row[BookingHoldsTable.tableId],
-                        eventId = row[BookingHoldsTable.eventId],
-                        slotStart = row[BookingHoldsTable.slotStart].toInstant(),
-                        slotEnd = row[BookingHoldsTable.slotEnd].toInstant(),
-                        expiresAt = newExpiry.toInstant(),
-                    ),
-                )
+                val hold = row.toBookingHold()
+                BookingCoreResult.Success(hold.copy(expiresAt = newExpiry.toInstant()))
             }
         return outcome
     }
@@ -449,16 +515,7 @@ class BookingHoldRepository(
         return if (expiresAt.isBefore(now)) {
             BookingCoreResult.Failure(BookingCoreError.HoldExpired)
         } else {
-            BookingCoreResult.Success(
-                BookingHold(
-                    id = id,
-                    tableId = row[BookingHoldsTable.tableId],
-                    eventId = row[BookingHoldsTable.eventId],
-                    slotStart = row[BookingHoldsTable.slotStart].toInstant(),
-                    slotEnd = row[BookingHoldsTable.slotEnd].toInstant(),
-                    expiresAt = expiresAt,
-                ),
-            )
+            BookingCoreResult.Success(row.toBookingHold())
         }
     }
 }
@@ -536,7 +593,11 @@ class OutboxRepository(
         }
     }
 
-    suspend fun markFailedWithRetry(id: Long, reason: String): BookingCoreResult<OutboxMessage> {
+    suspend fun markFailedWithRetry(
+        id: Long,
+        reason: String,
+        nextAttemptAt: Instant,
+    ): BookingCoreResult<OutboxMessage> {
         return try {
             val message =
                 withTxRetry {
@@ -548,16 +609,15 @@ class OutboxRepository(
                                 .firstOrNull()
                                 ?: return@newSuspendedTransaction null
                         val attempts = row[BookingOutboxTable.attempts] + 1
-                        val nextAttempt = computeNextAttempt(attempts)
                         val nowTs = Instant.now(clock).toOffsetDateTime()
                         BookingOutboxTable.update({ BookingOutboxTable.id eq id }) {
                             it[BookingOutboxTable.attempts] = attempts
                             it[BookingOutboxTable.status] = OutboxMessageStatus.NEW.name
-                            it[BookingOutboxTable.nextAttemptAt] = nextAttempt.toOffsetDateTime()
+                            it[BookingOutboxTable.nextAttemptAt] = nextAttemptAt.toOffsetDateTime()
                             it[BookingOutboxTable.lastError] = reason
                             it[BookingOutboxTable.updatedAt] = nowTs
                         }
-                        row.toOutboxMessage(attempts, nextAttempt, reason)
+                        row.toOutboxMessage(attempts, nextAttemptAt, reason)
                     }
                 }
             message?.let { BookingCoreResult.Success(it) }
@@ -568,20 +628,6 @@ class OutboxRepository(
                 else -> throw ex
             }
         }
-    }
-
-    private fun computeNextAttempt(attempts: Int): Instant {
-        val shift = min((attempts - 1).coerceAtLeast(0), com.example.bot.config.BotLimits.notifyBackoffMaxShift)
-        val multiplier = 1L shl shift
-        val base = com.example.bot.config.BotLimits.notifySendBaseBackoff
-        val candidate = base.multipliedBy(multiplier)
-        val capped =
-            if (candidate <= com.example.bot.config.BotLimits.notifySendMaxBackoff) {
-                candidate
-            } else {
-                com.example.bot.config.BotLimits.notifySendMaxBackoff
-            }
-        return Instant.now(clock).plus(capped)
     }
 
     private fun ResultRow.toOutboxMessage(): OutboxMessage {

@@ -1,5 +1,7 @@
 package com.example.bot.booking
 
+import com.example.bot.booking.legacy.BookingService as LegacyBookingService
+import com.example.bot.booking.legacy.ConfirmRequest as LegacyConfirmRequest
 import com.example.bot.data.booking.InMemoryBookingRepository
 import com.example.bot.data.outbox.InMemoryOutboxService
 import io.kotest.core.spec.style.StringSpec
@@ -12,11 +14,11 @@ class OutboxIntegrationTest :
         "confirm enqueues outbox record" {
             val repo = InMemoryBookingRepository()
             val outbox = InMemoryOutboxService()
-            val service = BookingService(repo, repo, outbox)
+            val service = LegacyBookingService(repo, repo, outbox)
             val event = EventDto(1, 1, Instant.now(), Instant.now().plusSeconds(3600))
             val table = TableDto(1, 1, 2, BigDecimal("10"), true)
             repo.seed(event, table)
-            val req = ConfirmRequest(null, 1, event.startUtc, 1, 1, null, null, null)
+            val req = LegacyConfirmRequest(null, 1, event.startUtc, 1, 1, null, null, null)
             service.confirm(req, "k")
             outbox.items.size shouldBe 1
         }

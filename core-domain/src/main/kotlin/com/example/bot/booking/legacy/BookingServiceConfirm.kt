@@ -1,5 +1,7 @@
-package com.example.bot.booking
+package com.example.bot.booking.legacy
 
+import com.example.bot.booking.PaymentMode
+import com.example.bot.booking.PaymentPolicy
 import com.example.bot.payments.PaymentsService
 
 /**

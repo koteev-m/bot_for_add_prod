@@ -1,6 +1,6 @@
 package com.example.bot.booking.payments
 
-import com.example.bot.booking.BookingSummary
+import com.example.bot.booking.legacy.BookingSummary
 
 /**
  * Mode of payment for a booking confirmation.
@@ -17,14 +17,14 @@ typealias PaymentMode = com.example.bot.booking.PaymentMode
  * Delegates to [com.example.bot.booking.ConfirmInput].
  */
 @Suppress("EXPERIMENTAL_FEATURE_WARNING")
-typealias ConfirmInput = com.example.bot.booking.ConfirmInput
+typealias ConfirmInput = com.example.bot.booking.legacy.ConfirmInput
 
 /**
  * Contact details supplied by the guest.
  * Delegates to [com.example.bot.booking.ContactInfo].
  */
 @Suppress("EXPERIMENTAL_FEATURE_WARNING")
-typealias ContactInfo = com.example.bot.booking.ContactInfo
+typealias ContactInfo = com.example.bot.booking.legacy.ContactInfo
 
 /** Information about a generated invoice. */
 data class InvoiceInfo(

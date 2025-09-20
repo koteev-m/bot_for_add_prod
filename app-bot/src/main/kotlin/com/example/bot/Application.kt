@@ -1,6 +1,7 @@
 package com.example.bot
 
 import com.example.bot.config.BotLimits
+import com.example.bot.di.bookingModule
 import com.example.bot.metrics.AppMetricsBinder
 import com.example.bot.plugins.installAppConfig
 import com.example.bot.plugins.installMetrics
@@ -17,12 +18,21 @@ import com.example.bot.telegram.ott.BookTableAction
 import com.example.bot.telegram.ott.CallbackQueryHandler
 import com.example.bot.telegram.ott.CallbackTokenService
 import com.example.bot.telegram.ott.KeyboardFactory
+import com.example.bot.workers.OutboxWorker
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.UpdatesListener
 import com.pengrad.telegrambot.model.Update
 import com.pengrad.telegrambot.request.SendMessage
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationStarted
+import io.ktor.server.application.ApplicationStopped
+import io.ktor.server.application.install
 import io.ktor.server.routing.routing
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import org.koin.ktor.ext.inject
+import org.koin.ktor.plugin.Koin
+import org.koin.logger.slf4jLogger
 
 @Suppress("unused")
 fun Application.module() {
@@ -44,6 +54,19 @@ fun Application.module() {
     installRequestLogging()
     installMetrics()
     AppMetricsBinder.bindAll(meterRegistry())
+    install(Koin) {
+        slf4jLogger()
+        modules(bookingModule)
+    }
+
+    val outboxWorker by inject<OutboxWorker>()
+    var workerJob: Job? = null
+    environment.monitor.subscribe(ApplicationStarted) {
+        workerJob = launch { outboxWorker.run() }
+    }
+    environment.monitor.subscribe(ApplicationStopped) {
+        workerJob?.cancel()
+    }
     // 5) Routes
     val renderer = DefaultHallRenderer()
     routing {
