@@ -48,6 +48,15 @@ class OutboxWorker(
         }
     }
 
+    suspend fun runOnce(): Boolean {
+        val batch = repository.pickBatchForSend(limit)
+        if (batch.isEmpty()) {
+            return false
+        }
+        batch.forEach { message -> processMessage(message) }
+        return true
+    }
+
     private suspend fun processMessage(message: OutboxMessage) {
         val outcome =
             try {
