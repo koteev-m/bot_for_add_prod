@@ -8,6 +8,7 @@ import com.example.bot.data.booking.core.OutboxRepository
 import com.example.bot.data.promo.BookingTemplateRepositoryImpl
 import com.example.bot.data.promo.PromoAttributionRepositoryImpl
 import com.example.bot.data.promo.PromoLinkRepositoryImpl
+import com.example.bot.data.notifications.NotificationsOutboxRepository
 import com.example.bot.data.security.ExposedUserRepository
 import com.example.bot.data.security.ExposedUserRoleRepository
 import com.example.bot.plugins.DataSourceHolder
@@ -32,6 +33,7 @@ val bookingModule = module {
     single { BookingRepository(get()) }
     single { BookingHoldRepository(get()) }
     single { OutboxRepository(get()) }
+    single { NotificationsOutboxRepository(get()) }
     single { AuditLogRepository(get()) }
     single { PromoLinkRepositoryImpl(get()) }
     single { PromoAttributionRepositoryImpl(get()) }
@@ -41,7 +43,7 @@ val bookingModule = module {
     single<PromoAttributionStore> { InMemoryPromoAttributionStore() }
     single { PromoAttributionService(get(), get(), get(), get(), get()) }
     single<PromoAttributionCoordinator> { get<PromoAttributionService>() }
-    single { BookingTemplateService(get(), get(), get(), get()) }
+    single { BookingTemplateService(get(), get(), get(), get(), get()) }
     single<SendPort> { DummySendPort }
     single { BookingService(get(), get(), get(), get(), get()) }
     single { OutboxWorker(get(), get()) }

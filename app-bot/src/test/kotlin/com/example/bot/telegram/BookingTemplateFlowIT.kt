@@ -7,6 +7,8 @@ import com.example.bot.data.booking.BookingsTable
 import com.example.bot.data.booking.EventsTable
 import com.example.bot.data.booking.TablesTable
 import com.example.bot.data.db.Clubs
+import com.example.bot.data.notifications.NotificationsOutboxRepository
+import com.example.bot.data.notifications.NotificationsOutboxTable
 import com.example.bot.data.promo.BookingTemplateRepositoryImpl
 import com.example.bot.data.security.ExposedUserRepository
 import com.example.bot.data.security.ExposedUserRoleRepository
@@ -24,6 +26,9 @@ import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -68,9 +73,17 @@ class BookingTemplateFlowIT : PostgresAppTest() {
         val auditRepository = com.example.bot.data.booking.core.AuditLogRepository(database, clock)
         bookingService = BookingService(bookingRepository, holdRepository, outboxRepository, auditRepository)
         val templateRepository = BookingTemplateRepositoryImpl(database, clock)
+        val notificationsOutbox = NotificationsOutboxRepository(database)
         userRepository = ExposedUserRepository(database)
         userRoleRepository = ExposedUserRoleRepository(database)
-        templateService = BookingTemplateService(templateRepository, bookingService, userRepository, userRoleRepository)
+        templateService =
+            BookingTemplateService(
+                templateRepository,
+                bookingService,
+                userRepository,
+                userRoleRepository,
+                notificationsOutbox,
+            )
     }
 
     @Test
@@ -206,6 +219,40 @@ class BookingTemplateFlowIT : PostgresAppTest() {
         transaction(database) {
             val outboxCount = BookingOutboxTable.select { BookingOutboxTable.topic eq "booking.confirmed" }.count()
             assertEquals(1, outboxCount)
+        }
+
+        transaction(database) {
+            val rows =
+                NotificationsOutboxTable
+                    .select { NotificationsOutboxTable.kind eq "promo.template.booked" }
+                    .toList()
+            assertEquals(1, rows.size)
+            val payload = rows.first()[NotificationsOutboxTable.payload]
+            val obj = payload.jsonObject
+            assertEquals(template.id, obj["templateId"]?.jsonPrimitive?.long)
+            assertEquals(clubId, obj["clubId"]?.jsonPrimitive?.long)
+            assertEquals(tableId, obj["tableId"]?.jsonPrimitive?.long)
+        }
+
+        val secondResult =
+            templateService.applyTemplate(
+                promoter,
+                template.id,
+                TemplateBookingRequest(
+                    clubId = clubId,
+                    tableId = tableId,
+                    slotStart = start,
+                    slotEnd = end,
+                ),
+            )
+        assertTrue(secondResult is BookingCmdResult.DuplicateActiveBooking)
+
+        transaction(database) {
+            val outboxRows =
+                NotificationsOutboxTable
+                    .select { NotificationsOutboxTable.kind eq "promo.template.booked" }
+                    .toList()
+            assertEquals(1, outboxRows.size)
         }
     }
 

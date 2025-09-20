@@ -1,7 +1,8 @@
 package com.example.bot.telegram
 
-import com.example.bot.telegram.ott.TemplateOttPayload.Booking
 import com.example.bot.telegram.ott.CallbackTokenService
+import com.example.bot.telegram.ott.TemplateOttPayload.Booking
+import com.example.bot.telegram.ott.TemplateOttPayload.Selection
 import java.time.Instant
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -30,5 +31,15 @@ class BookingTemplateOttPayloadTest {
 
         val replay = tokenService.consume(token)
         assertNull(replay)
+    }
+
+    @Test
+    fun `selection payload fits callback limit`() {
+        val payload = Selection(templateId = Long.MAX_VALUE)
+        val token = tokenService.issueToken(payload)
+        assertTrue(token.length <= 64)
+
+        val decoded = tokenService.consume(token)
+        assertEquals(payload, decoded)
     }
 }
