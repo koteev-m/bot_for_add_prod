@@ -7,6 +7,7 @@ import com.example.bot.data.booking.core.BookingHoldRepository
 import com.example.bot.data.booking.core.BookingRepository
 import com.example.bot.data.booking.core.OutboxRepository
 import com.example.bot.data.db.withTxRetry
+import com.example.bot.promo.PromoAttributionCoordinator
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -44,6 +45,7 @@ class BookingService(
     private val holdRepository: BookingHoldRepository,
     private val outboxRepository: OutboxRepository,
     private val auditLogRepository: AuditLogRepository,
+    private val promoAttribution: PromoAttributionCoordinator = PromoAttributionCoordinator.Noop,
 ) {
     suspend fun hold(req: HoldRequest, idempotencyKey: String): BookingCmdResult =
         withTxRetry {
@@ -220,13 +222,15 @@ class BookingService(
             }
         }
 
-    suspend fun finalize(bookingId: UUID): BookingCmdResult =
+    suspend fun finalize(bookingId: UUID, telegramUserId: Long? = null): BookingCmdResult =
         withTxRetry {
             val booking = bookingRepository.findById(bookingId)
             val record = booking ?: run {
                 log("booking.finalize", null, "not_found", null)
                 return@withTxRetry BookingCmdResult.NotFound
             }
+
+            promoAttribution.attachPending(record.id, telegramUserId)
 
             val payload =
                 buildJsonObject {
