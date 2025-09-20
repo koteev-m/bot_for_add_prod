@@ -35,6 +35,10 @@ Required variables:
 - `DATABASE_PASSWORD`
 - `OWNER_TELEGRAM_ID`
 
+Optional but recommended:
+
+- `TELEGRAM_USE_POLLING=false` to keep webhook mode (set to `true` for long polling).
+
 The application reads secrets only from the environment. To switch between
 configurations set `APP_ENV` (`dev` is default, set `prod` for production).
 
@@ -64,14 +68,17 @@ DATABASE_USER=sa DATABASE_PASSWORD= \
 
 ## Telegram bot modes
 
-Set `RUN_MODE=webhook` to start the Ktor server and expose `/webhook` for Telegram updates.
-Use `/telegram/setup-webhook` to call Bot API `setWebhook` with the URL `WEBHOOK_BASE_URL/webhook`.
+Set `TELEGRAM_USE_POLLING=false` (or leave it unset) to start the Ktor server and expose
+`/webhook` for Telegram updates. Use `/telegram/setup-webhook` to call Bot API
+`setWebhook` with the URL `WEBHOOK_BASE_URL/webhook`.
 
-Set `RUN_MODE=polling` to start long polling via `PollingMain`.
-`getUpdates` and `setWebhook` are mutually exclusive.
+Set `TELEGRAM_USE_POLLING=true` to start long polling via `PollingMain`. `getUpdates` and
+`setWebhook` are mutually exclusive.
 
 When using a local Bot API server (`LOCAL_BOT_API_URL`), the bot will send requests
 to that base URL instead of `https://api.telegram.org`.
+
+For webhook hardening details see [docs/WEBHOOK_SECURITY.md](docs/WEBHOOK_SECURITY.md).
 
 ## Running the bot
 

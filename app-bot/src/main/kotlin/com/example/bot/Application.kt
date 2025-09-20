@@ -2,6 +2,7 @@ package com.example.bot
 
 import com.example.bot.config.BotLimits
 import com.example.bot.di.bookingModule
+import com.example.bot.di.securityModule
 import com.example.bot.metrics.AppMetricsBinder
 import com.example.bot.plugins.installAppConfig
 import com.example.bot.plugins.installMetrics
@@ -56,7 +57,7 @@ fun Application.module() {
     AppMetricsBinder.bindAll(meterRegistry())
     install(Koin) {
         slf4jLogger()
-        modules(bookingModule)
+        modules(bookingModule, securityModule)
     }
 
     val outboxWorker by inject<OutboxWorker>()

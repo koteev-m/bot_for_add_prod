@@ -49,4 +49,10 @@ object BotLimits {
     val notifyRetryAfterFallback: Duration = Duration.ofSeconds(1)
     const val notifyBackoffMaxShift: Int = 20
     val notifyDurationPercentiles: DoubleArray = doubleArrayOf(0.5, 0.95)
+
+    object Webhook {
+        const val maxPayloadBytes: Long = 1L * 1024 * 1024
+        const val duplicateSuspiciousThreshold: Int = 3
+        val dedupTtl: Duration = Duration.ofHours(24)
+    }
 }
