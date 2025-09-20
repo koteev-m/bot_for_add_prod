@@ -22,7 +22,6 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.util.HexFormat
 import java.util.UUID
-import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SortOrder
@@ -33,9 +32,9 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.javatime.CurrentTimestamp
 import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
 import org.jetbrains.exposed.sql.select
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.transactions.transaction
 
 private object PromoLinksTable : Table("promo_links") {
     val id = long("id").autoIncrement()
@@ -92,7 +91,7 @@ class PromoLinkRepositoryImpl(
     ): PromoLink {
         val now = Instant.now(clock)
         return withTxRetry {
-            newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+            transaction(db) {
                 PromoLinksTable
                     .insert {
                         it[PromoLinksTable.promoterUserId] = promoterUserId
@@ -113,7 +112,7 @@ class PromoLinkRepositoryImpl(
 
     override suspend fun get(id: Long): PromoLink? {
         return withTxRetry {
-            newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+            transaction(db) {
                 PromoLinksTable
                     .select { PromoLinksTable.id eq id }
                     .limit(1)
@@ -125,7 +124,7 @@ class PromoLinkRepositoryImpl(
 
     override suspend fun listByPromoter(promoterUserId: Long, clubId: Long?): List<PromoLink> {
         return withTxRetry {
-            newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+            transaction(db) {
                 val query =
                     PromoLinksTable
                         .select { PromoLinksTable.promoterUserId eq promoterUserId }
@@ -138,16 +137,15 @@ class PromoLinkRepositoryImpl(
     }
 
     override suspend fun deactivate(id: Long): PromoLinkResult<Unit> {
-        val affected =
-            withTxRetry {
-                newSuspendedTransaction(context = Dispatchers.IO, db = db) {
-                    PromoLinksTable.deleteWhere { PromoLinksTable.id eq id }
+        return withTxRetry {
+            transaction(db) {
+                val affected = PromoLinksTable.deleteWhere { PromoLinksTable.id eq id }
+                if (affected == 0) {
+                    PromoLinkResult.Failure(PromoLinkError.NotFound)
+                } else {
+                    PromoLinkResult.Success(Unit)
                 }
             }
-        return if (affected == 0) {
-            PromoLinkResult.Failure(PromoLinkError.NotFound)
-        } else {
-            PromoLinkResult.Success(Unit)
         }
     }
 }
@@ -169,7 +167,7 @@ class PromoAttributionRepositoryImpl(
         return try {
             val inserted =
                 withTxRetry {
-                    newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+                    transaction(db) {
                         PromoAttributionTable
                             .insert {
                                 it[PromoAttributionTable.bookingId] = bookingId
@@ -199,7 +197,7 @@ class PromoAttributionRepositoryImpl(
 
     override suspend fun findByBooking(bookingId: UUID): PromoAttribution? {
         return withTxRetry {
-            newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+            transaction(db) {
                 PromoAttributionTable
                     .select { PromoAttributionTable.bookingId eq bookingId }
                     .limit(1)
@@ -222,7 +220,7 @@ class BookingTemplateRepositoryImpl(
     ): BookingTemplate {
         val now = Instant.now(clock)
         return withTxRetry {
-            newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+            transaction(db) {
                 BookingTemplatesTable
                     .insert {
                         it[BookingTemplatesTable.promoterUserId] = promoterUserId
@@ -247,7 +245,7 @@ class BookingTemplateRepositoryImpl(
         isActive: Boolean,
     ): BookingTemplateResult<BookingTemplate> {
         return withTxRetry {
-            newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+            transaction(db) {
                 val updated =
                     BookingTemplatesTable.update({ BookingTemplatesTable.id eq id }) {
                         it[BookingTemplatesTable.tableCapacityMin] = tableCapacityMin
@@ -270,7 +268,7 @@ class BookingTemplateRepositoryImpl(
 
     override suspend fun deactivate(id: Long): BookingTemplateResult<Unit> {
         return withTxRetry {
-            newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+            transaction(db) {
                 val updated =
                     BookingTemplatesTable.update({ BookingTemplatesTable.id eq id }) {
                         it[BookingTemplatesTable.isActive] = false
@@ -286,7 +284,7 @@ class BookingTemplateRepositoryImpl(
 
     override suspend fun get(id: Long): BookingTemplate? {
         return withTxRetry {
-            newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+            transaction(db) {
                 BookingTemplatesTable
                     .select { BookingTemplatesTable.id eq id }
                     .limit(1)
@@ -298,7 +296,7 @@ class BookingTemplateRepositoryImpl(
 
     override suspend fun listByOwner(promoterUserId: Long): List<BookingTemplate> {
         return withTxRetry {
-            newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+            transaction(db) {
                 BookingTemplatesTable
                     .select { BookingTemplatesTable.promoterUserId eq promoterUserId }
                     .orderBy(BookingTemplatesTable.createdAt, SortOrder.DESC)
@@ -309,7 +307,7 @@ class BookingTemplateRepositoryImpl(
 
     override suspend fun listByClub(clubId: Long, onlyActive: Boolean): List<BookingTemplate> {
         return withTxRetry {
-            newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+            transaction(db) {
                 val query =
                     BookingTemplatesTable
                         .select { BookingTemplatesTable.clubId eq clubId }
@@ -325,13 +323,13 @@ class BookingTemplateRepositoryImpl(
 
     override suspend fun applyTemplateSignature(id: Long): BookingTemplateResult<BookingTemplateSignature> {
         return withTxRetry {
-            newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+            transaction(db) {
                 val row =
                     BookingTemplatesTable
                         .select { BookingTemplatesTable.id eq id }
                         .limit(1)
                         .firstOrNull()
-                        ?: return@newSuspendedTransaction BookingTemplateResult.Failure(BookingTemplateError.NotFound)
+                        ?: return@transaction BookingTemplateResult.Failure(BookingTemplateError.NotFound)
                 val template = row.toBookingTemplate()
                 val payload =
                     buildString {
