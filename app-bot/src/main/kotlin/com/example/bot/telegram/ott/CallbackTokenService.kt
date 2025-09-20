@@ -1,5 +1,6 @@
 package com.example.bot.telegram.ott
 
+import com.example.bot.telegram.ott.TemplateOttPayload
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.CallbackQuery
 import com.pengrad.telegrambot.model.Update
@@ -49,7 +50,10 @@ class CallbackQueryHandler(
             else -> {
                 when (payload) {
                     is BookTableAction -> handleBookTable(callbackQuery, payload)
-                    // добавляйте другие типы payload тут
+                    is TemplateOttPayload -> {
+                        bot.execute(AnswerCallbackQuery(callbackQuery.id()))
+                        Unit
+                    }
                 }
             }
         }
