@@ -1,8 +1,11 @@
 package com.example.bot
 
 import com.example.bot.config.BotLimits
+import com.example.bot.data.repo.ClubRepository
+import com.example.bot.data.repo.ExposedClubRepository
 import com.example.bot.di.bookingModule
 import com.example.bot.di.securityModule
+import com.example.bot.i18n.BotTexts
 import com.example.bot.metrics.AppMetricsBinder
 import com.example.bot.plugins.installAppConfig
 import com.example.bot.plugins.installMetrics
@@ -20,6 +23,7 @@ import com.example.bot.telegram.ott.BookTableAction
 import com.example.bot.telegram.ott.CallbackQueryHandler
 import com.example.bot.telegram.ott.CallbackTokenService
 import com.example.bot.telegram.ott.KeyboardFactory
+import com.example.bot.telegram.Keyboards
 import com.example.bot.workers.OutboxWorker
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.UpdatesListener
@@ -61,9 +65,12 @@ fun Application.module() {
     val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN") ?: BotLimits.Demo.FALLBACK_TOKEN
     val telegramModule =
         module {
+            single { BotTexts() }
+            single { Keyboards(get()) }
             single { TelegramBot(telegramToken) }
             single { CallbackTokenService() }
-            single { MenuCallbacksHandler(get()) }
+            single<ClubRepository> { ExposedClubRepository(get()) }
+            single { MenuCallbacksHandler(get(), get(), get(), get()) }
             single { CallbackQueryHandler(get(), get(), get()) }
         }
     install(Koin) {

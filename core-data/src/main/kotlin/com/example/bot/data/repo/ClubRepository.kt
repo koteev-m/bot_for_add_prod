@@ -7,10 +7,10 @@ interface ClubRepository {
     /**
      * Lists available clubs limited by [limit].
      */
-    suspend fun listClubs(limit: Int = 10): List<Club>
+    suspend fun listClubs(limit: Int = 10): List<ClubDto>
 }
 
 /**
  * Simple projection of a club used in selection lists.
  */
-data class Club(val id: Long, val name: String)
+data class ClubDto(val id: Long, val name: String, val shortDescription: String?)

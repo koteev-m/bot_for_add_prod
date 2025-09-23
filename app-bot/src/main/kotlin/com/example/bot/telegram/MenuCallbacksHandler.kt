@@ -1,17 +1,24 @@
 package com.example.bot.telegram
 
+import com.example.bot.data.repo.ClubDto
+import com.example.bot.data.repo.ClubRepository
+import com.example.bot.i18n.BotTexts
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.Update
 import com.pengrad.telegrambot.request.AnswerCallbackQuery
 import com.pengrad.telegrambot.request.SendMessage
 import java.time.Instant
 import org.slf4j.LoggerFactory
+import kotlinx.coroutines.runBlocking
 
 /**
  * Handles callback-based navigation for inline menus.
  */
 class MenuCallbacksHandler(
     private val bot: TelegramBot,
+    private val keyboards: Keyboards,
+    private val texts: BotTexts,
+    private val clubRepository: ClubRepository,
 ) {
     private val logger = LoggerFactory.getLogger(MenuCallbacksHandler::class.java)
 
@@ -28,7 +35,11 @@ class MenuCallbacksHandler(
         try {
             when {
                 data == MENU_CLUBS && chatId != null -> {
-                    val request = SendMessage(chatId, "Выбор клуба…")
+                    val lang = callbackQuery.from()?.languageCode()
+                    val clubs = loadClubs()
+                    val request =
+                        SendMessage(chatId, buildClubSelectionMessage(clubs, lang))
+                            .replyMarkup(clubsKeyboard(clubs))
                     threadId?.let { request.messageThreadId(it) }
                     bot.execute(request)
                 }
@@ -43,6 +54,41 @@ class MenuCallbacksHandler(
             }
         } finally {
             bot.execute(AnswerCallbackQuery(callbackQuery.id()))
+        }
+    }
+
+    private fun loadClubs(limit: Int = CLUB_LIST_LIMIT): List<ClubDto> {
+        return try {
+            runBlocking { clubRepository.listClubs(limit) }
+        } catch (ex: Exception) {
+            logger.error("Failed to load clubs", ex)
+            emptyList()
+        }
+    }
+
+    private fun clubsKeyboard(clubs: List<ClubDto>) =
+        keyboards.clubsKeyboard(clubs.map { club -> ClubTokenCodec.encode(club.id) to club.name })
+
+    private fun buildClubSelectionMessage(clubs: List<ClubDto>, lang: String?): String {
+        val header = texts.menu(lang).chooseClub
+        if (clubs.isEmpty()) return header
+        val details =
+            clubs
+                .joinToString(separator = "\n") { club ->
+                    buildString {
+                        append("• ")
+                        append(club.name)
+                        val description = club.shortDescription?.takeIf { it.isNotBlank() }
+                        if (description != null) {
+                            append(" — ")
+                            append(description)
+                        }
+                    }
+                }
+        return buildString {
+            appendLine(header)
+            appendLine()
+            append(details)
         }
     }
 
@@ -87,3 +133,4 @@ private const val DELIMITER = ":"
 private const val MENU_CLUBS = "menu:clubs"
 private const val CLUB_PREFIX = "club:"
 private const val NIGHT_PREFIX = "night:"
+private const val CLUB_LIST_LIMIT = 10
