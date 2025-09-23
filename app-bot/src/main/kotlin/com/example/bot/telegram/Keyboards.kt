@@ -96,7 +96,10 @@ class Keyboards(private val texts: BotTexts) {
     /**
      * Keyboard for selecting number of guests up to [capacity].
      */
-    fun guestsKeyboard(capacity: Int, encode: (Int) -> String): InlineKeyboardMarkup {
+    fun guestsKeyboard(
+        capacity: Int,
+        encode: (Int) -> String,
+    ): InlineKeyboardMarkup {
         val rows = mutableListOf<Array<InlineKeyboardButton>>()
         var row = mutableListOf<InlineKeyboardButton>()
         for (i in 1..capacity) {

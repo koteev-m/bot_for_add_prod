@@ -12,4 +12,3 @@ object DbMetrics {
     // Пример интегратора с Micrometer (по желанию):
     // fun maybeBindMicrometer(registry: io.micrometer.core.instrument.MeterRegistry) { ... }
 }
-

@@ -20,7 +20,10 @@ interface SchedulerApi {
     suspend fun markSending(id: Long)
 
     /** Enqueues up to [limit] recipients into outbox for campaign. */
-    suspend fun enqueueBatch(campaignId: Long, limit: Int): Int
+    suspend fun enqueueBatch(
+        campaignId: Long,
+        limit: Int,
+    ): Int
 
     /** Returns progress for campaign. */
     suspend fun progress(campaignId: Long): Progress

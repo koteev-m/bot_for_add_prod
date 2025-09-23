@@ -52,7 +52,10 @@ class TokenBucket(capacity: Double, refillPerSec: Double, nowNanos: Long = Syste
  * Хранилище subject-бакетов с TTL (удаляем неиспользуемые).
  */
 class SubjectBucketStore(private val capacity: Double, private val refillPerSec: Double, private val ttl: Duration) {
-    private data class Entry(val bucket: TokenBucket, @Volatile var lastSeen: Instant)
+    private data class Entry(
+        val bucket: TokenBucket,
+        @Volatile var lastSeen: Instant,
+    )
 
     private val map = ConcurrentHashMap<String, Entry>()
     private val sizeCounter = AtomicLong(0)

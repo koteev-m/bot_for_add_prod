@@ -37,8 +37,8 @@ fun Route.metricsRoute() {
         call.respondText(
             text = scrape,
             contentType =
-            io.ktor.http.ContentType
-                .parse("text/plain; version=0.0.4; charset=utf-8"),
+                io.ktor.http.ContentType
+                    .parse("text/plain; version=0.0.4; charset=utf-8"),
         )
     }
 }

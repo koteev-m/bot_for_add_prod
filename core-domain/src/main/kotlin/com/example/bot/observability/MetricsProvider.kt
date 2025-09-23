@@ -19,14 +19,27 @@ class MetricsProvider(val registry: MeterRegistry) {
         fun simpleRegistry(): SimpleMeterRegistry = SimpleMeterRegistry()
     }
 
-    fun counter(name: String, vararg tags: String): Counter = Counter.builder(name).tags(*tags).register(registry)
+    fun counter(
+        name: String,
+        vararg tags: String,
+    ): Counter = Counter.builder(name).tags(*tags).register(registry)
 
-    fun timer(name: String, vararg tags: String): Timer = Timer.builder(name).tags(*tags).register(registry)
+    fun timer(
+        name: String,
+        vararg tags: String,
+    ): Timer = Timer.builder(name).tags(*tags).register(registry)
 
-    fun gauge(name: String, supplier: Supplier<Number>, vararg tags: String): Gauge =
-        Gauge.builder(name, supplier).tags(*tags).register(registry)
+    fun gauge(
+        name: String,
+        supplier: Supplier<Number>,
+        vararg tags: String,
+    ): Gauge = Gauge.builder(name, supplier).tags(*tags).register(registry)
 
-    fun registerBuildInfo(version: String, env: String, commit: String) {
+    fun registerBuildInfo(
+        version: String,
+        env: String,
+        commit: String,
+    ) {
         Gauge
             .builder("app.build.info") { 1.0 }
             .tags("version", version, "env", env, "commit", commit)

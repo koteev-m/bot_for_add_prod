@@ -15,7 +15,12 @@ interface HallRenderer {
      * Вернуть PNG-байты схемы зала.
      * scale — множитель для Retina/увеличенного качества (например, 2.0).
      */
-    suspend fun render(clubId: Long, startUtc: String, scale: Double, stateKey: String): ByteArray
+    suspend fun render(
+        clubId: Long,
+        startUtc: String,
+        scale: Double,
+        stateKey: String,
+    ): ByteArray
 }
 
 /**
@@ -52,7 +57,12 @@ class DefaultHallRenderer : HallRenderer {
         val bookedColor = Color(239, 68, 68)
     }
 
-    override suspend fun render(clubId: Long, startUtc: String, scale: Double, stateKey: String): ByteArray =
+    override suspend fun render(
+        clubId: Long,
+        startUtc: String,
+        scale: Double,
+        stateKey: String,
+    ): ByteArray =
         withContext(Dispatchers.Default) {
             val s = if (scale.isFinite() && scale > MIN_SCALE) scale else DEFAULT_SCALE
             val w = (BASE_W * s).toInt()
@@ -111,10 +121,19 @@ class DefaultHallRenderer : HallRenderer {
             baos.toByteArray()
         }
 
-    private fun drawLegend(g: java.awt.Graphics2D, x: Int, y: Int, s: Double) {
+    private fun drawLegend(
+        g: java.awt.Graphics2D,
+        x: Int,
+        y: Int,
+        s: Double,
+    ) {
         val r = (DOT_RADIUS * s).toInt()
 
-        fun dot(cx: Int, cy: Int, color: Color) {
+        fun dot(
+            cx: Int,
+            cy: Int,
+            color: Color,
+        ) {
             g.color = color
             g.fillOval(cx - r, cy - r, 2 * r, 2 * r)
         }

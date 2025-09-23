@@ -12,18 +12,17 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Testcontainers
+import testing.RequiresDocker
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import kotlin.math.ceil
-import testing.RequiresDocker
 
 @RequiresDocker
 @Tag("it")
 @Testcontainers
 class AvailabilityPerfTest {
-
     @Test
     fun `performance within limits`() {
         org.junit.jupiter.api.Assumptions.assumeTrue(
@@ -53,33 +52,29 @@ class AvailabilityPerfTest {
                     clubId: Long,
                     from: LocalDate,
                     to: LocalDate,
-                ) =
-                    emptyList<ClubHoliday>()
+                ) = emptyList<ClubHoliday>()
 
                 override suspend fun listExceptions(
                     clubId: Long,
                     from: LocalDate,
                     to: LocalDate,
-                ) =
-                    emptyList<ClubException>()
+                ) = emptyList<ClubException>()
 
                 override suspend fun listEvents(
                     clubId: Long,
                     from: Instant,
                     to: Instant,
-                ) =
-                    emptyList<com.example.bot.time.Event>()
+                ) = emptyList<com.example.bot.time.Event>()
 
                 override suspend fun findEvent(
                     clubId: Long,
                     startUtc: Instant,
-                ) =
-                    com.example.bot.time.Event(
-                        1,
-                        1,
-                        eventStart,
-                        eventEnd,
-                    )
+                ) = com.example.bot.time.Event(
+                    1,
+                    1,
+                    eventStart,
+                    eventEnd,
+                )
 
                 override suspend fun listTables(clubId: Long) = tables
 
@@ -88,9 +83,7 @@ class AvailabilityPerfTest {
                     now: Instant,
                 ) = emptySet<Long>()
 
-                override suspend fun listActiveBookingTableIds(
-                    eventId: Long,
-                ) = emptySet<Long>()
+                override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
             }
 
         val resolver = OperatingRulesResolver(repo)

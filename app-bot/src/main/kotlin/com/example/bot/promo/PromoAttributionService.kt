@@ -3,10 +3,6 @@ package com.example.bot.promo
 import com.example.bot.data.security.Role
 import com.example.bot.data.security.UserRepository
 import com.example.bot.data.security.UserRoleRepository
-import com.example.bot.promo.PromoAttributionRepository
-import com.example.bot.promo.PromoAttributionResult
-import com.example.bot.promo.PromoLink
-import com.example.bot.promo.PromoLinkRepository
 import java.nio.charset.StandardCharsets
 import java.time.Clock
 import java.time.Duration
@@ -34,13 +30,14 @@ object PromoLinkTokenCodec {
     private val decoder = Base64.getUrlDecoder()
 
     fun encode(token: PromoLinkToken): String {
-        val payload = buildString {
-            append(token.promoLinkId)
-            token.clubId?.let {
-                append(TOKEN_SEPARATOR)
-                append(it)
+        val payload =
+            buildString {
+                append(token.promoLinkId)
+                token.clubId?.let {
+                    append(TOKEN_SEPARATOR)
+                    append(it)
+                }
             }
-        }
         val encoded = encoder.encodeToString(payload.toByteArray(StandardCharsets.UTF_8))
         require(encoded.length <= MAX_TOKEN_LENGTH) { "promo token exceeds $MAX_TOKEN_LENGTH characters" }
         return encoded
@@ -48,11 +45,12 @@ object PromoLinkTokenCodec {
 
     fun decode(value: String): PromoLinkToken? {
         if (value.isBlank() || value.length > MAX_TOKEN_LENGTH) return null
-        val decoded = try {
-            decoder.decode(value)
-        } catch (_: IllegalArgumentException) {
-            return null
-        }
+        val decoded =
+            try {
+                decoder.decode(value)
+            } catch (_: IllegalArgumentException) {
+                return null
+            }
         val text = decoded.toString(StandardCharsets.UTF_8)
         val parts = text.split(TOKEN_SEPARATOR)
         if (parts.isEmpty() || parts.size > 2) return null
@@ -81,7 +79,11 @@ data class PendingPromoAttribution(
 
 interface PromoAttributionStore {
     fun put(entry: PendingPromoAttribution)
-    fun popFresh(telegramUserId: Long, now: Instant = Instant.now()): PendingPromoAttribution?
+
+    fun popFresh(
+        telegramUserId: Long,
+        now: Instant = Instant.now(),
+    ): PendingPromoAttribution?
 }
 
 class InMemoryPromoAttributionStore(
@@ -97,7 +99,10 @@ class InMemoryPromoAttributionStore(
         entries[entry.telegramUserId] = Entry(entry, clock.instant())
     }
 
-    override fun popFresh(telegramUserId: Long, now: Instant): PendingPromoAttribution? {
+    override fun popFresh(
+        telegramUserId: Long,
+        now: Instant,
+    ): PendingPromoAttribution? {
         cleanup()
         val entry = entries.remove(telegramUserId) ?: return null
         return if (now.isAfter(entry.storedAt.plus(ttl))) {
@@ -115,19 +120,27 @@ class InMemoryPromoAttributionStore(
 
 sealed interface PromoLinkIssueResult {
     data class Success(val token: String, val promoLink: PromoLink) : PromoLinkIssueResult
+
     data object NotAuthorized : PromoLinkIssueResult
 }
 
 sealed interface PromoStartResult {
     data object Stored : PromoStartResult
+
     data object Invalid : PromoStartResult
 }
 
 interface PromoAttributionCoordinator {
-    suspend fun attachPending(bookingId: UUID, telegramUserId: Long?)
+    suspend fun attachPending(
+        bookingId: UUID,
+        telegramUserId: Long?,
+    )
 
     object Noop : PromoAttributionCoordinator {
-        override suspend fun attachPending(bookingId: UUID, telegramUserId: Long?) {}
+        override suspend fun attachPending(
+            bookingId: UUID,
+            telegramUserId: Long?,
+        ) {}
     }
 }
 
@@ -157,27 +170,39 @@ class PromoAttributionService(
         return PromoLinkIssueResult.Success(token, promoLink)
     }
 
-    suspend fun registerStart(telegramUserId: Long, token: String): PromoStartResult {
-        val decoded = PromoLinkTokenCodec.decode(token) ?: return PromoStartResult.Invalid
-        val promoLink = promoLinkRepository.get(decoded.promoLinkId) ?: return PromoStartResult.Invalid
-        if (decoded.clubId != null && promoLink.clubId != decoded.clubId) {
-            return PromoStartResult.Invalid
-        }
-        val entry =
-            PendingPromoAttribution(
-                telegramUserId = telegramUserId,
-                promoLinkId = promoLink.id,
-                promoterUserId = promoLink.promoterUserId,
-                utmSource = promoLink.utmSource,
-                utmMedium = promoLink.utmMedium,
-                utmCampaign = promoLink.utmCampaign,
-                utmContent = promoLink.utmContent,
-            )
-        store.put(entry)
-        return PromoStartResult.Stored
+    suspend fun registerStart(
+        telegramUserId: Long,
+        token: String,
+    ): PromoStartResult {
+        val result =
+            PromoLinkTokenCodec.decode(token)?.let { decoded ->
+                val promoLink = promoLinkRepository.get(decoded.promoLinkId)
+                when {
+                    promoLink == null -> PromoStartResult.Invalid
+                    decoded.clubId != null && promoLink.clubId != decoded.clubId -> PromoStartResult.Invalid
+                    else -> {
+                        val entry =
+                            PendingPromoAttribution(
+                                telegramUserId = telegramUserId,
+                                promoLinkId = promoLink.id,
+                                promoterUserId = promoLink.promoterUserId,
+                                utmSource = promoLink.utmSource,
+                                utmMedium = promoLink.utmMedium,
+                                utmCampaign = promoLink.utmCampaign,
+                                utmContent = promoLink.utmContent,
+                            )
+                        store.put(entry)
+                        PromoStartResult.Stored
+                    }
+                }
+            } ?: PromoStartResult.Invalid
+        return result
     }
 
-    override suspend fun attachPending(bookingId: UUID, telegramUserId: Long?) {
+    override suspend fun attachPending(
+        bookingId: UUID,
+        telegramUserId: Long?,
+    ) {
         if (telegramUserId == null) return
         val entry = store.popFresh(telegramUserId, clock.instant()) ?: return
         when (

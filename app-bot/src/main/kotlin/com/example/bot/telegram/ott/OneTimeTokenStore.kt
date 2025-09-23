@@ -45,7 +45,6 @@ class InMemoryOneTimeTokenStore(
         System.getenv("OTT_TTL_SECONDS")?.toLongOrNull() ?: BotLimits.ottTokenTtl.seconds,
     maxEntries: Int = System.getenv("OTT_MAX_ENTRIES")?.toIntOrNull() ?: BotLimits.ottMaxEntries,
 ) : OneTimeTokenStore {
-
     private data class Entry(val payload: OttPayload, val expiresAt: Instant)
 
     private val ttl: Duration =

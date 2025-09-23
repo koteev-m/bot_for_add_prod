@@ -64,11 +64,12 @@ object RateLimitMetrics {
     val subjectStoreSize = AtomicLong(0)
 }
 
-private fun String?.toBooleanStrictOrNull(): Boolean? = when (this?.lowercase()) {
-    "true" -> true
-    "false" -> false
-    else -> null
-}
+private fun String?.toBooleanStrictOrNull(): Boolean? =
+    when (this?.lowercase()) {
+        "true" -> true
+        "false" -> false
+        else -> null
+    }
 
 val RateLimitPlugin =
     createApplicationPlugin(name = "RateLimitPlugin", createConfiguration = ::RateLimitConfig) {

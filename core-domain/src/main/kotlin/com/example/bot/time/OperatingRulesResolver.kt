@@ -82,12 +82,15 @@ class OperatingRulesResolver(
     private val repository: AvailabilityRepository,
     private val clock: Clock = Clock.systemUTC(),
 ) {
-
-/**
+    /**
      * Resolve slots for given club and period.
      */
     @Suppress("LongMethod", "CyclomaticComplexMethod", "ReturnCount", "LoopWithTooManyJumpStatements")
-    suspend fun resolve(clubId: Long, fromUtc: Instant, toUtc: Instant): List<NightSlot> {
+    suspend fun resolve(
+        clubId: Long,
+        fromUtc: Instant,
+        toUtc: Instant,
+    ): List<NightSlot> {
         val club = repository.findClub(clubId) ?: return emptyList()
         val zone = ZoneId.of(club.timezone)
         val fromDate = fromUtc.atZone(zone).toLocalDate()
@@ -193,13 +196,20 @@ class OperatingRulesResolver(
         return merged
     }
 
-    private fun shouldMerge(last: NightSlot?, slot: NightSlot): Boolean =
+    private fun shouldMerge(
+        last: NightSlot?,
+        slot: NightSlot,
+    ): Boolean =
         last != null &&
             last.source == slot.source &&
             last.isSpecial == slot.isSpecial &&
             last.eventEndUtc == slot.eventStartUtc
 
-    private fun zoned(date: LocalDate, time: LocalTime, zone: ZoneId): ZonedDateTime {
+    private fun zoned(
+        date: LocalDate,
+        time: LocalTime,
+        zone: ZoneId,
+    ): ZonedDateTime {
         val ldt = LocalDateTime.of(date, time)
         return ZonedDateTime.ofLocal(ldt, zone, null)
     }

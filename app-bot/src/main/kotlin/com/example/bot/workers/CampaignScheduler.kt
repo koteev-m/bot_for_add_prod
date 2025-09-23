@@ -51,7 +51,10 @@ class CampaignScheduler(
         }
     }
 
-    private suspend fun handleCampaign(c: SchedulerApi.Campaign, now: OffsetDateTime) {
+    private suspend fun handleCampaign(
+        c: SchedulerApi.Campaign,
+        now: OffsetDateTime,
+    ) {
         val scheduledButNotDue =
             c.status == SchedulerApi.Status.SCHEDULED && !isDue(c, now)
         val paused = c.status == SchedulerApi.Status.PAUSED
@@ -85,13 +88,19 @@ class CampaignScheduler(
         }
     }
 
-    private fun isDue(c: SchedulerApi.Campaign, now: OffsetDateTime): Boolean {
+    private fun isDue(
+        c: SchedulerApi.Campaign,
+        now: OffsetDateTime,
+    ): Boolean {
         val cron = c.scheduleCron
         return (c.startsAt == null || !now.isBefore(c.startsAt)) &&
             (cron == null || cronMatches(cron, now))
     }
 
-    private fun cronMatches(expr: String, time: OffsetDateTime): Boolean {
+    private fun cronMatches(
+        expr: String,
+        time: OffsetDateTime,
+    ): Boolean {
         val parts = expr.trim().split(" ").filter { it.isNotEmpty() }
         return if (parts.size == CRON_PARTS) {
             val min = parts[MIN_INDEX]
@@ -109,7 +118,10 @@ class CampaignScheduler(
         }
     }
 
-    private fun match(field: String, value: Int): Boolean {
+    private fun match(
+        field: String,
+        value: Int,
+    ): Boolean {
         return when {
             field == "*" -> true
             field.contains(",") -> field.split(",").any { match(it, value) }

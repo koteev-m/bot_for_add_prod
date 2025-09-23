@@ -37,13 +37,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import io.mockk.mockk
-import java.math.BigDecimal
-import java.time.Clock
-import java.time.Duration
-import java.time.Instant
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
-import kotlin.random.Random
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -65,6 +58,13 @@ import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import testing.RequiresDocker
+import java.math.BigDecimal
+import java.time.Clock
+import java.time.Duration
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import kotlin.random.Random
 
 @RequiresDocker
 @Tag("it")
@@ -96,10 +96,21 @@ class PromoTemplateE2EIT : PostgresAppTest() {
                         single { clock }
                         single { database }
                         single { Random(0) }
-                        single<PromoAttributionStore> { InMemoryPromoAttributionStore(ttl = Duration.ofHours(1), clock = get()) }
-                        single<PromoLinkRepository> { PromoLinkRepositoryImpl(get(), get()) }
-                        single<PromoAttributionRepository> { PromoAttributionRepositoryImpl(get(), get()) }
-                        single<BookingTemplateRepository> { BookingTemplateRepositoryImpl(get(), get()) }
+                        single<PromoAttributionStore> {
+                            InMemoryPromoAttributionStore(
+                                ttl = Duration.ofHours(1),
+                                clock = get(),
+                            )
+                        }
+                        single<PromoLinkRepository> {
+                            PromoLinkRepositoryImpl(get(), get())
+                        }
+                        single<PromoAttributionRepository> {
+                            PromoAttributionRepositoryImpl(get(), get())
+                        }
+                        single<BookingTemplateRepository> {
+                            BookingTemplateRepositoryImpl(get(), get())
+                        }
                         single { ExposedUserRepository(get()) }
                         single { ExposedUserRoleRepository(get()) }
                         single { NotificationsOutboxRepository(get()) }
@@ -109,12 +120,38 @@ class PromoTemplateE2EIT : PostgresAppTest() {
                         single { OutboxRepository(get(), get()) }
                         single { SuspiciousIpRepository(get(), get()) }
                         single { WebhookUpdateDedupRepository(get(), clock = get()) }
-                        single { PromoAttributionService(get(), get(), get(), get(), get(), get()) }
+                        single {
+                            PromoAttributionService(
+                                get(),
+                                get(),
+                                get(),
+                                get(),
+                                get(),
+                                get(),
+                            )
+                        }
                         single<PromoAttributionCoordinator> { get<PromoAttributionService>() }
                         single { BookingService(get(), get(), get(), get(), get()) }
-                        single { BookingTemplateService(get(), get(), get(), get(), get()) }
+                        single {
+                            BookingTemplateService(
+                                get(),
+                                get(),
+                                get(),
+                                get(),
+                                get(),
+                            )
+                        }
                         single<SendPort> { sendPort }
-                        single { OutboxWorker(get(), get(), limit = 5, idleDelay = Duration.ofMillis(10), clock = get(), random = get()) }
+                        single {
+                            OutboxWorker(
+                                get(),
+                                get(),
+                                limit = 5,
+                                idleDelay = Duration.ofMillis(10),
+                                clock = get(),
+                                random = get(),
+                            )
+                        }
                     },
                 )
             }.koin
@@ -135,139 +172,155 @@ class PromoTemplateE2EIT : PostgresAppTest() {
     }
 
     @Test
-    fun `promo link start applies template end-to-end`() = runBlocking {
-        val promoterTelegramId = 7_001_001L
-        val clubId = insertClub("Hyperion")
-        val tableId = insertTable(clubId, tableNumber = 11, capacity = 6, deposit = BigDecimal("180.00"))
-        val slotStart = baseInstant.plusSeconds(7_200)
-        val slotEnd = slotStart.plusSeconds(14_400)
-        insertEvent(clubId, slotStart, slotEnd)
-        val promoterUserId = insertUser(promoterTelegramId, "hyperion-promoter")
-        assignRole(promoterUserId, Role.PROMOTER, clubId)
+    fun `promo link start applies template end-to-end`() =
+        runBlocking {
+            val promoterTelegramId = 7_001_001L
+            val clubId = insertClub("Hyperion")
+            val tableId = insertTable(clubId, tableNumber = 11, capacity = 6, deposit = BigDecimal("180.00"))
+            val slotStart = baseInstant.plusSeconds(7_200)
+            val slotEnd = slotStart.plusSeconds(14_400)
+            insertEvent(clubId, slotStart, slotEnd)
+            val promoterUserId = insertUser(promoterTelegramId, "hyperion-promoter")
+            assignRole(promoterUserId, Role.PROMOTER, clubId)
 
-        val actor = templateService.resolveActor(promoterTelegramId) ?: error("actor not found")
+            val actor = templateService.resolveActor(promoterTelegramId) ?: error("actor not found")
 
-        val issued = promoService.issuePromoLink(promoterTelegramId)
-        assertTrue(issued is PromoLinkIssueResult.Success)
-        issued as PromoLinkIssueResult.Success
-        val token = issued.token
-        assertTrue(token.length <= 64)
-        assertNotNull(promoLinkRepository.get(issued.promoLink.id))
+            val issued = promoService.issuePromoLink(promoterTelegramId)
+            assertTrue(issued is PromoLinkIssueResult.Success)
+            issued as PromoLinkIssueResult.Success
+            val token = issued.token
+            assertTrue(token.length <= 64)
+            assertNotNull(promoLinkRepository.get(issued.promoLink.id))
 
-        val telegramClient = mockk<TelegramClient>(relaxed = true)
-        val updatePayload =
-            """{"update_id":101,"message":{"message_id":1,"chat":{"id":$promoterTelegramId},"text":"/start $token"}}"""
-        testApplication {
-            application {
-                routing {
-                    webhookRoute(
-                        security = {
-                            requireSecret = false
-                            dedupRepository = this@PromoTemplateE2EIT.dedupRepository
-                            suspiciousIpRepository = this@PromoTemplateE2EIT.suspiciousIpRepository
-                            json = this@PromoTemplateE2EIT.json
-                        },
-                        handler = { update ->
-                            val message = update.message ?: return@webhookRoute null
-                            val text = message.text ?: return@webhookRoute null
-                            val providedToken = text.split(" ", limit = 2).getOrNull(1)?.trim() ?: return@webhookRoute null
-                            val fromId = message.chat.id
-                            when (promoService.registerStart(fromId, providedToken)) {
-                                PromoStartResult.Stored -> WebhookReply.Inline(mapOf("status" to "ok"))
-                                PromoStartResult.Invalid -> WebhookReply.Inline(mapOf("status" to "invalid"))
-                            }
-                        },
-                        client = telegramClient,
-                        json = json,
-                    )
+            val telegramClient = mockk<TelegramClient>(relaxed = true)
+            val updatePayload =
+                """
+                    {
+                      "update_id": 101,
+                      "message": {
+                        "message_id": 1,
+                        "chat": { "id": $promoterTelegramId },
+                        "text": "/start $token"
+                      }
+                    }
+                """
+                    .trimIndent()
+            testApplication {
+                application {
+                    routing {
+                        webhookRoute(
+                            security = {
+                                requireSecret = false
+                                dedupRepository = this@PromoTemplateE2EIT.dedupRepository
+                                suspiciousIpRepository = this@PromoTemplateE2EIT.suspiciousIpRepository
+                                json = this@PromoTemplateE2EIT.json
+                            },
+                            handler = { update ->
+                                val message = update.message ?: return@webhookRoute null
+                                val text = message.text ?: return@webhookRoute null
+                                val providedToken =
+                                    text
+                                        .split(" ", limit = 2)
+                                        .getOrNull(1)
+                                        ?.trim()
+                                        ?: return@webhookRoute null
+                                val fromId = message.chat.id
+                                when (promoService.registerStart(fromId, providedToken)) {
+                                    PromoStartResult.Stored -> WebhookReply.Inline(mapOf("status" to "ok"))
+                                    PromoStartResult.Invalid -> WebhookReply.Inline(mapOf("status" to "invalid"))
+                                }
+                            },
+                            client = telegramClient,
+                            json = json,
+                        )
+                    }
                 }
+
+                val response =
+                    client.post("/webhook") {
+                        header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                        setBody(updatePayload)
+                    }
+                assertEquals(HttpStatusCode.OK, response.status)
             }
 
-            val response =
-                client.post("/webhook") {
-                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                    setBody(updatePayload)
-                }
-            assertEquals(HttpStatusCode.OK, response.status)
-        }
+            val pending = requireNotNull(promoStore.popFresh(promoterTelegramId, clock.instant()))
+            promoStore.put(pending)
 
-        val pending = requireNotNull(promoStore.popFresh(promoterTelegramId, clock.instant()))
-        promoStore.put(pending)
-
-        val template =
-            templateService.createTemplate(
-                actor,
-                TemplateCreateRequest(
-                    promoterUserId = actor.userId,
+            val template =
+                templateService.createTemplate(
+                    actor,
+                    TemplateCreateRequest(
+                        promoterUserId = actor.userId,
+                        clubId = clubId,
+                        tableCapacityMin = 4,
+                        notes = "welcome",
+                    ),
+                )
+            val bookingRequest =
+                TemplateBookingRequest(
                     clubId = clubId,
-                    tableCapacityMin = 4,
-                    notes = "welcome",
-                ),
-            )
-        val bookingRequest =
-            TemplateBookingRequest(
-                clubId = clubId,
-                tableId = tableId,
-                slotStart = slotStart,
-                slotEnd = slotEnd,
-            )
+                    tableId = tableId,
+                    slotStart = slotStart,
+                    slotEnd = slotEnd,
+                )
 
-        val firstResult = templateService.applyTemplate(actor, template.id, bookingRequest)
-        assertTrue(firstResult is BookingCmdResult.Booked)
-        val bookingId = (firstResult as BookingCmdResult.Booked).bookingId
+            val firstResult = templateService.applyTemplate(actor, template.id, bookingRequest)
+            assertTrue(firstResult is BookingCmdResult.Booked)
+            val bookingId = (firstResult as BookingCmdResult.Booked).bookingId
 
-        val processed = outboxWorker.runOnce()
-        assertTrue(processed)
-        val sentMessage = sendPort.sent.single()
-        assertEquals("booking.confirmed", sentMessage.first)
-        assertEquals(bookingId.toString(), sentMessage.second["bookingId"]?.jsonPrimitive?.content)
+            val processed = outboxWorker.runOnce()
+            assertTrue(processed)
+            val sentMessage = sendPort.sent.single()
+            assertEquals("booking.confirmed", sentMessage.first)
+            assertEquals(bookingId.toString(), sentMessage.second["bookingId"]?.jsonPrimitive?.content)
 
-        transaction(database) {
-            val bookedRows =
-                BookingsTable
-                    .select { BookingsTable.status eq BookingStatus.BOOKED.name }
-                    .toList()
-            assertEquals(1, bookedRows.size)
-            assertEquals(bookingId, bookedRows.single()[BookingsTable.id])
+            transaction(database) {
+                val bookedRows =
+                    BookingsTable
+                        .select { BookingsTable.status eq BookingStatus.BOOKED.name }
+                        .toList()
+                assertEquals(1, bookedRows.size)
+                assertEquals(bookingId, bookedRows.single()[BookingsTable.id])
+            }
+
+            transaction(database) {
+                val outboxRows = BookingOutboxTable.selectAll().toList()
+                assertEquals(1, outboxRows.size)
+                val row = outboxRows.single()
+                assertEquals("SENT", row[BookingOutboxTable.status])
+                assertEquals(1, row[BookingOutboxTable.attempts])
+            }
+            assertTrue(outboxRepository.pickBatchForSend(1).isEmpty())
+
+            val storedAttribution = promoAttributionRepository.findByBooking(bookingId)
+            assertNotNull(storedAttribution)
+
+            transaction(database) {
+                val promoRows =
+                    PromoAttributionAssertionTable
+                        .select { PromoAttributionAssertionTable.bookingId eq bookingId }
+                        .toList()
+                assertEquals(1, promoRows.size)
+                val total = PromoAttributionAssertionTable.selectAll().count()
+                assertEquals(1L, total)
+            }
+
+            val duplicateResult = templateService.applyTemplate(actor, template.id, bookingRequest)
+            assertTrue(duplicateResult is BookingCmdResult.DuplicateActiveBooking)
+
+            transaction(database) {
+                val bookingCount =
+                    BookingsTable
+                        .select { BookingsTable.status eq BookingStatus.BOOKED.name }
+                        .count()
+                assertEquals(1L, bookingCount)
+                val promoCount = PromoAttributionAssertionTable.selectAll().count()
+                assertEquals(1L, promoCount)
+                val outboxCount = BookingOutboxTable.selectAll().count()
+                assertEquals(1L, outboxCount)
+            }
         }
-
-        transaction(database) {
-            val outboxRows = BookingOutboxTable.selectAll().toList()
-            assertEquals(1, outboxRows.size)
-            val row = outboxRows.single()
-            assertEquals("SENT", row[BookingOutboxTable.status])
-            assertEquals(1, row[BookingOutboxTable.attempts])
-        }
-        assertTrue(outboxRepository.pickBatchForSend(1).isEmpty())
-
-        val storedAttribution = promoAttributionRepository.findByBooking(bookingId)
-        assertNotNull(storedAttribution)
-
-        transaction(database) {
-            val promoRows =
-                PromoAttributionAssertionTable
-                    .select { PromoAttributionAssertionTable.bookingId eq bookingId }
-                    .toList()
-            assertEquals(1, promoRows.size)
-            val total = PromoAttributionAssertionTable.selectAll().count()
-            assertEquals(1L, total)
-        }
-
-        val duplicateResult = templateService.applyTemplate(actor, template.id, bookingRequest)
-        assertTrue(duplicateResult is BookingCmdResult.DuplicateActiveBooking)
-
-        transaction(database) {
-            val bookingCount =
-                BookingsTable
-                    .select { BookingsTable.status eq BookingStatus.BOOKED.name }
-                    .count()
-            assertEquals(1L, bookingCount)
-            val promoCount = PromoAttributionAssertionTable.selectAll().count()
-            assertEquals(1L, promoCount)
-            val outboxCount = BookingOutboxTable.selectAll().count()
-            assertEquals(1L, outboxCount)
-        }
-    }
 
     private fun insertClub(name: String): Long {
         return transaction(database) {
@@ -286,7 +339,11 @@ class PromoTemplateE2EIT : PostgresAppTest() {
         }.value.toLong()
     }
 
-    private fun insertEvent(clubId: Long, start: Instant, end: Instant) {
+    private fun insertEvent(
+        clubId: Long,
+        start: Instant,
+        end: Instant,
+    ) {
         transaction(database) {
             EventsTable.insert { row ->
                 row[EventsTable.clubId] = clubId
@@ -299,7 +356,12 @@ class PromoTemplateE2EIT : PostgresAppTest() {
         }
     }
 
-    private fun insertTable(clubId: Long, tableNumber: Int, capacity: Int, deposit: BigDecimal): Long {
+    private fun insertTable(
+        clubId: Long,
+        tableNumber: Int,
+        capacity: Int,
+        deposit: BigDecimal,
+    ): Long {
         return transaction(database) {
             TablesTable.insert { row ->
                 row[TablesTable.clubId] = clubId
@@ -312,7 +374,10 @@ class PromoTemplateE2EIT : PostgresAppTest() {
         }
     }
 
-    private fun insertUser(telegramId: Long, username: String): Long {
+    private fun insertUser(
+        telegramId: Long,
+        username: String,
+    ): Long {
         return transaction(database) {
             TestUsersTable.insert { row ->
                 row[TestUsersTable.telegramUserId] = telegramId
@@ -323,7 +388,11 @@ class PromoTemplateE2EIT : PostgresAppTest() {
         }
     }
 
-    private fun assignRole(userId: Long, role: Role, clubId: Long?) {
+    private fun assignRole(
+        userId: Long,
+        role: Role,
+        clubId: Long?,
+    ) {
         transaction(database) {
             TestUserRolesTable.insert { row ->
                 row[TestUserRolesTable.userId] = userId
@@ -342,7 +411,10 @@ class PromoTemplateE2EIT : PostgresAppTest() {
     private class RecordingSendPort : SendPort {
         val sent: MutableList<Pair<String, JsonObject>> = mutableListOf()
 
-        override suspend fun send(topic: String, payload: JsonObject): SendOutcome {
+        override suspend fun send(
+            topic: String,
+            payload: JsonObject,
+        ): SendOutcome {
             sent += topic to payload
             return SendOutcome.Ok
         }

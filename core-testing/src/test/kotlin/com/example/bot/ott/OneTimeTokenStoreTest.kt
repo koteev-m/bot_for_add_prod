@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test
 import java.time.Duration
 
 class OneTimeTokenStoreTest {
-
     @Test
     fun `issue-consume once`() {
         val store = InMemoryOneTimeTokenStore(ttlSeconds = 60, maxEntries = 100)

@@ -13,18 +13,17 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Testcontainers
+import testing.RequiresDocker
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
-import testing.RequiresDocker
 
 @RequiresDocker
 @Tag("it")
 @Testcontainers
 class AvailabilityCalendarTest {
-
     @Test
     fun `holiday override and base hours`() {
         org.junit.jupiter.api.Assumptions.assumeTrue(
@@ -48,29 +47,26 @@ class AvailabilityCalendarTest {
                     clubId: Long,
                     from: LocalDate,
                     to: LocalDate,
-                ) =
-                    listOf(
-                        ClubHoliday(
-                            LocalDate.of(2025, 5, 4),
-                            true,
-                            LocalTime.of(22, 0),
-                            LocalTime.of(3, 0),
-                        ),
-                    )
+                ) = listOf(
+                    ClubHoliday(
+                        LocalDate.of(2025, 5, 4),
+                        true,
+                        LocalTime.of(22, 0),
+                        LocalTime.of(3, 0),
+                    ),
+                )
 
                 override suspend fun listExceptions(
                     clubId: Long,
                     from: LocalDate,
                     to: LocalDate,
-                ) =
-                    emptyList<ClubException>()
+                ) = emptyList<ClubException>()
 
                 override suspend fun listEvents(
                     clubId: Long,
                     from: Instant,
                     to: Instant,
-                ) =
-                    emptyList<com.example.bot.time.Event>()
+                ) = emptyList<com.example.bot.time.Event>()
 
                 override suspend fun findEvent(
                     clubId: Long,
@@ -84,9 +80,7 @@ class AvailabilityCalendarTest {
                     now: Instant,
                 ) = emptySet<Long>()
 
-                override suspend fun listActiveBookingTableIds(
-                    eventId: Long,
-                ) = emptySet<Long>()
+                override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
             }
 
         val resolver = OperatingRulesResolver(repo)
@@ -126,24 +120,21 @@ class AvailabilityCalendarTest {
                     clubId: Long,
                     from: LocalDate,
                     to: LocalDate,
-                ) =
-                    emptyList<ClubHoliday>()
+                ) = emptyList<ClubHoliday>()
 
                 override suspend fun listExceptions(
                     clubId: Long,
                     from: LocalDate,
                     to: LocalDate,
-                ) =
-                    listOf(
-                        ClubException(LocalDate.of(2025, 5, 3), false, null, null),
-                    )
+                ) = listOf(
+                    ClubException(LocalDate.of(2025, 5, 3), false, null, null),
+                )
 
                 override suspend fun listEvents(
                     clubId: Long,
                     from: Instant,
                     to: Instant,
-                ) =
-                    emptyList<com.example.bot.time.Event>()
+                ) = emptyList<com.example.bot.time.Event>()
 
                 override suspend fun findEvent(
                     clubId: Long,
@@ -157,9 +148,7 @@ class AvailabilityCalendarTest {
                     now: Instant,
                 ) = emptySet<Long>()
 
-                override suspend fun listActiveBookingTableIds(
-                    eventId: Long,
-                ) = emptySet<Long>()
+                override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
             }
         val resolver = OperatingRulesResolver(repo)
         val from = LocalDate.of(2025, 5, 2).atStartOfDay(ZoneId.of("UTC")).toInstant()

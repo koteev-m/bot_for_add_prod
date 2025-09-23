@@ -12,7 +12,6 @@ import java.util.concurrent.atomic.AtomicLong
  * Вызывать один раз после установки MicrometerMetrics.
  */
 object AppMetricsBinder {
-
     fun bindAll(registry: MeterRegistry) {
         // Hall cache (20.4)
         registry.gauge("hall.cache.evictions", HallCacheMetrics.evictions)

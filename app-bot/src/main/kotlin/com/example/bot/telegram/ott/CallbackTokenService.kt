@@ -14,9 +14,8 @@ import com.pengrad.telegrambot.request.SendMessage
  *  - умеет быстро отвечать пользователю при истёкших/повторных токенах.
  */
 class CallbackTokenService(
-    private val store: OneTimeTokenStore = InMemoryOneTimeTokenStore()
+    private val store: OneTimeTokenStore = InMemoryOneTimeTokenStore(),
 ) {
-
     /** Выдать токен под payload (для callback_data). */
     fun issueToken(payload: OttPayload): String = store.issue(payload)
 
@@ -30,7 +29,6 @@ class CallbackQueryHandler(
     private val tokenService: CallbackTokenService,
     private val menuCallbacksHandler: MenuCallbacksHandler,
 ) {
-
     fun handle(update: Update) {
         val callbackQuery: CallbackQuery = update.callbackQuery() ?: return
         val data: String = callbackQuery.data() ?: return
@@ -44,7 +42,7 @@ class CallbackQueryHandler(
                 bot.execute(
                     AnswerCallbackQuery(callbackQuery.id())
                         .text("Кнопка устарела, обновите экран.")
-                        .showAlert(true)
+                        .showAlert(true),
                 )
             } else {
                 when (payload) {
@@ -64,10 +62,13 @@ class CallbackQueryHandler(
         return MENU_PREFIXES.any { prefix -> data.startsWith(prefix) }
     }
 
-    private fun handleBookTable(cq: CallbackQuery, p: BookTableAction) {
+    private fun handleBookTable(
+        cq: CallbackQuery,
+        p: BookTableAction,
+    ) {
         // Пример: отправим подтверждение в чат (минимальный сценарий)
         val chatId = cq.message()?.chat()?.id() ?: return
-        val text = "Выбран стол #${'$'}{p.tableId} • клуб ${'$'}{p.clubId} • ночь ${'$'}{p.startUtc}"
+        val text = "Выбран стол #${p.tableId} • клуб ${p.clubId} • ночь ${p.startUtc}"
         val req = SendMessage(chatId, text)
         // Если callback был в теме — можно добавить message_thread_id (не всегда доступно из callback)
         bot.execute(req)
@@ -78,4 +79,3 @@ class CallbackQueryHandler(
 
 private val MENU_PREFIXES = listOf("menu:", "club:", "night:", "tbl:", "pg:")
 private const val NOOP_CALLBACK = "noop"
-

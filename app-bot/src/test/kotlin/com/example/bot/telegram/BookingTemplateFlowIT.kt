@@ -2,10 +2,10 @@ package com.example.bot.telegram
 
 import com.example.bot.booking.BookingCmdResult
 import com.example.bot.booking.BookingService
-import com.example.bot.data.booking.core.BookingOutboxTable
 import com.example.bot.data.booking.BookingsTable
 import com.example.bot.data.booking.EventsTable
 import com.example.bot.data.booking.TablesTable
+import com.example.bot.data.booking.core.BookingOutboxTable
 import com.example.bot.data.db.Clubs
 import com.example.bot.data.notifications.NotificationsOutboxRepository
 import com.example.bot.data.notifications.NotificationsOutboxTable
@@ -20,11 +20,6 @@ import com.example.bot.promo.TemplateBookingRequest
 import com.example.bot.promo.TemplateCreateRequest
 import com.example.bot.promo.TemplateUpdateRequest
 import com.example.bot.testing.PostgresAppTest
-import java.math.BigDecimal
-import java.time.Clock
-import java.time.Instant
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -33,10 +28,15 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.math.BigDecimal
+import java.time.Clock
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 private object TestUsersTable : org.jetbrains.exposed.sql.Table("users") {
     val id = long("id").autoIncrement()
@@ -87,174 +87,176 @@ class BookingTemplateFlowIT : PostgresAppTest() {
     }
 
     @Test
-    fun `rbac rules enforced for template lifecycle`() = runBlocking {
-        val clubOne = insertClub("Orion")
-        val clubTwo = insertClub("Andromeda")
+    fun `rbac rules enforced for template lifecycle`() =
+        runBlocking {
+            val clubOne = insertClub("Orion")
+            val clubTwo = insertClub("Andromeda")
 
-        val promoterOneId = insertUser(telegramId = 101L, username = "promoter1")
-        val promoterTwoId = insertUser(telegramId = 102L, username = "promoter2")
-        val managerId = insertUser(telegramId = 201L, username = "manager")
-        val ownerId = insertUser(telegramId = 301L, username = "owner")
+            val promoterOneId = insertUser(telegramId = 101L, username = "promoter1")
+            val promoterTwoId = insertUser(telegramId = 102L, username = "promoter2")
+            val managerId = insertUser(telegramId = 201L, username = "manager")
+            val ownerId = insertUser(telegramId = 301L, username = "owner")
 
-        assignRole(promoterOneId, Role.PROMOTER, clubOne)
-        assignRole(promoterTwoId, Role.PROMOTER, clubTwo)
-        assignRole(managerId, Role.MANAGER, clubOne)
-        assignRole(ownerId, Role.OWNER, null)
+            assignRole(promoterOneId, Role.PROMOTER, clubOne)
+            assignRole(promoterTwoId, Role.PROMOTER, clubTwo)
+            assignRole(managerId, Role.MANAGER, clubOne)
+            assignRole(ownerId, Role.OWNER, null)
 
-        val promoterOne = actor(101L)
-        val promoterTwo = actor(102L)
-        val manager = actor(201L)
-        val owner = actor(301L)
+            val promoterOne = actor(101L)
+            val promoterTwo = actor(102L)
+            val manager = actor(201L)
+            val owner = actor(301L)
 
-        val templateOne =
-            templateService.createTemplate(
-                promoterOne,
-                TemplateCreateRequest(
-                    promoterUserId = promoterOne.userId,
-                    clubId = clubOne,
-                    tableCapacityMin = 4,
-                    notes = "VIP",
-                ),
-            )
-        val templateTwo =
-            templateService.createTemplate(
-                promoterTwo,
-                TemplateCreateRequest(
-                    promoterUserId = promoterTwo.userId,
-                    clubId = clubTwo,
-                    tableCapacityMin = 2,
-                    notes = "BAR",
-                ),
-            )
+            val templateOne =
+                templateService.createTemplate(
+                    promoterOne,
+                    TemplateCreateRequest(
+                        promoterUserId = promoterOne.userId,
+                        clubId = clubOne,
+                        tableCapacityMin = 4,
+                        notes = "VIP",
+                    ),
+                )
+            val templateTwo =
+                templateService.createTemplate(
+                    promoterTwo,
+                    TemplateCreateRequest(
+                        promoterUserId = promoterTwo.userId,
+                        clubId = clubTwo,
+                        tableCapacityMin = 2,
+                        notes = "BAR",
+                    ),
+                )
 
-        val ownTemplates = templateService.listTemplates(promoterOne)
-        assertEquals(listOf(templateOne.id), ownTemplates.map { it.id })
+            val ownTemplates = templateService.listTemplates(promoterOne)
+            assertEquals(listOf(templateOne.id), ownTemplates.map { it.id })
 
-        try {
-            templateService.updateTemplate(
-                promoterOne,
-                TemplateUpdateRequest(
-                    id = templateTwo.id,
-                    tableCapacityMin = 3,
-                    notes = "updated",
-                    isActive = true,
-                ),
-            )
-            fail("expected TemplateAccessException")
-        } catch (_: TemplateAccessException) {
-            // expected
+            try {
+                templateService.updateTemplate(
+                    promoterOne,
+                    TemplateUpdateRequest(
+                        id = templateTwo.id,
+                        tableCapacityMin = 3,
+                        notes = "updated",
+                        isActive = true,
+                    ),
+                )
+                fail("expected TemplateAccessException")
+            } catch (_: TemplateAccessException) {
+                // expected
+            }
+
+            val managerTemplates = templateService.listTemplates(manager, clubId = clubOne, onlyActive = false)
+            assertEquals(listOf(templateOne.id), managerTemplates.map { it.id })
+            try {
+                templateService.listTemplates(manager, clubId = clubTwo, onlyActive = false)
+                fail("expected TemplateAccessException")
+            } catch (_: TemplateAccessException) {
+                // expected
+            }
+
+            val updated =
+                templateService.updateTemplate(
+                    manager,
+                    TemplateUpdateRequest(
+                        id = templateOne.id,
+                        tableCapacityMin = 5,
+                        notes = "updated",
+                        isActive = true,
+                    ),
+                )
+            assertEquals(5, updated.tableCapacityMin)
+
+            val ownerView = templateService.listTemplates(owner, clubId = clubTwo, onlyActive = false)
+            assertEquals(listOf(templateTwo.id), ownerView.map { it.id })
         }
-
-        val managerTemplates = templateService.listTemplates(manager, clubId = clubOne, onlyActive = false)
-        assertEquals(listOf(templateOne.id), managerTemplates.map { it.id })
-        try {
-            templateService.listTemplates(manager, clubId = clubTwo, onlyActive = false)
-            fail("expected TemplateAccessException")
-        } catch (_: TemplateAccessException) {
-            // expected
-        }
-
-        val updated =
-            templateService.updateTemplate(
-                manager,
-                TemplateUpdateRequest(
-                    id = templateOne.id,
-                    tableCapacityMin = 5,
-                    notes = "updated",
-                    isActive = true,
-                ),
-            )
-        assertEquals(5, updated.tableCapacityMin)
-
-        val ownerView = templateService.listTemplates(owner, clubId = clubTwo, onlyActive = false)
-        assertEquals(listOf(templateTwo.id), ownerView.map { it.id })
-    }
 
     @Test
-    fun `apply template books table and enqueues notification`() = runBlocking {
-        val clubId = insertClub("Nova")
-        val promoterId = insertUser(telegramId = 501L, username = "nova-promoter")
-        val managerId = insertUser(telegramId = 502L, username = "nova-manager")
-        assignRole(promoterId, Role.PROMOTER, clubId)
-        assignRole(managerId, Role.MANAGER, clubId)
+    fun `apply template books table and enqueues notification`() =
+        runBlocking {
+            val clubId = insertClub("Nova")
+            val promoterId = insertUser(telegramId = 501L, username = "nova-promoter")
+            val managerId = insertUser(telegramId = 502L, username = "nova-manager")
+            assignRole(promoterId, Role.PROMOTER, clubId)
+            assignRole(managerId, Role.MANAGER, clubId)
 
-        val start = fixedInstant.plusSeconds(3_600)
-        val end = start.plusSeconds(10_800)
-        insertEvent(clubId, start, end)
-        val tableId = insertTable(clubId, tableNumber = 10, capacity = 6, deposit = BigDecimal("150.00"))
+            val start = fixedInstant.plusSeconds(3_600)
+            val end = start.plusSeconds(10_800)
+            insertEvent(clubId, start, end)
+            val tableId = insertTable(clubId, tableNumber = 10, capacity = 6, deposit = BigDecimal("150.00"))
 
-        val promoter = actor(501L)
-        val template =
-            templateService.createTemplate(
-                promoter,
-                TemplateCreateRequest(
-                    promoterUserId = promoter.userId,
-                    clubId = clubId,
-                    tableCapacityMin = 4,
-                    notes = null,
-                ),
-            )
+            val promoter = actor(501L)
+            val template =
+                templateService.createTemplate(
+                    promoter,
+                    TemplateCreateRequest(
+                        promoterUserId = promoter.userId,
+                        clubId = clubId,
+                        tableCapacityMin = 4,
+                        notes = null,
+                    ),
+                )
 
-        val result =
-            templateService.applyTemplate(
-                promoter,
-                template.id,
-                TemplateBookingRequest(
-                    clubId = clubId,
-                    tableId = tableId,
-                    slotStart = start,
-                    slotEnd = end,
-                ),
-            )
-        assertTrue(result is BookingCmdResult.Booked)
+            val result =
+                templateService.applyTemplate(
+                    promoter,
+                    template.id,
+                    TemplateBookingRequest(
+                        clubId = clubId,
+                        tableId = tableId,
+                        slotStart = start,
+                        slotEnd = end,
+                    ),
+                )
+            assertTrue(result is BookingCmdResult.Booked)
 
-        transaction(database) {
-            val bookings = BookingsTable.select { BookingsTable.tableId eq tableId }.toList()
-            assertEquals(1, bookings.size)
-            val record = bookings.first()
-            assertEquals(start, record[BookingsTable.slotStart].toInstant())
-            assertEquals(end, record[BookingsTable.slotEnd].toInstant())
+            transaction(database) {
+                val bookings = BookingsTable.select { BookingsTable.tableId eq tableId }.toList()
+                assertEquals(1, bookings.size)
+                val record = bookings.first()
+                assertEquals(start, record[BookingsTable.slotStart].toInstant())
+                assertEquals(end, record[BookingsTable.slotEnd].toInstant())
+            }
+
+            transaction(database) {
+                val outboxCount = BookingOutboxTable.select { BookingOutboxTable.topic eq "booking.confirmed" }.count()
+                assertEquals(1, outboxCount)
+            }
+
+            transaction(database) {
+                val rows =
+                    NotificationsOutboxTable
+                        .select { NotificationsOutboxTable.kind eq "promo.template.booked" }
+                        .toList()
+                assertEquals(1, rows.size)
+                val payload = rows.first()[NotificationsOutboxTable.payload]
+                val obj = payload.jsonObject
+                assertEquals(template.id, obj["templateId"]?.jsonPrimitive?.long)
+                assertEquals(clubId, obj["clubId"]?.jsonPrimitive?.long)
+                assertEquals(tableId, obj["tableId"]?.jsonPrimitive?.long)
+            }
+
+            val secondResult =
+                templateService.applyTemplate(
+                    promoter,
+                    template.id,
+                    TemplateBookingRequest(
+                        clubId = clubId,
+                        tableId = tableId,
+                        slotStart = start,
+                        slotEnd = end,
+                    ),
+                )
+            assertTrue(secondResult is BookingCmdResult.DuplicateActiveBooking)
+
+            transaction(database) {
+                val outboxRows =
+                    NotificationsOutboxTable
+                        .select { NotificationsOutboxTable.kind eq "promo.template.booked" }
+                        .toList()
+                assertEquals(1, outboxRows.size)
+            }
         }
-
-        transaction(database) {
-            val outboxCount = BookingOutboxTable.select { BookingOutboxTable.topic eq "booking.confirmed" }.count()
-            assertEquals(1, outboxCount)
-        }
-
-        transaction(database) {
-            val rows =
-                NotificationsOutboxTable
-                    .select { NotificationsOutboxTable.kind eq "promo.template.booked" }
-                    .toList()
-            assertEquals(1, rows.size)
-            val payload = rows.first()[NotificationsOutboxTable.payload]
-            val obj = payload.jsonObject
-            assertEquals(template.id, obj["templateId"]?.jsonPrimitive?.long)
-            assertEquals(clubId, obj["clubId"]?.jsonPrimitive?.long)
-            assertEquals(tableId, obj["tableId"]?.jsonPrimitive?.long)
-        }
-
-        val secondResult =
-            templateService.applyTemplate(
-                promoter,
-                template.id,
-                TemplateBookingRequest(
-                    clubId = clubId,
-                    tableId = tableId,
-                    slotStart = start,
-                    slotEnd = end,
-                ),
-            )
-        assertTrue(secondResult is BookingCmdResult.DuplicateActiveBooking)
-
-        transaction(database) {
-            val outboxRows =
-                NotificationsOutboxTable
-                    .select { NotificationsOutboxTable.kind eq "promo.template.booked" }
-                    .toList()
-            assertEquals(1, outboxRows.size)
-        }
-    }
 
     private suspend fun actor(telegramId: Long): TemplateActor =
         templateService.resolveActor(telegramId) ?: error("actor $telegramId not found")
@@ -278,7 +280,11 @@ class BookingTemplateFlowIT : PostgresAppTest() {
         return id.value.toLong()
     }
 
-    private fun insertEvent(clubId: Long, start: Instant, end: Instant): Long {
+    private fun insertEvent(
+        clubId: Long,
+        start: Instant,
+        end: Instant,
+    ): Long {
         return transaction(database) {
             EventsTable.insert { row ->
                 row[EventsTable.clubId] = clubId
@@ -291,7 +297,12 @@ class BookingTemplateFlowIT : PostgresAppTest() {
         }
     }
 
-    private fun insertTable(clubId: Long, tableNumber: Int, capacity: Int, deposit: BigDecimal): Long {
+    private fun insertTable(
+        clubId: Long,
+        tableNumber: Int,
+        capacity: Int,
+        deposit: BigDecimal,
+    ): Long {
         return transaction(database) {
             TablesTable.insert { row ->
                 row[TablesTable.clubId] = clubId
@@ -304,7 +315,10 @@ class BookingTemplateFlowIT : PostgresAppTest() {
         }
     }
 
-    private fun insertUser(telegramId: Long, username: String): Long {
+    private fun insertUser(
+        telegramId: Long,
+        username: String,
+    ): Long {
         return transaction(database) {
             TestUsersTable.insert { row ->
                 row[TestUsersTable.telegramUserId] = telegramId
@@ -315,7 +329,11 @@ class BookingTemplateFlowIT : PostgresAppTest() {
         }
     }
 
-    private fun assignRole(userId: Long, role: Role, clubId: Long?) {
+    private fun assignRole(
+        userId: Long,
+        role: Role,
+        clubId: Long?,
+    ) {
         transaction(database) {
             TestUserRolesTable.insert { row ->
                 row[TestUserRolesTable.userId] = userId

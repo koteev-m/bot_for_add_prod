@@ -12,7 +12,12 @@ import java.util.concurrent.ConcurrentLinkedQueue
 class InMemoryOutboxService : OutboxService {
     val items: ConcurrentLinkedQueue<OutboxRecord> = ConcurrentLinkedQueue()
 
-    override suspend fun enqueue(kind: String, chatId: Long, threadId: Long?, payload: String) {
+    override suspend fun enqueue(
+        kind: String,
+        chatId: Long,
+        threadId: Long?,
+        payload: String,
+    ) {
         val record = OutboxRecord(UUID.randomUUID(), kind, chatId, threadId, payload)
         items.add(record)
     }

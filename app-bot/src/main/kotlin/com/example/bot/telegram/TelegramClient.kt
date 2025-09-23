@@ -61,7 +61,10 @@ class TelegramClient(token: String, apiUrl: String? = null) {
     }
 
     @Suppress("SpreadOperator")
-    suspend fun getUpdates(offset: Long, allowedUpdates: List<String>): List<Update> {
+    suspend fun getUpdates(
+        offset: Long,
+        allowedUpdates: List<String>,
+    ): List<Update> {
         return withContext(Dispatchers.IO) {
             val resp =
                 bot.execute(

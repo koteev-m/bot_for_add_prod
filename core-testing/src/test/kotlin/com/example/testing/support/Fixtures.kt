@@ -9,7 +9,10 @@ import java.time.Instant
 
 /** Factory helpers for test entities. */
 object Fixtures {
-    fun club(id: Long = 1, timezone: String = "UTC") = Club(id, timezone)
+    fun club(
+        id: Long = 1,
+        timezone: String = "UTC",
+    ) = Club(id, timezone)
 
     fun event(
         id: Long = 1,
@@ -28,12 +31,22 @@ object Fixtures {
         active: Boolean = true,
     ) = Table(id, number, zone, capacity, minDeposit, active)
 
-    fun user(id: Long = 1, name: String = "User", role: String = "guest") = User(id, name, role)
+    fun user(
+        id: Long = 1,
+        name: String = "User",
+        role: String = "guest",
+    ) = User(id, name, role)
 
     data class Promoter(val id: Long = 1, val name: String = "Promoter", val alias: String = "prom")
 
-    fun promoter(id: Long = 1, name: String = "Promoter", alias: String = "prom") = Promoter(id, name, alias)
+    fun promoter(
+        id: Long = 1,
+        name: String = "Promoter",
+        alias: String = "prom",
+    ) = Promoter(id, name, alias)
 
-    fun notifyMessage(chatId: Long = 1, text: String = "hi") =
-        NotifyMessage(chatId, null, com.example.bot.notifications.NotifyMethod.TEXT, text, null, null, null, null, null)
+    fun notifyMessage(
+        chatId: Long = 1,
+        text: String = "hi",
+    ) = NotifyMessage(chatId, null, com.example.bot.notifications.NotifyMethod.TEXT, text, null, null, null, null, null)
 }

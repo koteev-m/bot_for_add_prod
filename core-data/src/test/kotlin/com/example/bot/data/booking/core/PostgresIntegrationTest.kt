@@ -47,7 +47,18 @@ abstract class PostgresIntegrationTest {
         check(::database.isInitialized) { "database not initialised" }
         transaction(database) {
             exec(
-                "TRUNCATE TABLE booking_outbox, audit_log, booking_holds, bookings, events, tables, clubs RESTART IDENTITY CASCADE",
+                """
+                TRUNCATE TABLE
+                    booking_outbox,
+                    audit_log,
+                    booking_holds,
+                    bookings,
+                    events,
+                    tables,
+                    clubs
+                RESTART IDENTITY CASCADE
+                """
+                    .trimIndent(),
             )
         }
     }

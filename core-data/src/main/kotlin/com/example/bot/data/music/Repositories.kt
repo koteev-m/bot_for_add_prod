@@ -1,9 +1,18 @@
+@file:Suppress("ktlint:standard:no-wildcard-imports")
+
 package com.example.bot.data.music
 
-import com.example.bot.music.*
+import com.example.bot.music.MusicItemCreate
+import com.example.bot.music.MusicItemRepository
+import com.example.bot.music.MusicItemView
+import com.example.bot.music.MusicPlaylistRepository
+import com.example.bot.music.MusicSource
+import com.example.bot.music.PlaylistCreate
+import com.example.bot.music.PlaylistFullView
+import com.example.bot.music.PlaylistView
+import com.example.bot.music.UserId
 import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
@@ -11,7 +20,10 @@ import java.time.ZoneOffset
 
 /** Exposed implementation of [MusicItemRepository] and [MusicPlaylistRepository]. */
 class MusicItemRepositoryImpl(private val db: Database) : MusicItemRepository {
-    override suspend fun create(req: MusicItemCreate, actor: UserId): MusicItemView {
+    override suspend fun create(
+        req: MusicItemCreate,
+        actor: UserId,
+    ): MusicItemView {
         return newSuspendedTransaction(Dispatchers.IO, db) {
             val row =
                 MusicItemsTable
@@ -73,7 +85,10 @@ class MusicItemRepositoryImpl(private val db: Database) : MusicItemRepository {
 }
 
 class MusicPlaylistRepositoryImpl(private val db: Database) : MusicPlaylistRepository {
-    override suspend fun create(req: PlaylistCreate, actor: UserId): PlaylistView {
+    override suspend fun create(
+        req: PlaylistCreate,
+        actor: UserId,
+    ): PlaylistView {
         return newSuspendedTransaction(Dispatchers.IO, db) {
             val row =
                 MusicPlaylistsTable
@@ -89,7 +104,10 @@ class MusicPlaylistRepositoryImpl(private val db: Database) : MusicPlaylistRepos
         }
     }
 
-    override suspend fun setItems(playlistId: Long, itemIds: List<Long>) {
+    override suspend fun setItems(
+        playlistId: Long,
+        itemIds: List<Long>,
+    ) {
         return newSuspendedTransaction(Dispatchers.IO, db) {
             MusicPlaylistItemsTable.deleteWhere { MusicPlaylistItemsTable.playlistId eq playlistId }
             itemIds.forEachIndexed { idx, itemId ->

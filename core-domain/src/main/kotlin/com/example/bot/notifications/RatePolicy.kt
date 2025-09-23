@@ -19,11 +19,22 @@ data class Permit(val granted: Boolean, val retryAfterMs: Long = 0L)
 interface RatePolicy {
     val timeSource: TimeSource
 
-    fun acquireGlobal(n: Int = 1, now: Long = timeSource.nowMs()): Permit
+    fun acquireGlobal(
+        n: Int = 1,
+        now: Long = timeSource.nowMs(),
+    ): Permit
 
-    fun acquireChat(chatId: Long, n: Int = 1, now: Long = timeSource.nowMs()): Permit
+    fun acquireChat(
+        chatId: Long,
+        n: Int = 1,
+        now: Long = timeSource.nowMs(),
+    ): Permit
 
-    fun on429(chatId: Long?, retryAfter: Long, now: Long = timeSource.nowMs())
+    fun on429(
+        chatId: Long?,
+        retryAfter: Long,
+        now: Long = timeSource.nowMs(),
+    )
 }
 
 private const val SCALE = MS
@@ -38,7 +49,10 @@ private class TokenBucket(
     private val blockedUntilMs = AtomicLong(0L)
 
     @Suppress("LoopWithTooManyJumpStatements")
-    fun tryAcquire(n: Int, nowMs: Long): Permit {
+    fun tryAcquire(
+        n: Int,
+        nowMs: Long,
+    ): Permit {
         val blocked = blockedUntilMs.get()
         if (nowMs < blocked) {
             return Permit(false, blocked - nowMs)
@@ -100,9 +114,16 @@ class DefaultRatePolicy(
     private val chats = ConcurrentHashMap<Long, Holder>()
     private val lastCleanup = AtomicLong(timeSource.nowMs())
 
-    override fun acquireGlobal(n: Int, now: Long): Permit = globalBucket.tryAcquire(n, now)
+    override fun acquireGlobal(
+        n: Int,
+        now: Long,
+    ): Permit = globalBucket.tryAcquire(n, now)
 
-    override fun acquireChat(chatId: Long, n: Int, now: Long): Permit {
+    override fun acquireChat(
+        chatId: Long,
+        n: Int,
+        now: Long,
+    ): Permit {
         val holder =
             chats.compute(chatId) { _, existing ->
                 if (existing == null) {
@@ -116,7 +137,11 @@ class DefaultRatePolicy(
         return holder.bucket.tryAcquire(n, now)
     }
 
-    override fun on429(chatId: Long?, retryAfter: Long, now: Long) {
+    override fun on429(
+        chatId: Long?,
+        retryAfter: Long,
+        now: Long,
+    ) {
         val until = now + retryAfter
         globalBucket.blockUntil(until)
         if (chatId != null) {

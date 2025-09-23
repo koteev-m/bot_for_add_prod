@@ -27,9 +27,6 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.testing.testApplication
-import java.time.Instant
-import java.time.ZoneOffset
-import java.util.UUID
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -40,6 +37,9 @@ import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.time.Instant
+import java.time.ZoneOffset
+import java.util.UUID
 
 class GuestListRoutesTest : StringSpec({
     lateinit var dataSource: JdbcDataSource
@@ -79,7 +79,10 @@ class GuestListRoutesTest : StringSpec({
         }
     }
 
-    suspend fun createEvent(clubId: Long, title: String): Long {
+    suspend fun createEvent(
+        clubId: Long,
+        title: String,
+    ): Long {
         val start = Instant.parse("2024-07-01T18:00:00Z")
         val end = Instant.parse("2024-07-02T02:00:00Z")
         return transaction(database) {
@@ -103,7 +106,11 @@ class GuestListRoutesTest : StringSpec({
         }
     }
 
-    suspend fun registerRbacUser(telegramId: Long, roles: Set<Role>, clubs: Set<Long>): Long {
+    suspend fun registerRbacUser(
+        telegramId: Long,
+        roles: Set<Role>,
+        clubs: Set<Long>,
+    ): Long {
         return transaction(database) {
             roles.forEach { role ->
                 if (RolesTable.selectAll().none { it[RolesTable.code] == role.name }) {

@@ -1,10 +1,10 @@
 package com.example.bot.workers
 
-import java.time.Duration
-import kotlin.random.Random
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.time.Duration
+import kotlin.random.Random
 
 class OutboxWorkerBackoffTest {
     @Test

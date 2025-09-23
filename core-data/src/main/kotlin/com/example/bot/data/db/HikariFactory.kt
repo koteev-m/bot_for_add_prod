@@ -6,7 +6,6 @@ import java.time.Duration
 import javax.sql.DataSource
 
 object HikariFactory {
-
     private const val ENV_MAX_POOL_SIZE = "HIKARI_MAX_POOL_SIZE"
     private const val ENV_MIN_IDLE = "HIKARI_MIN_IDLE"
     private const val ENV_CONN_TIMEOUT = "HIKARI_CONN_TIMEOUT_MS"
@@ -19,38 +18,45 @@ object HikariFactory {
     private val DEFAULT_VALIDATION_TIMEOUT: Duration = Duration.ofSeconds(2)
     private val DEFAULT_LEAK_DETECTION_THRESHOLD: Duration = Duration.ofSeconds(10)
 
-    private fun envInt(name: String, default: Int): Int =
-        System.getenv(name)?.toIntOrNull() ?: default
+    private fun envInt(
+        name: String,
+        default: Int,
+    ): Int = System.getenv(name)?.toIntOrNull() ?: default
 
-    private fun envDurationMillis(name: String, default: Duration): Duration =
-        System.getenv(name)?.toLongOrNull()?.let(Duration::ofMillis) ?: default
+    private fun envDurationMillis(
+        name: String,
+        default: Duration,
+    ): Duration = System.getenv(name)?.toLongOrNull()?.let(Duration::ofMillis) ?: default
 
     fun dataSource(db: DbConfig): DataSource {
-        val hc = HikariConfig().apply {
-            jdbcUrl = db.url
-            username = db.user
-            password = db.password
+        val hc =
+            HikariConfig().apply {
+                jdbcUrl = db.url
+                username = db.user
+                password = db.password
 
-            maximumPoolSize = envInt(ENV_MAX_POOL_SIZE, DEFAULT_MAX_POOL_SIZE)
-            minimumIdle = envInt(ENV_MIN_IDLE, DEFAULT_MIN_IDLE)
-            connectionTimeout = envDurationMillis(
-                ENV_CONN_TIMEOUT,
-                DEFAULT_CONNECTION_TIMEOUT,
-            ).toMillis()
-            validationTimeout = envDurationMillis(
-                ENV_VALIDATION_TIMEOUT,
-                DEFAULT_VALIDATION_TIMEOUT,
-            ).toMillis()
-            leakDetectionThreshold = envDurationMillis(
-                ENV_LEAK_DETECTION,
-                DEFAULT_LEAK_DETECTION_THRESHOLD,
-            ).toMillis()
+                maximumPoolSize = envInt(ENV_MAX_POOL_SIZE, DEFAULT_MAX_POOL_SIZE)
+                minimumIdle = envInt(ENV_MIN_IDLE, DEFAULT_MIN_IDLE)
+                connectionTimeout =
+                    envDurationMillis(
+                        ENV_CONN_TIMEOUT,
+                        DEFAULT_CONNECTION_TIMEOUT,
+                    ).toMillis()
+                validationTimeout =
+                    envDurationMillis(
+                        ENV_VALIDATION_TIMEOUT,
+                        DEFAULT_VALIDATION_TIMEOUT,
+                    ).toMillis()
+                leakDetectionThreshold =
+                    envDurationMillis(
+                        ENV_LEAK_DETECTION,
+                        DEFAULT_LEAK_DETECTION_THRESHOLD,
+                    ).toMillis()
 
-            isAutoCommit = false
-            transactionIsolation = "TRANSACTION_REPEATABLE_READ"
-            validate()
-        }
+                isAutoCommit = false
+                transactionIsolation = "TRANSACTION_REPEATABLE_READ"
+                validate()
+            }
         return HikariDataSource(hc)
     }
 }
-

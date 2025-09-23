@@ -15,6 +15,19 @@ import com.example.bot.promo.PromoLink
 import com.example.bot.promo.PromoLinkError
 import com.example.bot.promo.PromoLinkRepository
 import com.example.bot.promo.PromoLinkResult
+import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.andWhere
+import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.javatime.CurrentTimestamp
+import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
+import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Clock
@@ -22,19 +35,6 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.util.HexFormat
 import java.util.UUID
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.ResultRow
-import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.andWhere
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.javatime.CurrentTimestamp
-import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
-import org.jetbrains.exposed.sql.select
-import org.jetbrains.exposed.sql.update
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.transactions.transaction
 
 private object PromoLinksTable : Table("promo_links") {
     val id = long("id").autoIncrement()
@@ -122,7 +122,10 @@ class PromoLinkRepositoryImpl(
         }
     }
 
-    override suspend fun listByPromoter(promoterUserId: Long, clubId: Long?): List<PromoLink> {
+    override suspend fun listByPromoter(
+        promoterUserId: Long,
+        clubId: Long?,
+    ): List<PromoLink> {
         return withTxRetry {
             transaction(db) {
                 val query =
@@ -305,7 +308,10 @@ class BookingTemplateRepositoryImpl(
         }
     }
 
-    override suspend fun listByClub(clubId: Long, onlyActive: Boolean): List<BookingTemplate> {
+    override suspend fun listByClub(
+        clubId: Long,
+        onlyActive: Boolean,
+    ): List<BookingTemplate> {
         return withTxRetry {
             transaction(db) {
                 val query =

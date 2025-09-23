@@ -20,17 +20,17 @@ import io.ktor.server.response.respondText
 import io.ktor.util.AttributeKey
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readAvailable
-import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Job
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.long
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
+import java.io.ByteArrayOutputStream
 import kotlin.text.Charsets
 
 const val TELEGRAM_SECRET_HEADER: String = "X-Telegram-Bot-Api-Secret-Token"
@@ -52,110 +52,117 @@ class WebhookSecurityConfig {
     var json: Json = Json { ignoreUnknownKeys = true }
 }
 
-val WebhookSecurity = createRouteScopedPlugin(name = "WebhookSecurity", createConfiguration = ::WebhookSecurityConfig) {
-    val logger = LoggerFactory.getLogger("WebhookSecurity")
-    val state = WebhookSecurityState(
-        requireSecret = pluginConfig.requireSecret,
-        secretToken = pluginConfig.secretToken,
-        maxBodySize = pluginConfig.maxBodySizeBytes,
-        dedupRepository = pluginConfig.dedupRepository ?: error("WebhookUpdateDedupRepository must be provided"),
-        suspiciousRepository = pluginConfig.suspiciousIpRepository ?: error("SuspiciousIpRepository must be provided"),
-        duplicateThreshold = pluginConfig.duplicateSuspicionThreshold,
-        json = pluginConfig.json,
-        logger = logger,
-    )
-
-    onCall { call ->
-        val forwarded = call.request.header(HttpHeaders.XForwardedFor)?.substringBefore(',')?.trim()
-        val remoteIp = forwarded?.takeIf { it.isNotEmpty() }
-            ?: call.request.header("X-Real-IP")?.takeIf { it.isNotBlank() }
-            ?: "unknown"
-        val userAgent = call.request.header(HttpHeaders.UserAgent)
-
-        if (call.request.httpMethod != HttpMethod.Post) {
-            state.recordSuspicious(
-                remoteIp,
-                userAgent,
-                SuspiciousIpReason.INVALID_METHOD,
-                call.request.httpMethod.value,
+val WebhookSecurity =
+    createRouteScopedPlugin(name = "WebhookSecurity", createConfiguration = ::WebhookSecurityConfig) {
+        val logger = LoggerFactory.getLogger("WebhookSecurity")
+        val state =
+            WebhookSecurityState(
+                requireSecret = pluginConfig.requireSecret,
+                secretToken = pluginConfig.secretToken,
+                maxBodySize = pluginConfig.maxBodySizeBytes,
+                dedupRepository =
+                    pluginConfig.dedupRepository
+                        ?: error("WebhookUpdateDedupRepository must be provided"),
+                suspiciousRepository =
+                    pluginConfig.suspiciousIpRepository
+                        ?: error("SuspiciousIpRepository must be provided"),
+                duplicateThreshold = pluginConfig.duplicateSuspicionThreshold,
+                json = pluginConfig.json,
+                logger = logger,
             )
-            call.respondText("Method Not Allowed", status = HttpStatusCode.MethodNotAllowed)
-            return@onCall
-        }
 
-        if (!state.checkSecret(call, remoteIp, userAgent)) {
-            return@onCall
-        }
+        onCall { call ->
+            val forwarded = call.request.header(HttpHeaders.XForwardedFor)?.substringBefore(',')?.trim()
+            val remoteIp =
+                forwarded?.takeIf { it.isNotEmpty() }
+                    ?: call.request.header("X-Real-IP")?.takeIf { it.isNotBlank() }
+                    ?: "unknown"
+            val userAgent = call.request.header(HttpHeaders.UserAgent)
 
-        val contentType = call.request.contentType().withoutParameters()
-        if (contentType != ContentType.Application.Json) {
-            state.recordSuspicious(
-                remoteIp,
-                userAgent,
-                SuspiciousIpReason.INVALID_CONTENT_TYPE,
-                contentType.toString(),
-            )
-            call.respondText("Unsupported content type", status = HttpStatusCode.UnsupportedMediaType)
-            return@onCall
-        }
-
-        val contentLength = call.request.header(HttpHeaders.ContentLength)?.toLongOrNull()
-        if (contentLength != null && contentLength > state.maxBodySize) {
-            state.recordSuspicious(
-                remoteIp,
-                userAgent,
-                SuspiciousIpReason.PAYLOAD_TOO_LARGE,
-                contentLength.toString(),
-            )
-            call.respondText("Payload too large", status = HttpStatusCode.PayloadTooLarge)
-            return@onCall
-        }
-
-        val channel = call.receiveChannel()
-        val bodyBytes = channel.readBodyLimited(state.maxBodySize)
-        if (bodyBytes == null) {
-            state.recordSuspicious(remoteIp, userAgent, SuspiciousIpReason.PAYLOAD_TOO_LARGE, "stream")
-            call.respondText("Payload too large", status = HttpStatusCode.PayloadTooLarge)
-            return@onCall
-        }
-        val payload = bodyBytes.toString(Charsets.UTF_8)
-        if (payload.isBlank()) {
-            state.recordSuspicious(remoteIp, userAgent, SuspiciousIpReason.EMPTY_BODY, null)
-            call.respondText("Empty body", status = HttpStatusCode.BadRequest)
-            return@onCall
-        }
-
-        val updateId = state.extractUpdateId(payload)
-        if (updateId == null) {
-            state.recordSuspicious(remoteIp, userAgent, SuspiciousIpReason.MALFORMED_JSON, null)
-            call.respondText("Invalid payload", status = HttpStatusCode.BadRequest)
-            return@onCall
-        }
-
-        call.attributes.put(webhookBodyKey, bodyBytes)
-        call.attributes.put(updateIdKey, updateId)
-        call.extractIdempotencyKey()?.let { key -> call.attributes.put(idempotencyKeyAttr, key) }
-
-        val mdcKeys = state.applyMdc(call)
-        state.registerMdcCleanup(call, mdcKeys)
-        when (val result = state.dedupRepository.mark(updateId)) {
-            is DedupResult.FirstSeen -> Unit
-            is DedupResult.Duplicate -> {
-                state.logger.debug("Duplicate update {} from {}", updateId, remoteIp)
-                if (result.duplicateCount >= state.duplicateThreshold) {
-                    state.recordSuspicious(
-                        remoteIp,
-                        userAgent,
-                        SuspiciousIpReason.DUPLICATE_UPDATE,
-                        "count=${result.duplicateCount}",
-                    )
-                }
-                call.respondText("Duplicate update", status = HttpStatusCode.Conflict)
+            if (call.request.httpMethod != HttpMethod.Post) {
+                state.recordSuspicious(
+                    remoteIp,
+                    userAgent,
+                    SuspiciousIpReason.INVALID_METHOD,
+                    call.request.httpMethod.value,
+                )
+                call.respondText("Method Not Allowed", status = HttpStatusCode.MethodNotAllowed)
                 return@onCall
+            }
+
+            if (!state.checkSecret(call, remoteIp, userAgent)) {
+                return@onCall
+            }
+
+            val contentType = call.request.contentType().withoutParameters()
+            if (contentType != ContentType.Application.Json) {
+                state.recordSuspicious(
+                    remoteIp,
+                    userAgent,
+                    SuspiciousIpReason.INVALID_CONTENT_TYPE,
+                    contentType.toString(),
+                )
+                call.respondText("Unsupported content type", status = HttpStatusCode.UnsupportedMediaType)
+                return@onCall
+            }
+
+            val contentLength = call.request.header(HttpHeaders.ContentLength)?.toLongOrNull()
+            if (contentLength != null && contentLength > state.maxBodySize) {
+                state.recordSuspicious(
+                    remoteIp,
+                    userAgent,
+                    SuspiciousIpReason.PAYLOAD_TOO_LARGE,
+                    contentLength.toString(),
+                )
+                call.respondText("Payload too large", status = HttpStatusCode.PayloadTooLarge)
+                return@onCall
+            }
+
+            val channel = call.receiveChannel()
+            val bodyBytes = channel.readBodyLimited(state.maxBodySize)
+            if (bodyBytes == null) {
+                state.recordSuspicious(remoteIp, userAgent, SuspiciousIpReason.PAYLOAD_TOO_LARGE, "stream")
+                call.respondText("Payload too large", status = HttpStatusCode.PayloadTooLarge)
+                return@onCall
+            }
+            val payload = bodyBytes.toString(Charsets.UTF_8)
+            if (payload.isBlank()) {
+                state.recordSuspicious(remoteIp, userAgent, SuspiciousIpReason.EMPTY_BODY, null)
+                call.respondText("Empty body", status = HttpStatusCode.BadRequest)
+                return@onCall
+            }
+
+            val updateId = state.extractUpdateId(payload)
+            if (updateId == null) {
+                state.recordSuspicious(remoteIp, userAgent, SuspiciousIpReason.MALFORMED_JSON, null)
+                call.respondText("Invalid payload", status = HttpStatusCode.BadRequest)
+                return@onCall
+            }
+
+            call.attributes.put(webhookBodyKey, bodyBytes)
+            call.attributes.put(updateIdKey, updateId)
+            call.extractIdempotencyKey()?.let { key -> call.attributes.put(idempotencyKeyAttr, key) }
+
+            val mdcKeys = state.applyMdc(call)
+            state.registerMdcCleanup(call, mdcKeys)
+            when (val result = state.dedupRepository.mark(updateId)) {
+                is DedupResult.FirstSeen -> Unit
+                is DedupResult.Duplicate -> {
+                    state.logger.debug("Duplicate update {} from {}", updateId, remoteIp)
+                    if (result.duplicateCount >= state.duplicateThreshold) {
+                        state.recordSuspicious(
+                            remoteIp,
+                            userAgent,
+                            SuspiciousIpReason.DUPLICATE_UPDATE,
+                            "count=${result.duplicateCount}",
+                        )
+                    }
+                    call.respondText("Duplicate update", status = HttpStatusCode.Conflict)
+                    return@onCall
+                }
             }
         }
     }
-}
 
 private data class WebhookSecurityState(
     val requireSecret: Boolean,
@@ -167,7 +174,11 @@ private data class WebhookSecurityState(
     val json: Json,
     val logger: Logger,
 ) {
-    suspend fun checkSecret(call: ApplicationCall, remoteIp: String, userAgent: String?): Boolean {
+    suspend fun checkSecret(
+        call: ApplicationCall,
+        remoteIp: String,
+        userAgent: String?,
+    ): Boolean {
         if (!requireSecret) {
             return true
         }
@@ -182,7 +193,12 @@ private data class WebhookSecurityState(
         return valid
     }
 
-    suspend fun recordSuspicious(ip: String, userAgent: String?, reason: SuspiciousIpReason, details: String?) {
+    suspend fun recordSuspicious(
+        ip: String,
+        userAgent: String?,
+        reason: SuspiciousIpReason,
+        details: String?,
+    ) {
         suspiciousRepository.record(ip, userAgent, reason, details)
         logger.warn("suspicious_ip reason={} ip={} details={}", reason, ip, details)
     }
@@ -200,8 +216,9 @@ private data class WebhookSecurityState(
 
     fun applyMdc(call: ApplicationCall): List<String> {
         val keys = mutableListOf<String>()
-        val idempotency = call.attributeOrNull(idempotencyKeyAttr)
-            ?: call.parameters["idempotency_key"]
+        val idempotency =
+            call.attributeOrNull(idempotencyKeyAttr)
+                ?: call.parameters["idempotency_key"]
         if (idempotency != null) {
             MDC.put(IDEMPOTENCY_MDC_KEY, idempotency)
             keys += IDEMPOTENCY_MDC_KEY
@@ -218,7 +235,10 @@ private data class WebhookSecurityState(
         keys.forEach { MDC.remove(it) }
     }
 
-    fun registerMdcCleanup(call: ApplicationCall, keys: List<String>) {
+    fun registerMdcCleanup(
+        call: ApplicationCall,
+        keys: List<String>,
+    ) {
         if (keys.isEmpty()) {
             return
         }

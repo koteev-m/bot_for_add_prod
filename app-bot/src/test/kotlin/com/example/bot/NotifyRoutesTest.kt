@@ -69,7 +69,20 @@ class NotifyRoutesTest :
                         header("X-Telegram-Id", "1")
                         contentType(ContentType.Application.Json)
                         setBody(
-                            """{"chatId":1,"messageThreadId":null,"method":"TEXT","text":"hi","parseMode":null,"photoUrl":null,"album":null,"buttons":null,"dedupKey":null}""",
+                            """
+                                {
+                                  "chatId": 1,
+                                  "messageThreadId": null,
+                                  "method": "TEXT",
+                                  "text": "hi",
+                                  "parseMode": null,
+                                  "photoUrl": null,
+                                  "album": null,
+                                  "buttons": null,
+                                  "dedupKey": null
+                                }
+                            """
+                                .trimIndent(),
                         )
                     }
                 resp.status shouldBe HttpStatusCode.Accepted
@@ -122,7 +135,6 @@ class NotifyRoutesTest :
                 list.status shouldBe HttpStatusCode.OK
             }
         }
-
     })
 
 private fun prepareSecurityData(): JdbcDataSource {

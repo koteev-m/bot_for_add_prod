@@ -16,12 +16,16 @@ import org.jetbrains.exposed.sql.update
 import java.time.OffsetDateTime
 
 class OutboxRepository(private val db: Database) {
-
     data class Record(val id: Long, val message: NotifyMessage, val dedupKey: String?, val attempts: Int)
 
     private val json = Json
 
-    suspend fun enqueue(msg: NotifyMessage, campaignId: Long? = null, priority: Int = 100, dedupKey: String? = null) {
+    suspend fun enqueue(
+        msg: NotifyMessage,
+        campaignId: Long? = null,
+        priority: Int = 100,
+        dedupKey: String? = null,
+    ) {
         return newSuspendedTransaction(db = db) {
             NotificationsOutboxTable.insertIgnore {
                 it[targetChatId] = msg.chatId
@@ -41,7 +45,10 @@ class OutboxRepository(private val db: Database) {
         }
     }
 
-    suspend fun pickBatch(now: OffsetDateTime, limit: Int): List<Record> {
+    suspend fun pickBatch(
+        now: OffsetDateTime,
+        limit: Int,
+    ): List<Record> {
         return newSuspendedTransaction(db = db) {
             NotificationsOutboxTable
                 .select {
@@ -56,10 +63,10 @@ class OutboxRepository(private val db: Database) {
                     Record(
                         id = it[NotificationsOutboxTable.id],
                         message =
-                        json.decodeFromJsonElement(
-                            NotifyMessage.serializer(),
-                            it[NotificationsOutboxTable.payload],
-                        ),
+                            json.decodeFromJsonElement(
+                                NotifyMessage.serializer(),
+                                it[NotificationsOutboxTable.payload],
+                            ),
                         dedupKey = it[NotificationsOutboxTable.dedupKey],
                         attempts = it[NotificationsOutboxTable.attempts],
                     )
@@ -67,7 +74,10 @@ class OutboxRepository(private val db: Database) {
         }
     }
 
-    suspend fun markSent(id: Long, messageId: Long?) {
+    suspend fun markSent(
+        id: Long,
+        messageId: Long?,
+    ) {
         return newSuspendedTransaction(db = db) {
             NotificationsOutboxTable.update({ NotificationsOutboxTable.id eq id }) {
                 it[status] = OutboxStatus.SENT.name
@@ -80,7 +90,11 @@ class OutboxRepository(private val db: Database) {
         }
     }
 
-    suspend fun markFailed(id: Long, error: String?, nextRetryAt: OffsetDateTime) {
+    suspend fun markFailed(
+        id: Long,
+        error: String?,
+        nextRetryAt: OffsetDateTime,
+    ) {
         return newSuspendedTransaction(db = db) {
             NotificationsOutboxTable.update({ NotificationsOutboxTable.id eq id }) {
                 it[status] = OutboxStatus.NEW.name
@@ -93,7 +107,10 @@ class OutboxRepository(private val db: Database) {
         }
     }
 
-    suspend fun postpone(id: Long, nextRetryAt: OffsetDateTime) {
+    suspend fun postpone(
+        id: Long,
+        nextRetryAt: OffsetDateTime,
+    ) {
         return newSuspendedTransaction(db = db) {
             NotificationsOutboxTable.update({ NotificationsOutboxTable.id eq id }) {
                 it[status] = OutboxStatus.NEW.name
@@ -103,7 +120,10 @@ class OutboxRepository(private val db: Database) {
         }
     }
 
-    suspend fun markPermanentFailure(id: Long, error: String?) {
+    suspend fun markPermanentFailure(
+        id: Long,
+        error: String?,
+    ) {
         return newSuspendedTransaction(db = db) {
             NotificationsOutboxTable.update({ NotificationsOutboxTable.id eq id }) {
                 it[status] = OutboxStatus.FAILED.name

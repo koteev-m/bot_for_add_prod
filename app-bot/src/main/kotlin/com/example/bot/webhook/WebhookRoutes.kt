@@ -2,16 +2,16 @@ package com.example.bot.webhook
 
 import com.example.bot.security.webhook.WebhookSecurity
 import com.example.bot.security.webhook.WebhookSecurityConfig
+import com.example.bot.security.webhook.hasWebhookPayload
 import com.example.bot.security.webhook.webhookRawBody
 import com.example.bot.security.webhook.webhookUpdateId
-import com.example.bot.security.webhook.hasWebhookPayload
 import com.example.bot.telegram.TelegramClient
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.route
 import io.ktor.server.routing.post
+import io.ktor.server.routing.route
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -79,13 +79,21 @@ data class MessageDto(
 )
 
 @Serializable
-data class ChatDto(@SerialName("id") val id: Long)
+data class ChatDto(
+    @SerialName("id") val id: Long,
+)
 
 @Serializable
-data class CallbackQueryDto(val id: String, @SerialName("from") val from: UserDto? = null, val data: String? = null)
+data class CallbackQueryDto(
+    val id: String,
+    @SerialName("from") val from: UserDto? = null,
+    val data: String? = null,
+)
 
 @Serializable
-data class UserDto(@SerialName("id") val id: Long)
+data class UserDto(
+    @SerialName("id") val id: Long,
+)
 
 /** Represents result of handling an update. */
 sealed interface WebhookReply {

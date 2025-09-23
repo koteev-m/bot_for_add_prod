@@ -1,12 +1,11 @@
 package com.example.bot.cache
 
-import java.time.Duration
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import java.time.Duration
 
 class HallRenderCacheEtagTest {
-
     @Test
     fun `returns 304 on If-None-Match`() =
         runBlocking {

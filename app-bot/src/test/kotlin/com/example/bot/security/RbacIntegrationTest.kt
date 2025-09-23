@@ -26,11 +26,11 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.postgresql.ds.PGSimpleDataSource
 import org.testcontainers.containers.PostgreSQLContainer
 
@@ -103,40 +103,44 @@ class RbacIntegrationTest {
     }
 
     @Test
-    fun `returns 401 when principal missing`() = testApplication {
-        application { testModule() }
-        val response = client.get("/clubs/1/manage")
-        response.status shouldBe HttpStatusCode.Unauthorized
-        verifyAudit(result = "access_denied", clubId = null, userId = null)
-    }
+    fun `returns 401 when principal missing`() =
+        testApplication {
+            application { testModule() }
+            val response = client.get("/clubs/1/manage")
+            response.status shouldBe HttpStatusCode.Unauthorized
+            verifyAudit(result = "access_denied", clubId = null, userId = null)
+        }
 
     @Test
-    fun `returns 403 when role missing`() = testApplication {
-        val userId = registerUser(telegramId = 10L, roles = emptySet(), clubs = emptySet())
-        application { testModule() }
-        val response = client.get("/clubs/1/manage") { header("X-Telegram-Id", "10") }
-        response.status shouldBe HttpStatusCode.Forbidden
-        verifyAudit(result = "access_denied", clubId = null, userId = userId)
-    }
+    fun `returns 403 when role missing`() =
+        testApplication {
+            val userId = registerUser(telegramId = 10L, roles = emptySet(), clubs = emptySet())
+            application { testModule() }
+            val response = client.get("/clubs/1/manage") { header("X-Telegram-Id", "10") }
+            response.status shouldBe HttpStatusCode.Forbidden
+            verifyAudit(result = "access_denied", clubId = null, userId = userId)
+        }
 
     @Test
-    fun `returns 403 when club scope violated`() = testApplication {
-        val userId = registerUser(telegramId = 20L, roles = setOf(Role.MANAGER), clubs = setOf(2L))
-        application { testModule() }
-        val response = client.get("/clubs/5/manage") { header("X-Telegram-Id", "20") }
-        response.status shouldBe HttpStatusCode.Forbidden
-        verifyAudit(result = "access_denied", clubId = 5L, userId = userId)
-    }
+    fun `returns 403 when club scope violated`() =
+        testApplication {
+            val userId = registerUser(telegramId = 20L, roles = setOf(Role.MANAGER), clubs = setOf(2L))
+            application { testModule() }
+            val response = client.get("/clubs/5/manage") { header("X-Telegram-Id", "20") }
+            response.status shouldBe HttpStatusCode.Forbidden
+            verifyAudit(result = "access_denied", clubId = 5L, userId = userId)
+        }
 
     @Test
-    fun `returns 200 when access granted`() = testApplication {
-        val userId = registerUser(telegramId = 30L, roles = setOf(Role.MANAGER), clubs = setOf(7L))
-        application { testModule() }
-        val response = client.get("/clubs/7/manage") { header("X-Telegram-Id", "30") }
-        response.status shouldBe HttpStatusCode.OK
-        response.bodyAsText() shouldBe "ok"
-        verifyAudit(result = "access_granted", clubId = 7L, userId = userId)
-    }
+    fun `returns 200 when access granted`() =
+        testApplication {
+            val userId = registerUser(telegramId = 30L, roles = setOf(Role.MANAGER), clubs = setOf(7L))
+            application { testModule() }
+            val response = client.get("/clubs/7/manage") { header("X-Telegram-Id", "30") }
+            response.status shouldBe HttpStatusCode.OK
+            response.bodyAsText() shouldBe "ok"
+            verifyAudit(result = "access_granted", clubId = 7L, userId = userId)
+        }
 
     private fun Application.testModule() {
         val dataSource =
@@ -156,7 +160,11 @@ class RbacIntegrationTest {
         }
     }
 
-    private fun registerUser(telegramId: Long, roles: Set<Role>, clubs: Set<Long>): Long {
+    private fun registerUser(
+        telegramId: Long,
+        roles: Set<Role>,
+        clubs: Set<Long>,
+    ): Long {
         return transaction(database) {
             val userId =
                 UsersTable.insert {
@@ -190,7 +198,11 @@ class RbacIntegrationTest {
         }
     }
 
-    private fun verifyAudit(result: String, clubId: Long?, userId: Long?) {
+    private fun verifyAudit(
+        result: String,
+        clubId: Long?,
+        userId: Long?,
+    ) {
         transaction(database) {
             val record = AuditLogTable.selectAll().single()
             record[AuditLogTable.result] shouldBe result

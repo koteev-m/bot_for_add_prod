@@ -17,7 +17,10 @@ object InitDataValidator {
     /**
      * Parses and validates raw init data. Returns user information if valid, or null otherwise.
      */
-    fun validate(initData: String, botToken: String): TelegramUser? {
+    fun validate(
+        initData: String,
+        botToken: String,
+    ): TelegramUser? {
         val params =
             initData
                 .split('&')

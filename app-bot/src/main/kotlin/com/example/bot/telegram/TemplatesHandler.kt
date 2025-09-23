@@ -37,13 +37,16 @@ class BookingTemplateBotHandler(
         if (templates.isEmpty()) {
             return InlineKeyboardMarkup(arrayOf(InlineKeyboardButton("Нет шаблонов").callbackData("tpl:none")))
         }
-        val rows = templates.map { template ->
-            val payload = TemplateOttPayload.Selection(template.id)
-            val token = tokenService.issueToken(payload)
-            arrayOf(
-                InlineKeyboardButton("Шаблон #${template.id} · ${template.tableCapacityMin} гостей").callbackData(token),
-            )
-        }
+        val rows =
+            templates.map { template ->
+                val payload = TemplateOttPayload.Selection(template.id)
+                val token = tokenService.issueToken(payload)
+                arrayOf(
+                    InlineKeyboardButton(
+                        "Шаблон #${template.id} · ${template.tableCapacityMin} гостей",
+                    ).callbackData(token),
+                )
+            }
         return InlineKeyboardMarkup(*rows.toTypedArray())
     }
 
@@ -64,23 +67,28 @@ class BookingTemplateBotHandler(
         return tokenService.issueToken(ottPayload)
     }
 
-    suspend fun listTemplates(actor: TemplateActor, clubId: Long? = null): List<BookingTemplate> {
+    suspend fun listTemplates(
+        actor: TemplateActor,
+        clubId: Long? = null,
+    ): List<BookingTemplate> {
         return service.listTemplates(actor, clubId, onlyActive = false)
     }
 
-    suspend fun applyBooking(actor: TemplateActor, payload: TemplateOttPayload.Booking) =
-        service.applyTemplate(
-            actor = actor,
-            templateId = payload.templateId,
-            request =
-                TemplateBookingRequest(
-                    clubId = payload.clubId,
-                    tableId = payload.tableId,
-                    slotStart = payload.slotStart,
-                    slotEnd = payload.slotEnd,
-                    guestsOverride = payload.guests,
-                ),
-        )
+    suspend fun applyBooking(
+        actor: TemplateActor,
+        payload: TemplateOttPayload.Booking,
+    ) = service.applyTemplate(
+        actor = actor,
+        templateId = payload.templateId,
+        request =
+            TemplateBookingRequest(
+                clubId = payload.clubId,
+                tableId = payload.tableId,
+                slotStart = payload.slotStart,
+                slotEnd = payload.slotEnd,
+                guestsOverride = payload.guests,
+            ),
+    )
 }
 
 /** Command button descriptors kept for convenience. */

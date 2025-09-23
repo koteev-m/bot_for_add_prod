@@ -8,16 +8,11 @@ import com.example.bot.data.booking.TablesTable
 import com.example.bot.data.db.isRetryLimitExceeded
 import com.example.bot.data.db.isUniqueViolation
 import com.example.bot.data.db.withTxRetry
-import java.math.BigDecimal
-import java.time.Clock
-import java.time.Instant
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
-import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
@@ -27,7 +22,12 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.update
-import org.jetbrains.exposed.sql.SortOrder
+import java.math.BigDecimal
+import java.time.Clock
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.util.UUID
 
 private val ACTIVE_STATUSES = listOf(BookingStatus.BOOKED.name, BookingStatus.SEATED.name)
 
@@ -59,7 +59,11 @@ class BookingRepository(
         }
     }
 
-    suspend fun existsActiveFor(tableId: Long, slotStart: Instant, slotEnd: Instant): Boolean {
+    suspend fun existsActiveFor(
+        tableId: Long,
+        slotStart: Instant,
+        slotEnd: Instant,
+    ): Boolean {
         val start = slotStart.toOffsetDateTime()
         val end = slotEnd.toOffsetDateTime()
         return withTxRetry {
@@ -120,16 +124,20 @@ class BookingRepository(
             }
         } catch (ex: Throwable) {
             when {
-                ex.isUniqueViolation() -> BookingCoreResult.Failure(
-                    determineConflictError(tableId, start, end, idempotencyKey),
-                )
+                ex.isUniqueViolation() ->
+                    BookingCoreResult.Failure(
+                        determineConflictError(tableId, start, end, idempotencyKey),
+                    )
                 ex.isRetryLimitExceeded() -> BookingCoreResult.Failure(BookingCoreError.OptimisticRetryExceeded)
                 else -> throw ex
             }
         }
     }
 
-    suspend fun setStatus(id: UUID, newStatus: BookingStatus): BookingCoreResult<BookingRecord> {
+    suspend fun setStatus(
+        id: UUID,
+        newStatus: BookingStatus,
+    ): BookingCoreResult<BookingRecord> {
         return try {
             val record =
                 withTxRetry {
@@ -237,7 +245,10 @@ class BookingRepository(
         }
     }
 
-    private suspend fun updateStatusInternal(id: UUID, newStatus: BookingStatus): BookingRecord? {
+    private suspend fun updateStatusInternal(
+        id: UUID,
+        newStatus: BookingStatus,
+    ): BookingRecord? {
         val updated =
             BookingsTable.update({ BookingsTable.id eq id }) {
                 it[status] = newStatus.name
@@ -272,7 +283,6 @@ class BookingRepository(
             updatedAt = this[BookingsTable.updatedAt].toInstant(),
         )
     }
-
 }
 
 class BookingHoldRepository(
@@ -351,7 +361,10 @@ class BookingHoldRepository(
         }
     }
 
-    suspend fun prolongHold(id: UUID, ttl: java.time.Duration): BookingCoreResult<BookingHold> {
+    suspend fun prolongHold(
+        id: UUID,
+        ttl: java.time.Duration,
+    ): BookingCoreResult<BookingHold> {
         return try {
             withTxRetry {
                 newSuspendedTransaction(context = Dispatchers.IO, db = db) {
@@ -477,7 +490,10 @@ class BookingHoldRepository(
         )
     }
 
-    private fun prolongHoldInternal(id: UUID, ttl: java.time.Duration): BookingCoreResult<BookingHold> {
+    private fun prolongHoldInternal(
+        id: UUID,
+        ttl: java.time.Duration,
+    ): BookingCoreResult<BookingHold> {
         val row =
             BookingHoldsTable
                 .select { BookingHoldsTable.id eq id }
@@ -523,7 +539,10 @@ class OutboxRepository(
     private val db: Database,
     private val clock: Clock = Clock.systemUTC(),
 ) {
-    suspend fun enqueue(topic: String, payload: JsonObject): Long {
+    suspend fun enqueue(
+        topic: String,
+        payload: JsonObject,
+    ): Long {
         val now = Instant.now(clock).toOffsetDateTime()
         return withTxRetry {
             newSuspendedTransaction(context = Dispatchers.IO, db = db) {
@@ -641,7 +660,11 @@ class OutboxRepository(
         )
     }
 
-    private fun ResultRow.toOutboxMessage(attempts: Int, nextAttempt: Instant, reason: String?): OutboxMessage {
+    private fun ResultRow.toOutboxMessage(
+        attempts: Int,
+        nextAttempt: Instant,
+        reason: String?,
+    ): OutboxMessage {
         return OutboxMessage(
             id = this[BookingOutboxTable.id],
             topic = this[BookingOutboxTable.topic],

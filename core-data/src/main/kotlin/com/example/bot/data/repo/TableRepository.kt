@@ -9,5 +9,8 @@ interface TableRepository {
     /**
      * Finds a table by its identifier within a club.
      */
-    suspend fun findTable(clubId: Long, tableId: Long): Table?
+    suspend fun findTable(
+        clubId: Long,
+        tableId: Long,
+    ): Table?
 }

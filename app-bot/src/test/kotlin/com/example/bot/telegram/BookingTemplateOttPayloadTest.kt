@@ -3,11 +3,11 @@ package com.example.bot.telegram
 import com.example.bot.telegram.ott.CallbackTokenService
 import com.example.bot.telegram.ott.TemplateOttPayload.Booking
 import com.example.bot.telegram.ott.TemplateOttPayload.Selection
-import java.time.Instant
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.time.Instant
 
 class BookingTemplateOttPayloadTest {
     private val tokenService = CallbackTokenService()

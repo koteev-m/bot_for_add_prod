@@ -14,11 +14,17 @@ enum class Role {
 }
 
 class AccessController(private val permissions: Map<Role, Set<String>>) {
-    fun isAllowed(role: Role, action: String): Boolean = permissions[role]?.contains(action) ?: false
+    fun isAllowed(
+        role: Role,
+        action: String,
+    ): Boolean = permissions[role]?.contains(action) ?: false
 }
 
 object SignatureValidator {
-    fun sign(secret: String, data: String): String {
+    fun sign(
+        secret: String,
+        data: String,
+    ): String {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(secret.toByteArray(), "HmacSHA256"))
         return mac.doFinal(data.toByteArray()).joinToString("") { byte ->
@@ -27,5 +33,9 @@ object SignatureValidator {
         }
     }
 
-    fun verify(secret: String, data: String, signature: String): Boolean = sign(secret, data) == signature
+    fun verify(
+        secret: String,
+        data: String,
+        signature: String,
+    ): Boolean = sign(secret, data) == signature
 }

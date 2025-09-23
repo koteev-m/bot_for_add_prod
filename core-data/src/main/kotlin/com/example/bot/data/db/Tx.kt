@@ -1,23 +1,27 @@
 package com.example.bot.data.db
 
-import java.sql.SQLException
-import java.time.Duration
-import java.util.concurrent.ThreadLocalRandom
-import kotlin.system.measureNanoTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.slf4j.LoggerFactory
+import java.sql.SQLException
+import java.time.Duration
+import java.util.concurrent.ThreadLocalRandom
+import kotlin.system.measureNanoTime
 
 /**
  * Настройки retry/backoff читаются из ENV; есть дефолты.
  */
-private fun envInt(name: String, default: Int): Int =
-    System.getenv(name)?.toIntOrNull() ?: default
+private fun envInt(
+    name: String,
+    default: Int,
+): Int = System.getenv(name)?.toIntOrNull() ?: default
 
-private fun envDurationMillis(name: String, default: Duration): Duration =
-    System.getenv(name)?.toLongOrNull()?.let(Duration::ofMillis) ?: default
+private fun envDurationMillis(
+    name: String,
+    default: Duration,
+): Duration = System.getenv(name)?.toLongOrNull()?.let(Duration::ofMillis) ?: default
 
 private const val LOGGER_NAME = "DB.Tx"
 private const val ENV_TX_MAX_RETRIES = "DB_TX_MAX_RETRIES"
@@ -62,11 +66,12 @@ private suspend fun backoff(attempt: Int) {
     val exp = 1L shl attempt.coerceAtMost(BACKOFF_SHIFT_GUARD) // защита от переполнения
     val base = BASE_BACKOFF.multipliedBy(exp)
     val capped = if (base < MAX_BACKOFF) base else MAX_BACKOFF
-    val jitterMillis = if (JITTER.isZero || JITTER.isNegative) {
-        0L
-    } else {
-        ThreadLocalRandom.current().nextLong(0, JITTER.toMillis() + 1)
-    }
+    val jitterMillis =
+        if (JITTER.isZero || JITTER.isNegative) {
+            0L
+        } else {
+            ThreadLocalRandom.current().nextLong(0, JITTER.toMillis() + 1)
+        }
     val totalDelay = capped.plus(Duration.ofMillis(jitterMillis))
     delay(totalDelay.toMillis())
 }
@@ -75,22 +80,26 @@ private suspend fun backoff(attempt: Int) {
  * Выполнить блок внутри Exposed-транзакции (IO), с retry на deadlock/serialization,
  * и slow-query логом по порогу SLOW_QUERY_THRESHOLD.
  */
-suspend fun <T> txRetrying(db: Database? = null, block: suspend () -> T): T {
+suspend fun <T> txRetrying(
+    db: Database? = null,
+    block: suspend () -> T,
+): T {
     var attempt = 0
     var lastError: Throwable? = null
 
     while (attempt <= MAX_RETRIES) {
         try {
             var result: T
-            val elapsed = measureNanoTime {
-                result =
-                    newSuspendedTransaction(
-                        context = Dispatchers.IO,
-                        db = db,
-                    ) {
-                        block.invoke()
-                    }
-            }
+            val elapsed =
+                measureNanoTime {
+                    result =
+                        newSuspendedTransaction(
+                            context = Dispatchers.IO,
+                            db = db,
+                        ) {
+                            block.invoke()
+                        }
+                }
             val elapsedDuration = Duration.ofNanos(elapsed)
             if (elapsedDuration > SLOW_QUERY_THRESHOLD) {
                 DbMetrics.slowQueryCount.incrementAndGet()
@@ -129,4 +138,3 @@ suspend fun <T> txRetrying(db: Database? = null, block: suspend () -> T): T {
     }
     throw lastError ?: IllegalStateException("txRetrying failed without exception")
 }
-

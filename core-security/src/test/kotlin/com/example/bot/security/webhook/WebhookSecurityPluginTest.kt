@@ -24,12 +24,12 @@ import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
-import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.util.UUID
 
 private const val SECRET = "token"
 
@@ -149,10 +149,11 @@ private fun withTestApp(
     configure: WebhookSecurityConfig.() -> Unit = {},
     block: suspend (TestEnvironment) -> Unit,
 ) {
-    val database = Database.connect(
-        url = "jdbc:h2:mem:webhook-${UUID.randomUUID()};DB_CLOSE_DELAY=-1;MODE=PostgreSQL",
-        driver = "org.h2.Driver",
-    )
+    val database =
+        Database.connect(
+            url = "jdbc:h2:mem:webhook-${UUID.randomUUID()};DB_CLOSE_DELAY=-1;MODE=PostgreSQL",
+            driver = "org.h2.Driver",
+        )
     transaction(database) {
         SchemaUtils.create(SuspiciousIpTable, WebhookUpdateDedupTable)
     }

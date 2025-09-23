@@ -7,15 +7,15 @@ import com.example.bot.data.notifications.NotificationsOutboxRepository
 import com.example.bot.data.security.Role
 import com.example.bot.data.security.UserRepository
 import com.example.bot.data.security.UserRoleRepository
-import kotlin.math.min
-import java.time.Duration
-import java.time.Instant
-import java.util.LinkedHashMap
-import java.util.UUID
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
+import java.time.Duration
+import java.time.Instant
+import java.util.LinkedHashMap
+import java.util.UUID
+import kotlin.math.min
 
 private val DEFAULT_HOLD_TTL: Duration = Duration.ofMinutes(15)
 
@@ -76,7 +76,11 @@ class BookingTemplateService(
         return TemplateActor(userId = user.id, telegramUserId = user.telegramId, roles = roles, clubIds = clubIds)
     }
 
-    suspend fun listMine(promoterId: Long, page: Int, size: Int): List<BookingTemplate> {
+    suspend fun listMine(
+        promoterId: Long,
+        page: Int,
+        size: Int,
+    ): List<BookingTemplate> {
         require(page > 0) { "page must be positive" }
         require(size > 0) { "size must be positive" }
         val templates = repository.listByOwner(promoterId)
@@ -95,7 +99,10 @@ class BookingTemplateService(
         return repository.create(promoterId, clubId, tableCapacityMin, notes)
     }
 
-    suspend fun toggleActive(id: Long, active: Boolean) {
+    suspend fun toggleActive(
+        id: Long,
+        active: Boolean,
+    ) {
         val template = repository.get(id) ?: throw TemplateNotFoundException("template $id not found")
         val result = repository.update(id, template.tableCapacityMin, template.notes, active)
         if (result !is BookingTemplateResult.Success) {
@@ -110,7 +117,10 @@ class BookingTemplateService(
         }
     }
 
-    suspend fun createTemplate(actor: TemplateActor, request: TemplateCreateRequest): BookingTemplate {
+    suspend fun createTemplate(
+        actor: TemplateActor,
+        request: TemplateCreateRequest,
+    ): BookingTemplate {
         ensureCanCreate(actor, request.promoterUserId, request.clubId)
         return repository.create(
             promoterUserId = request.promoterUserId,
@@ -146,16 +156,30 @@ class BookingTemplateService(
         }
     }
 
-    suspend fun updateTemplate(actor: TemplateActor, request: TemplateUpdateRequest): BookingTemplate {
+    suspend fun updateTemplate(
+        actor: TemplateActor,
+        request: TemplateUpdateRequest,
+    ): BookingTemplate {
         val template = repository.get(request.id) ?: throw TemplateNotFoundException("template ${request.id} not found")
         ensureCanAccess(actor, template)
-        return when (val result = repository.update(request.id, request.tableCapacityMin, request.notes, request.isActive)) {
+        return when (
+            val result =
+                repository.update(
+                    request.id,
+                    request.tableCapacityMin,
+                    request.notes,
+                    request.isActive,
+                )
+        ) {
             is BookingTemplateResult.Success -> result.value
             is BookingTemplateResult.Failure -> throw TemplateNotFoundException("template ${request.id} not found")
         }
     }
 
-    suspend fun deactivateTemplate(actor: TemplateActor, id: Long) {
+    suspend fun deactivateTemplate(
+        actor: TemplateActor,
+        id: Long,
+    ) {
         val template = repository.get(id) ?: throw TemplateNotFoundException("template $id not found")
         ensureCanAccess(actor, template)
         when (repository.deactivate(id)) {
@@ -205,13 +229,14 @@ class BookingTemplateService(
                 return holdResult
             }
             when (val confirmed = bookingService.confirm(holdResult.holdId, "$idempotency:confirm")) {
-                is BookingCmdResult.Booked -> finalizeAndNotify(
-                    confirmed.bookingId,
-                    actor,
-                    template,
-                    request,
-                    idempotency,
-                )
+                is BookingCmdResult.Booked ->
+                    finalizeAndNotify(
+                        confirmed.bookingId,
+                        actor,
+                        template,
+                        request,
+                        idempotency,
+                    )
                 else -> confirmed
             }
         } finally {
@@ -253,7 +278,11 @@ class BookingTemplateService(
         return finalized
     }
 
-    private fun ensureCanCreate(actor: TemplateActor, promoterId: Long, clubId: Long) {
+    private fun ensureCanCreate(
+        actor: TemplateActor,
+        promoterId: Long,
+        clubId: Long,
+    ) {
         val allowed =
             when {
                 actor.hasRole(Role.OWNER, Role.HEAD_MANAGER) -> true
@@ -266,7 +295,10 @@ class BookingTemplateService(
         }
     }
 
-    private fun ensureCanAccess(actor: TemplateActor, template: BookingTemplate) {
+    private fun ensureCanAccess(
+        actor: TemplateActor,
+        template: BookingTemplate,
+    ) {
         if (!actor.canAccess(template)) {
             throw TemplateAccessException("actor ${actor.userId} cannot access template ${template.id}")
         }
@@ -281,7 +313,10 @@ class BookingTemplateService(
         }
     }
 
-    private fun determineClubScope(actor: TemplateActor, requestedClub: Long?): Set<Long> {
+    private fun determineClubScope(
+        actor: TemplateActor,
+        requestedClub: Long?,
+    ): Set<Long> {
         val privileged = actor.hasRole(Role.OWNER, Role.HEAD_MANAGER)
         val scopedRoles = actor.hasRole(Role.CLUB_ADMIN, Role.MANAGER)
         return when {
@@ -317,5 +352,5 @@ internal fun templateIdempotencyKey(
     slotStart: Instant,
     tableId: Long,
 ): String {
-    return "tpl:$templateId:$promoterId:${slotStart.toString()}:$tableId"
+    return "tpl:$templateId:$promoterId:$slotStart:$tableId"
 }

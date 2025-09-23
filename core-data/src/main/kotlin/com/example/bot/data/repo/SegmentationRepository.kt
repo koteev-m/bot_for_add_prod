@@ -55,7 +55,10 @@ class SegmentationRepository(private val db: Database) {
 
     private val json = Json
 
-    fun resolveSegment(segmentId: SegmentId, batchSize: Int = 500): Sequence<UserId> {
+    fun resolveSegment(
+        segmentId: SegmentId,
+        batchSize: Int = 500,
+    ): Sequence<UserId> {
         return sequence {
             val node =
                 transaction(db) {
@@ -101,7 +104,7 @@ class SegmentationRepository(private val db: Database) {
                             node.args
                                 .first()
                                 .jsonPrimitive.int
-                    else -> error("unsupported op ${'$'}{node.op}")
+                    else -> error("unsupported op ${node.op}")
                 }
             "opt_in" ->
                 Users.optIn eq
@@ -116,7 +119,7 @@ class SegmentationRepository(private val db: Database) {
                             node.args
                                 .first()
                                 .jsonPrimitive.content
-                    else -> error("unsupported op ${'$'}{node.op}")
+                    else -> error("unsupported op ${node.op}")
                 }
             "last_visit_days" -> {
                 val days =
@@ -127,7 +130,7 @@ class SegmentationRepository(private val db: Database) {
                 when (node.op) {
                     "<=" -> Users.lastVisit greaterEq date
                     ">=" -> Users.lastVisit lessEq date
-                    else -> error("unsupported op ${'$'}{node.op}")
+                    else -> error("unsupported op ${node.op}")
                 }
             }
             "is_promoter" ->
@@ -155,7 +158,7 @@ class SegmentationRepository(private val db: Database) {
                         .first()
                         .jsonPrimitive.int,
                 )
-            else -> error("unknown field ${'$'}field")
+            else -> error("unknown field $field")
         }
     }
 }

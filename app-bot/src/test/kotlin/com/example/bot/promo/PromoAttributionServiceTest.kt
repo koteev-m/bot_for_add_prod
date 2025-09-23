@@ -4,14 +4,14 @@ import com.example.bot.data.security.Role
 import com.example.bot.data.security.User
 import com.example.bot.data.security.UserRepository
 import com.example.bot.data.security.UserRoleRepository
+import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Test
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.UUID
 import kotlin.test.assertEquals
-import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Test
 
 class PromoAttributionServiceTest {
     private val clock: Clock = Clock.fixed(Instant.parse("2024-05-01T12:00:00Z"), ZoneOffset.UTC)
@@ -53,27 +53,28 @@ class PromoAttributionServiceTest {
         )
 
     @Test
-    fun `attachPending consumes pending attribution exactly once`() = runBlocking {
-        val guestTelegramId = 9_900_123L
-        val bookingId = UUID.randomUUID()
-        val token = PromoLinkTokenCodec.encode(PromoLinkToken(promoLink.id, promoLink.clubId))
+    fun `attachPending consumes pending attribution exactly once`() =
+        runBlocking {
+            val guestTelegramId = 9_900_123L
+            val bookingId = UUID.randomUUID()
+            val token = PromoLinkTokenCodec.encode(PromoLinkToken(promoLink.id, promoLink.clubId))
 
-        val startResult = service.registerStart(guestTelegramId, token)
-        assertEquals(PromoStartResult.Stored, startResult)
+            val startResult = service.registerStart(guestTelegramId, token)
+            assertEquals(PromoStartResult.Stored, startResult)
 
-        service.attachPending(bookingId, guestTelegramId)
-        service.attachPending(bookingId, guestTelegramId)
+            service.attachPending(bookingId, guestTelegramId)
+            service.attachPending(bookingId, guestTelegramId)
 
-        assertEquals(1, promoAttributionRepository.calls.size)
-        val call = promoAttributionRepository.calls.single()
-        assertEquals(bookingId, call.bookingId)
-        assertEquals(promoLink.id, call.promoLinkId)
-        assertEquals(promoLink.promoterUserId, call.promoterUserId)
-        assertEquals(promoLink.utmSource, call.utmSource)
-        assertEquals(promoLink.utmMedium, call.utmMedium)
-        assertEquals(promoLink.utmCampaign, call.utmCampaign)
-        assertEquals(promoLink.utmContent, call.utmContent)
-    }
+            assertEquals(1, promoAttributionRepository.calls.size)
+            val call = promoAttributionRepository.calls.single()
+            assertEquals(bookingId, call.bookingId)
+            assertEquals(promoLink.id, call.promoLinkId)
+            assertEquals(promoLink.promoterUserId, call.promoterUserId)
+            assertEquals(promoLink.utmSource, call.utmSource)
+            assertEquals(promoLink.utmMedium, call.utmMedium)
+            assertEquals(promoLink.utmCampaign, call.utmCampaign)
+            assertEquals(promoLink.utmContent, call.utmContent)
+        }
 }
 
 private class StaticPromoLinkRepository(private val link: PromoLink) : PromoLinkRepository {
@@ -88,7 +89,10 @@ private class StaticPromoLinkRepository(private val link: PromoLink) : PromoLink
 
     override suspend fun get(id: Long): PromoLink? = if (id == link.id) link else null
 
-    override suspend fun listByPromoter(promoterUserId: Long, clubId: Long?): List<PromoLink> = emptyList()
+    override suspend fun listByPromoter(
+        promoterUserId: Long,
+        clubId: Long?,
+    ): List<PromoLink> = emptyList()
 
     override suspend fun deactivate(id: Long) = throw UnsupportedOperationException("deactivate should not be called")
 }

@@ -25,12 +25,18 @@ class InMemoryBookingRepository :
     private val bookings = ConcurrentHashMap<UUID, BookingRecord>()
     private val bookingsByKey = ConcurrentHashMap<String, BookingRecord>()
 
-    fun seed(event: EventDto, table: TableDto) {
+    fun seed(
+        event: EventDto,
+        table: TableDto,
+    ) {
         events[event.clubId to event.startUtc] = event
         tables[table.id] = table
     }
 
-    override suspend fun findEvent(clubId: Long, startUtc: Instant): EventDto? = events[clubId to startUtc]
+    override suspend fun findEvent(
+        clubId: Long,
+        startUtc: Instant,
+    ): EventDto? = events[clubId to startUtc]
 
     override suspend fun findTable(tableId: Long): TableDto? = tables[tableId]
 
@@ -112,7 +118,10 @@ class InMemoryBookingRepository :
         }
     }
 
-    override suspend fun updateStatus(id: UUID, status: String) {
+    override suspend fun updateStatus(
+        id: UUID,
+        status: String,
+    ) {
         bookings.computeIfPresent(id) { _, rec -> rec.copy(status = status) }
     }
 }

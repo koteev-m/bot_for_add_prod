@@ -92,32 +92,32 @@ class SegmentationTest {
             SegmentNode(
                 op = "AND",
                 items =
-                listOf(
-                    SegmentNode(
-                        field = "club_id",
-                        op = "IN",
-                        args = listOf(Json.encodeToJsonElement(1), Json.encodeToJsonElement(2)),
-                    ),
-                    SegmentNode(field = "opt_in", op = "=", args = listOf(Json.encodeToJsonElement(true))),
-                    SegmentNode(
-                        field = "lang",
-                        op = "IN",
-                        args = listOf(Json.encodeToJsonElement("ru"), Json.encodeToJsonElement("en")),
-                    ),
-                    SegmentNode(field = "last_visit_days", op = "<=", args = listOf(Json.encodeToJsonElement(60))),
-                    SegmentNode(field = "is_promoter", op = "=", args = listOf(Json.encodeToJsonElement(true))),
-                    SegmentNode(field = "is_vip", op = "=", args = listOf(Json.encodeToJsonElement(false))),
-                    SegmentNode(
-                        field = "has_bookings_between",
-                        op = "BETWEEN",
-                        args =
-                        listOf(
-                            Json.encodeToJsonElement(LocalDate.now().minusDays(30).toString()),
-                            Json.encodeToJsonElement(LocalDate.now().plusDays(1).toString()),
+                    listOf(
+                        SegmentNode(
+                            field = "club_id",
+                            op = "IN",
+                            args = listOf(Json.encodeToJsonElement(1), Json.encodeToJsonElement(2)),
                         ),
+                        SegmentNode(field = "opt_in", op = "=", args = listOf(Json.encodeToJsonElement(true))),
+                        SegmentNode(
+                            field = "lang",
+                            op = "IN",
+                            args = listOf(Json.encodeToJsonElement("ru"), Json.encodeToJsonElement("en")),
+                        ),
+                        SegmentNode(field = "last_visit_days", op = "<=", args = listOf(Json.encodeToJsonElement(60))),
+                        SegmentNode(field = "is_promoter", op = "=", args = listOf(Json.encodeToJsonElement(true))),
+                        SegmentNode(field = "is_vip", op = "=", args = listOf(Json.encodeToJsonElement(false))),
+                        SegmentNode(
+                            field = "has_bookings_between",
+                            op = "BETWEEN",
+                            args =
+                                listOf(
+                                    Json.encodeToJsonElement(LocalDate.now().minusDays(30).toString()),
+                                    Json.encodeToJsonElement(LocalDate.now().plusDays(1).toString()),
+                                ),
+                        ),
+                        SegmentNode(field = "no_shows_ge", op = ">=", args = listOf(Json.encodeToJsonElement(1))),
                     ),
-                    SegmentNode(field = "no_shows_ge", op = ">=", args = listOf(Json.encodeToJsonElement(1))),
-                ),
             )
 
         val id =
@@ -136,23 +136,35 @@ class SegmentationTest {
             SegmentNode(
                 op = "AND",
                 items =
-                listOf(
-                    SegmentNode(
-                        op = "OR",
-                        items =
-                        listOf(
-                            SegmentNode(field = "club_id", op = "=", args = listOf(Json.encodeToJsonElement(1))),
-                            SegmentNode(field = "club_id", op = "=", args = listOf(Json.encodeToJsonElement(2))),
+                    listOf(
+                        SegmentNode(
+                            op = "OR",
+                            items =
+                                listOf(
+                                    SegmentNode(
+                                        field = "club_id",
+                                        op = "=",
+                                        args = listOf(Json.encodeToJsonElement(1)),
+                                    ),
+                                    SegmentNode(
+                                        field = "club_id",
+                                        op = "=",
+                                        args = listOf(Json.encodeToJsonElement(2)),
+                                    ),
+                                ),
+                        ),
+                        SegmentNode(
+                            op = "NOT",
+                            items =
+                                listOf(
+                                    SegmentNode(
+                                        field = "is_vip",
+                                        op = "=",
+                                        args = listOf(Json.encodeToJsonElement(true)),
+                                    ),
+                                ),
                         ),
                     ),
-                    SegmentNode(
-                        op = "NOT",
-                        items =
-                        listOf(
-                            SegmentNode(field = "is_vip", op = "=", args = listOf(Json.encodeToJsonElement(true))),
-                        ),
-                    ),
-                ),
             )
 
         val id =

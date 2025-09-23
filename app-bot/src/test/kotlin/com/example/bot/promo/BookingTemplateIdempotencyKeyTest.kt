@@ -1,9 +1,9 @@
 package com.example.bot.promo
 
-import java.time.Instant
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Test
+import java.time.Instant
 
 class BookingTemplateIdempotencyKeyTest {
     private val slot = Instant.parse("2025-05-01T18:00:00Z")

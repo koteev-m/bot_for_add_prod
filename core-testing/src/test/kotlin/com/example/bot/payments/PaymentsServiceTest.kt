@@ -45,11 +45,20 @@ class PaymentsServiceTest {
 
             override suspend fun markPending(id: UUID) {}
 
-            override suspend fun markCaptured(id: UUID, externalId: String?) {}
+            override suspend fun markCaptured(
+                id: UUID,
+                externalId: String?,
+            ) {}
 
-            override suspend fun markDeclined(id: UUID, reason: String) {}
+            override suspend fun markDeclined(
+                id: UUID,
+                reason: String,
+            ) {}
 
-            override suspend fun markRefunded(id: UUID, externalId: String?) {}
+            override suspend fun markRefunded(
+                id: UUID,
+                externalId: String?,
+            ) {}
 
             override suspend fun findByPayload(payload: String): PaymentRecord? = null
         }

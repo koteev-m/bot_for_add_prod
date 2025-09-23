@@ -12,7 +12,14 @@ import com.example.bot.time.Event
 import com.example.bot.time.OperatingRulesResolver
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
-import java.time.*
+import java.time.Clock
+import java.time.DayOfWeek
+import java.time.Duration
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneOffset
 import kotlin.test.assertEquals
 
 class AvailabilityServiceTest {
@@ -25,18 +32,35 @@ class AvailabilityServiceTest {
                 ClubHour(DayOfWeek.SATURDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)),
             )
 
-        override suspend fun listHolidays(clubId: Long, from: LocalDate, to: LocalDate) = emptyList<ClubHoliday>()
+        override suspend fun listHolidays(
+            clubId: Long,
+            from: LocalDate,
+            to: LocalDate,
+        ) = emptyList<ClubHoliday>()
 
-        override suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate) =
-            listOf(ClubException(LocalDate.of(2024, 3, 29), false, null, null))
+        override suspend fun listExceptions(
+            clubId: Long,
+            from: LocalDate,
+            to: LocalDate,
+        ) = listOf(ClubException(LocalDate.of(2024, 3, 29), false, null, null))
 
-        override suspend fun listEvents(clubId: Long, from: Instant, to: Instant) = emptyList<Event>()
+        override suspend fun listEvents(
+            clubId: Long,
+            from: Instant,
+            to: Instant,
+        ) = emptyList<Event>()
 
-        override suspend fun findEvent(clubId: Long, startUtc: Instant) = null
+        override suspend fun findEvent(
+            clubId: Long,
+            startUtc: Instant,
+        ) = null
 
         override suspend fun listTables(clubId: Long) = emptyList<Table>()
 
-        override suspend fun listActiveHoldTableIds(eventId: Long, now: Instant) = emptySet<Long>()
+        override suspend fun listActiveHoldTableIds(
+            eventId: Long,
+            now: Instant,
+        ) = emptySet<Long>()
 
         override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
     }

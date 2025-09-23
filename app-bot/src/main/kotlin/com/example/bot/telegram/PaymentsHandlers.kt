@@ -24,7 +24,10 @@ class PaymentsHandlers(
     private val paymentsRepo: PaymentsRepository,
 ) {
     /** Sends invoice using Bot Payments API. */
-    fun sendInvoice(chatId: Long, invoice: InvoiceInfo): SendResponse {
+    fun sendInvoice(
+        chatId: Long,
+        invoice: InvoiceInfo,
+    ): SendResponse {
         val price =
             com.pengrad.telegrambot.model.request
                 .LabeledPrice("deposit", invoice.totalMinor.toInt())

@@ -26,17 +26,17 @@ data class FlywayConfig(
             return FlywayConfig(
                 enabled = env("FLYWAY_ENABLED")?.toBooleanStrictOrNull() ?: true,
                 locations =
-                env("FLYWAY_LOCATIONS")
-                    ?.split(",")
-                    ?.map { it.trim() }
-                    ?.filter { it.isNotEmpty() }
-                    ?: listOf("classpath:db/migration"),
+                    env("FLYWAY_LOCATIONS")
+                        ?.split(",")
+                        ?.map { it.trim() }
+                        ?.filter { it.isNotEmpty() }
+                        ?: listOf("classpath:db/migration"),
                 schemas =
-                env("FLYWAY_SCHEMAS")
-                    ?.split(",")
-                    ?.map { it.trim() }
-                    ?.filter { it.isNotEmpty() }
-                    ?: emptyList(),
+                    env("FLYWAY_SCHEMAS")
+                        ?.split(",")
+                        ?.map { it.trim() }
+                        ?.filter { it.isNotEmpty() }
+                        ?: emptyList(),
                 baselineOnMigrate = env("FLYWAY_BASELINE_ON_MIGRATE")?.toBooleanStrictOrNull() ?: true,
                 validateOnly = env("FLYWAY_VALIDATE_ONLY")?.toBooleanStrictOrNull() ?: false,
             )

@@ -11,12 +11,16 @@ annotation class RequiresDocker
 
 class DockerRequiredCondition : ExecutionCondition {
     override fun evaluateExecutionCondition(ctx: ExtensionContext): ConditionEvaluationResult {
-        val available = try {
-            org.testcontainers.DockerClientFactory.instance().isDockerAvailable()
-        } catch (_: Throwable) { false }
-        return if (available)
+        val available =
+            try {
+                org.testcontainers.DockerClientFactory.instance().isDockerAvailable()
+            } catch (_: Throwable) {
+                false
+            }
+        return if (available) {
             ConditionEvaluationResult.enabled("Docker available")
-        else
+        } else {
             ConditionEvaluationResult.disabled("Docker not available, skipping integration test")
+        }
     }
 }

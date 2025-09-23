@@ -2,9 +2,6 @@ package com.example.bot.data.club
 
 import com.example.bot.data.booking.EventsTable
 import com.example.bot.data.booking.TablesTable
-import java.math.BigDecimal
-import java.time.Instant
-import java.time.ZoneOffset
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.Table
@@ -19,6 +16,9 @@ import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import testing.RequiresDocker
+import java.math.BigDecimal
+import java.time.Instant
+import java.time.ZoneOffset
 
 @RequiresDocker
 @Tag("it")
@@ -53,12 +53,28 @@ abstract class PostgresClubIntegrationTest {
     fun cleanDatabase() {
         transaction(database) {
             exec(
-                "TRUNCATE TABLE guest_list_entries, guest_lists, bookings, booking_holds, events, tables, zones, clubs, users RESTART IDENTITY CASCADE",
+                """
+                TRUNCATE TABLE
+                    guest_list_entries,
+                    guest_lists,
+                    bookings,
+                    booking_holds,
+                    events,
+                    tables,
+                    zones,
+                    clubs,
+                    users
+                RESTART IDENTITY CASCADE
+                """
+                    .trimIndent(),
             )
         }
     }
 
-    protected fun insertClub(name: String, timezone: String = "Europe/Moscow"): Long {
+    protected fun insertClub(
+        name: String,
+        timezone: String = "Europe/Moscow",
+    ): Long {
         return transaction(database) {
             ClubsTable
                 .insert {
@@ -118,7 +134,10 @@ abstract class PostgresClubIntegrationTest {
         }
     }
 
-    protected fun insertUser(username: String, displayName: String): Long {
+    protected fun insertUser(
+        username: String,
+        displayName: String,
+    ): Long {
         return transaction(database) {
             UsersTable
                 .insert {

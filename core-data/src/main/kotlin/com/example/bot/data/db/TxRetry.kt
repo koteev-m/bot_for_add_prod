@@ -1,10 +1,10 @@
 package com.example.bot.data.db
 
 import com.example.bot.config.BotLimits
-import java.sql.SQLException
-import java.time.Duration
 import kotlinx.coroutines.delay
 import org.slf4j.LoggerFactory
+import java.sql.SQLException
+import java.time.Duration
 
 private val txRetryLogger = LoggerFactory.getLogger("TxRetry")
 
@@ -31,7 +31,10 @@ private fun computeBackoff(attempt: Int): Duration {
     return if (candidate <= maxBackoff) candidate else maxBackoff
 }
 
-suspend fun <T> withTxRetry(retries: Int = 3, block: suspend () -> T): T {
+suspend fun <T> withTxRetry(
+    retries: Int = 3,
+    block: suspend () -> T,
+): T {
     require(retries >= 0) { "retries must be non-negative" }
     var attempt = 0
     var lastError: Throwable? = null

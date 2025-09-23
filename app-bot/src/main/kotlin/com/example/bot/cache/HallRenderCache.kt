@@ -40,7 +40,10 @@ class TtlLruCache<K, V>(private val maxEntries: Int, private val ttl: Duration) 
     }
 
     @Synchronized
-    fun put(key: K, value: V) {
+    fun put(
+        key: K,
+        value: V,
+    ) {
         map[key] = Timed(value, Instant.now().plus(ttl))
     }
 
@@ -81,7 +84,11 @@ class HallRenderCache(
      * Вернёт NotModified если ifNoneMatch совпадает с актуальным etag, иначе Ok с байтами.
      * supplier должен отрисовать новые байты при отсутствии кэша.
      */
-    suspend fun getOrRender(key: String, ifNoneMatch: String?, supplier: suspend () -> ByteArray): Result {
+    suspend fun getOrRender(
+        key: String,
+        ifNoneMatch: String?,
+        supplier: suspend () -> ByteArray,
+    ): Result {
         val cached = cache.get(key)
         val notModified: Boolean
         val etag: String
@@ -113,7 +120,10 @@ class HallRenderCache(
             return "W/\"$b64\""
         }
 
-        private fun equalsWeakEtag(ifNoneMatch: String, etag: String): Boolean {
+        private fun equalsWeakEtag(
+            ifNoneMatch: String,
+            etag: String,
+        ): Boolean {
             if (ifNoneMatch.trim() == "*") return true
             val normA = ifNoneMatch.trim()
             val normB = etag.trim()

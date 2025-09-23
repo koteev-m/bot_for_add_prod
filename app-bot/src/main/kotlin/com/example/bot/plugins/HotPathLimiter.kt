@@ -3,8 +3,8 @@ package com.example.bot.plugins
 import com.example.bot.config.BotLimits
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
-import io.ktor.server.application.createApplicationPlugin
 import io.ktor.server.application.call
+import io.ktor.server.application.createApplicationPlugin
 import io.ktor.server.application.install
 import io.ktor.server.request.path
 import io.ktor.server.response.ApplicationSendPipeline
@@ -53,53 +53,55 @@ object HotPathMetrics {
 
 private enum class HotPathDecision { SKIP, ACQUIRE, THROTTLE }
 
-val HotPathLimiter = createApplicationPlugin(name = "HotPathLimiter", createConfiguration = ::HotPathLimiterConfig) {
-    val cfg = pluginConfig
-    val semaphore = Semaphore(cfg.maxConcurrent, true)
+val HotPathLimiter =
+    createApplicationPlugin(name = "HotPathLimiter", createConfiguration = ::HotPathLimiterConfig) {
+        val cfg = pluginConfig
+        val semaphore = Semaphore(cfg.maxConcurrent, true)
 
-    onCall { call ->
-        val path = call.request.path()
-        val decision =
-            when {
-                cfg.pathPrefixes.none { prefix -> path.startsWith(prefix) } -> HotPathDecision.SKIP
-                semaphore.tryAcquire() -> HotPathDecision.ACQUIRE
-                else -> HotPathDecision.THROTTLE
-            }
+        onCall { call ->
+            val path = call.request.path()
+            val decision =
+                when {
+                    cfg.pathPrefixes.none { prefix -> path.startsWith(prefix) } -> HotPathDecision.SKIP
+                    semaphore.tryAcquire() -> HotPathDecision.ACQUIRE
+                    else -> HotPathDecision.THROTTLE
+                }
 
-        when (decision) {
-            HotPathDecision.SKIP -> Unit
-            HotPathDecision.THROTTLE -> {
-                HotPathMetrics.throttled.incrementAndGet()
-                call.response.header(cfg.throttlingHeader, cfg.retryAfter.seconds.toString())
-                call.respondText("Too Many Requests", status = HttpStatusCode.TooManyRequests)
-            }
-            HotPathDecision.ACQUIRE -> {
-                HotPathMetrics.active.incrementAndGet()
-                HotPathMetrics.availablePermits.set(semaphore.availablePermits())
+            when (decision) {
+                HotPathDecision.SKIP -> Unit
+                HotPathDecision.THROTTLE -> {
+                    HotPathMetrics.throttled.incrementAndGet()
+                    call.response.header(cfg.throttlingHeader, cfg.retryAfter.seconds.toString())
+                    call.respondText("Too Many Requests", status = HttpStatusCode.TooManyRequests)
+                }
+                HotPathDecision.ACQUIRE -> {
+                    HotPathMetrics.active.incrementAndGet()
+                    HotPathMetrics.availablePermits.set(semaphore.availablePermits())
 
-                call.response.pipeline.intercept(ApplicationSendPipeline.Engine) {
-                    try {
-                        proceed()
-                    } finally {
-                        semaphore.release()
-                        HotPathMetrics.active.decrementAndGet()
-                        HotPathMetrics.availablePermits.set(semaphore.availablePermits())
+                    call.response.pipeline.intercept(ApplicationSendPipeline.Engine) {
+                        try {
+                            proceed()
+                        } finally {
+                            semaphore.release()
+                            HotPathMetrics.active.decrementAndGet()
+                            HotPathMetrics.availablePermits.set(semaphore.availablePermits())
+                        }
                     }
                 }
             }
         }
     }
-}
 
 /**
  * Утилита для регистрации плагина с ENV/дефолтами.
  */
 fun Application.installHotPathLimiterDefaults() {
-    val defaults = listOf(
-        "/webhook",
-        "/api/bookings/confirm",
-        "/api/guest-lists/import"
-    )
+    val defaults =
+        listOf(
+            "/webhook",
+            "/api/bookings/confirm",
+            "/api/guest-lists/import",
+        )
     install(HotPathLimiter) {
         pathPrefixes = defaults
         maxConcurrent = System.getenv("HOT_PATH_MAX_CONCURRENT")?.toIntOrNull()
