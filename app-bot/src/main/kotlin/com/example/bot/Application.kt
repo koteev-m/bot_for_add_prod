@@ -15,6 +15,7 @@ import com.example.bot.routes.hallImageRoute
 import com.example.bot.routes.healthRoute
 import com.example.bot.routes.readinessRoute
 import com.example.bot.server.installServerTuning
+import com.example.bot.telegram.MenuCallbacksHandler
 import com.example.bot.telegram.ott.BookTableAction
 import com.example.bot.telegram.ott.CallbackQueryHandler
 import com.example.bot.telegram.ott.CallbackTokenService
@@ -31,6 +32,7 @@ import io.ktor.server.application.install
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import org.koin.dsl.module
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
@@ -55,12 +57,24 @@ fun Application.module() {
     installRequestLogging()
     installMetrics()
     AppMetricsBinder.bindAll(meterRegistry())
+
+    val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN") ?: BotLimits.Demo.FALLBACK_TOKEN
+    val telegramModule =
+        module {
+            single { TelegramBot(telegramToken) }
+            single { CallbackTokenService() }
+            single { MenuCallbacksHandler(get()) }
+            single { CallbackQueryHandler(get(), get(), get()) }
+        }
     install(Koin) {
         slf4jLogger()
-        modules(bookingModule, securityModule)
+        modules(bookingModule, securityModule, telegramModule)
     }
 
     val outboxWorker by inject<OutboxWorker>()
+    val bot by inject<TelegramBot>()
+    val ottService by inject<CallbackTokenService>()
+    val callbackHandler by inject<CallbackQueryHandler>()
     var workerJob: Job? = null
     environment.monitor.subscribe(ApplicationStarted) {
         workerJob = launch { outboxWorker.run() }
@@ -78,10 +92,6 @@ fun Application.module() {
     }
 
     // Telegram bot demo integration
-    val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN") ?: BotLimits.Demo.FALLBACK_TOKEN
-    val bot = TelegramBot(telegramToken)
-    val ottService = CallbackTokenService()
-    val callbackHandler = CallbackQueryHandler(bot, ottService)
     bot.setUpdatesListener(
         object : UpdatesListener {
             override fun process(updates: MutableList<Update>?): Int {
