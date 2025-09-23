@@ -16,29 +16,30 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
+import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
-import io.ktor.serialization.kotlinx.json.json
-import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
-import io.mockk.coVerify
-import io.mockk.mockk
 
 private const val SECRET = "token"
 
 class WebhookRouteTest :
     StringSpec({
         "inline reply is returned to caller" {
-            val db = Database.connect(
-                url = "jdbc:h2:mem:webhook-route-${System.nanoTime()};DB_CLOSE_DELAY=-1",
-                driver = "org.h2.Driver",
-            )
+            val db =
+                Database.connect(
+                    url = "jdbc:h2:mem:webhook-route-${System.nanoTime()};DB_CLOSE_DELAY=-1",
+                    driver = "org.h2.Driver",
+                )
             transaction(db) { SchemaUtils.create(SuspiciousIpTable, WebhookUpdateDedupTable) }
             val suspiciousRepo = SuspiciousIpRepository(db)
             val dedupRepo = WebhookUpdateDedupRepository(db)
@@ -75,10 +76,11 @@ class WebhookRouteTest :
         }
 
         "async reply triggers telegram client" {
-            val db = Database.connect(
-                url = "jdbc:h2:mem:webhook-route-${System.nanoTime()};DB_CLOSE_DELAY=-1",
-                driver = "org.h2.Driver",
-            )
+            val db =
+                Database.connect(
+                    url = "jdbc:h2:mem:webhook-route-${System.nanoTime()};DB_CLOSE_DELAY=-1",
+                    driver = "org.h2.Driver",
+                )
             transaction(db) { SchemaUtils.create(SuspiciousIpTable, WebhookUpdateDedupTable) }
             val suspiciousRepo = SuspiciousIpRepository(db)
             val dedupRepo = WebhookUpdateDedupRepository(db)

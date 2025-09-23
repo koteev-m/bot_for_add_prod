@@ -22,20 +22,24 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
     }
 }
 
-val databaseUrlProvider = providers.environmentVariable("DATABASE_URL")
-    .orElse(providers.gradleProperty("DATABASE_URL"))
-val databaseUserProvider = providers.environmentVariable("DATABASE_USER")
-    .orElse(providers.gradleProperty("DATABASE_USER"))
-val databasePasswordProvider = providers.environmentVariable("DATABASE_PASSWORD")
-    .orElse(providers.gradleProperty("DATABASE_PASSWORD"))
+val databaseUrlProvider =
+    providers.environmentVariable("DATABASE_URL")
+        .orElse(providers.gradleProperty("DATABASE_URL"))
+val databaseUserProvider =
+    providers.environmentVariable("DATABASE_USER")
+        .orElse(providers.gradleProperty("DATABASE_USER"))
+val databasePasswordProvider =
+    providers.environmentVariable("DATABASE_PASSWORD")
+        .orElse(providers.gradleProperty("DATABASE_PASSWORD"))
 
 val dbUrl = databaseUrlProvider.orNull
-val dbVendor = (providers.gradleProperty("dbVendor").orNull)
-    ?: when {
-        dbUrl?.startsWith("jdbc:h2", ignoreCase = true) == true -> "h2"
-        dbUrl?.startsWith("jdbc:postgresql", ignoreCase = true) == true -> "postgresql"
-        else -> "postgresql"
-    }
+val dbVendor =
+    (providers.gradleProperty("dbVendor").orNull)
+        ?: when {
+            dbUrl?.startsWith("jdbc:h2", ignoreCase = true) == true -> "h2"
+            dbUrl?.startsWith("jdbc:postgresql", ignoreCase = true) == true -> "postgresql"
+            else -> "postgresql"
+        }
 
 val migrationLocationDirs =
     listOf(
@@ -57,17 +61,18 @@ flywayExtension.migrationLocations.setFrom(migrationLocationDirs.map { it.asFile
 
 tasks.withType<FlywayTask>().configureEach {
     doFirst("validateFlywayDatabaseConfiguration") {
-        val missing = buildList {
-            if (flywayExtension.url.orNull.isNullOrBlank()) add("DATABASE_URL")
-            if (flywayExtension.user.orNull.isNullOrBlank()) add("DATABASE_USER")
-            if (flywayExtension.password.orNull == null) add("DATABASE_PASSWORD")
-        }
+        val missing =
+            buildList {
+                if (flywayExtension.url.orNull.isNullOrBlank()) add("DATABASE_URL")
+                if (flywayExtension.user.orNull.isNullOrBlank()) add("DATABASE_USER")
+                if (flywayExtension.password.orNull == null) add("DATABASE_PASSWORD")
+            }
 
         if (missing.isNotEmpty()) {
             throw GradleException(
                 "Missing required environment variables for Flyway migrations: " +
                     missing.joinToString(", ") +
-                    ". Provide them via environment variables or Gradle properties."
+                    ". Provide them via environment variables or Gradle properties.",
             )
         }
     }

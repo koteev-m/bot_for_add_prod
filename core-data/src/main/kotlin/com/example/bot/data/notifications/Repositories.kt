@@ -1,8 +1,6 @@
 package com.example.bot.data.notifications
 
 import kotlinx.serialization.json.JsonElement
-import com.example.bot.data.notifications.NotificationsOutboxTable
-import com.example.bot.data.notifications.OutboxStatus
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -22,7 +20,11 @@ data class NotifySegment(
 )
 
 class NotifySegmentsRepository(private val db: Database) {
-    suspend fun insert(title: String, definition: JsonElement, createdBy: Long): Long {
+    suspend fun insert(
+        title: String,
+        definition: JsonElement,
+        createdBy: Long,
+    ): Long {
         return newSuspendedTransaction(db = db) {
             NotifySegments.insert {
                 it[NotifySegments.title] = title
@@ -132,7 +134,11 @@ class UserSubscriptionsRepository(private val db: Database) {
         }
     }
 
-    suspend fun find(userId: Long, clubId: Long?, topic: String): UserSubscription? {
+    suspend fun find(
+        userId: Long,
+        clubId: Long?,
+        topic: String,
+    ): UserSubscription? {
         return newSuspendedTransaction(db = db) {
             UserSubscriptions
                 .select {

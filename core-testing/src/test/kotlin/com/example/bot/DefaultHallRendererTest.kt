@@ -3,8 +3,8 @@ package com.example.bot
 import com.example.bot.render.DefaultHallRenderer
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.ints.shouldBeGreaterThan
-import javax.imageio.ImageIO
 import kotlinx.coroutines.test.runTest
+import javax.imageio.ImageIO
 
 class DefaultHallRendererTest : StringSpec({
     "renders image" {

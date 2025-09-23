@@ -27,7 +27,6 @@ private const val SIG_TAG_IDX = 5
 private const val HMAC_IDX = 6
 
 class QrCodec(private val key: ByteArray) {
-
     /** Data extracted from a QR code. */
     data class Data(val clubId: Long, val eventId: Long, val entryId: Long)
 

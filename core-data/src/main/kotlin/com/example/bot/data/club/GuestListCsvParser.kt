@@ -20,7 +20,7 @@ class GuestListCsvParser {
             val headerLine = requireNotNull(reader.readLine()) { "Empty import file" }
             val delimiter = detectDelimiter(headerLine)
             val headers = headerLine.split(delimiter).map { it.trim().lowercase() }
-            require(headers == EXPECTED_HEADER) { "Invalid header: ${'$'}headerLine" }
+            require(headers == EXPECTED_HEADER) { "Invalid header: $headerLine" }
             val parsed = mutableListOf<ParsedGuest>()
             val rejected = mutableListOf<RejectedRow>()
             var lineNumber = 1
@@ -47,14 +47,15 @@ class GuestListCsvParser {
                 val validation = validateEntryInput(name, phoneRaw, guestsCount, notes, DEFAULT_STATUS)
                 when (validation) {
                     is EntryValidationOutcome.Invalid -> rejected += RejectedRow(lineNumber, validation.reason)
-                    is EntryValidationOutcome.Valid -> parsed +=
-                        ParsedGuest(
-                            lineNumber = lineNumber,
-                            name = validation.name,
-                            phone = validation.phone,
-                            guestsCount = validation.guestsCount,
-                            notes = validation.notes,
-                        )
+                    is EntryValidationOutcome.Valid ->
+                        parsed +=
+                            ParsedGuest(
+                                lineNumber = lineNumber,
+                                name = validation.name,
+                                phone = validation.phone,
+                                guestsCount = validation.guestsCount,
+                                notes = validation.notes,
+                            )
                 }
             }
             return GuestListParseResult(parsed.toList(), rejected.toList())

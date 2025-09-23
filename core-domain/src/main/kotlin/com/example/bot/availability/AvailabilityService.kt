@@ -22,17 +22,35 @@ interface AvailabilityRepository {
 
     suspend fun listClubHours(clubId: Long): List<ClubHour>
 
-    suspend fun listHolidays(clubId: Long, from: LocalDate, to: LocalDate): List<ClubHoliday>
+    suspend fun listHolidays(
+        clubId: Long,
+        from: LocalDate,
+        to: LocalDate,
+    ): List<ClubHoliday>
 
-    suspend fun listExceptions(clubId: Long, from: LocalDate, to: LocalDate): List<ClubException>
+    suspend fun listExceptions(
+        clubId: Long,
+        from: LocalDate,
+        to: LocalDate,
+    ): List<ClubException>
 
-    suspend fun listEvents(clubId: Long, from: Instant, to: Instant): List<Event>
+    suspend fun listEvents(
+        clubId: Long,
+        from: Instant,
+        to: Instant,
+    ): List<Event>
 
-    suspend fun findEvent(clubId: Long, startUtc: Instant): Event?
+    suspend fun findEvent(
+        clubId: Long,
+        startUtc: Instant,
+    ): Event?
 
     suspend fun listTables(clubId: Long): List<Table>
 
-    suspend fun listActiveHoldTableIds(eventId: Long, now: Instant): Set<Long>
+    suspend fun listActiveHoldTableIds(
+        eventId: Long,
+        now: Instant,
+    ): Set<Long>
 
     suspend fun listActiveBookingTableIds(eventId: Long): Set<Long>
 }
@@ -56,7 +74,10 @@ class AvailabilityService(
     /**
      * Returns upcoming nights open for online booking.
      */
-    suspend fun listOpenNights(clubId: Long, limit: Int = 8): List<NightDto> {
+    suspend fun listOpenNights(
+        clubId: Long,
+        limit: Int = 8,
+    ): List<NightDto> {
         nightsCache.get(clubId)?.let { return it.take(limit) }
         val now = Instant.now(clock)
         val slots = rulesResolver.resolve(clubId, now, now.plus(OPEN_LOOKAHEAD))
@@ -72,7 +93,10 @@ class AvailabilityService(
     /**
      * Lists free tables for event start.
      */
-    suspend fun listFreeTables(clubId: Long, eventStartUtc: Instant): List<TableAvailabilityDto> {
+    suspend fun listFreeTables(
+        clubId: Long,
+        eventStartUtc: Instant,
+    ): List<TableAvailabilityDto> {
         val key = clubId to eventStartUtc
         tablesCache.get(key)?.let { return it }
 
@@ -126,14 +150,20 @@ class AvailabilityService(
     /**
      * Counts free tables for quick badge display.
      */
-    suspend fun countFreeTables(clubId: Long, eventStartUtc: Instant): Int = listFreeTables(clubId, eventStartUtc).size
+    suspend fun countFreeTables(
+        clubId: Long,
+        eventStartUtc: Instant,
+    ): Int = listFreeTables(clubId, eventStartUtc).size
 
     /** cache invalidation helpers */
     fun invalidateNights(clubId: Long) {
         nightsCache.remove(clubId)
     }
 
-    fun invalidateTables(clubId: Long, startUtc: Instant) {
+    fun invalidateTables(
+        clubId: Long,
+        startUtc: Instant,
+    ) {
         tablesCache.remove(clubId to startUtc)
     }
 }
@@ -155,7 +185,10 @@ private class TimedCache<K, V>(private val ttl: Duration) {
         }
     }
 
-    fun put(key: K, value: V) {
+    fun put(
+        key: K,
+        value: V,
+    ) {
         store[key] = Entry(value, Instant.now().plus(ttl))
     }
 

@@ -18,12 +18,12 @@ import com.example.bot.routes.hallImageRoute
 import com.example.bot.routes.healthRoute
 import com.example.bot.routes.readinessRoute
 import com.example.bot.server.installServerTuning
+import com.example.bot.telegram.Keyboards
 import com.example.bot.telegram.MenuCallbacksHandler
 import com.example.bot.telegram.ott.BookTableAction
 import com.example.bot.telegram.ott.CallbackQueryHandler
 import com.example.bot.telegram.ott.CallbackTokenService
 import com.example.bot.telegram.ott.KeyboardFactory
-import com.example.bot.telegram.Keyboards
 import com.example.bot.workers.OutboxWorker
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.UpdatesListener
@@ -34,7 +34,10 @@ import io.ktor.server.application.ApplicationStarted
 import io.ktor.server.application.ApplicationStopped
 import io.ktor.server.application.install
 import io.ktor.server.routing.routing
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.koin.dsl.module
 import org.koin.ktor.ext.inject
@@ -70,7 +73,8 @@ fun Application.module() {
             single { TelegramBot(telegramToken) }
             single { CallbackTokenService() }
             single<ClubRepository> { ExposedClubRepository(get()) }
-            single { MenuCallbacksHandler(get(), get(), get(), get()) }
+            single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
+            single { MenuCallbacksHandler(get(), get(), get(), get(), get(), get()) }
             single { CallbackQueryHandler(get(), get(), get()) }
         }
     install(Koin) {
@@ -108,13 +112,14 @@ fun Application.module() {
                         callbackHandler.handle(u)
                     } else if (u.message() != null && u.message().text() == "/demo") {
                         val chatId = u.message().chat().id()
+                        val items =
+                            demoTableIds.map { tableId ->
+                                "Стол $tableId" to BookTableAction(demoClubId, demoStartUtc, tableId)
+                            }
                         val kb =
                             KeyboardFactory.tableKeyboard(
                                 service = ottService,
-                                items =
-                                    demoTableIds.map { tableId ->
-                                        "Стол $tableId" to BookTableAction(demoClubId, demoStartUtc, tableId)
-                                    },
+                                items = items,
                             )
                         bot.execute(SendMessage(chatId, "Выберите стол:").replyMarkup(kb))
                     }

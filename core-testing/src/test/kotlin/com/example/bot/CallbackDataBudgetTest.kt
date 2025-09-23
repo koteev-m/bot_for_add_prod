@@ -2,7 +2,7 @@ package com.example.bot
 
 import com.example.bot.i18n.BotTexts
 import com.example.bot.telegram.Keyboards
-import com.example.bot.telegram.ClubTokenCodec
+import com.example.bot.telegram.tokens.ClubTokenCodec
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.ints.shouldBeLessThan
 

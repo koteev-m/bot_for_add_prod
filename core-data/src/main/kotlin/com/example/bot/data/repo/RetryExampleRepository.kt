@@ -9,10 +9,9 @@ import com.example.bot.data.db.txRetrying
 private const val RETRY_PLACEHOLDER_RESULT = 42
 
 class RetryExampleRepository {
-
-    suspend fun doSomethingWithRetry(): Int = txRetrying {
-        // Здесь могла быть ваша Exposed-логика; ниже — заглушка для примера:
-        RETRY_PLACEHOLDER_RESULT
-    }
+    suspend fun doSomethingWithRetry(): Int =
+        txRetrying {
+            // Здесь могла быть ваша Exposed-логика; ниже — заглушка для примера:
+            RETRY_PLACEHOLDER_RESULT
+        }
 }
-

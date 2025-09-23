@@ -1,11 +1,13 @@
 import io.gitlab.arturbosch.detekt.Detekt
 import io.gitlab.arturbosch.detekt.extensions.DetektExtension
 import org.gradle.api.tasks.testing.Test
+import org.jlleitschuh.gradle.ktlint.KtlintExtension
 
 plugins {
     kotlin("jvm") version "2.2.10" apply false
     kotlin("plugin.serialization") version "2.2.10" apply false
     id("io.gitlab.arturbosch.detekt") version "1.23.6" apply false
+    id("org.jlleitschuh.gradle.ktlint") version "12.1.0" apply false
 }
 
 allprojects {
@@ -16,6 +18,17 @@ allprojects {
 
 subprojects {
     apply(plugin = "io.gitlab.arturbosch.detekt")
+    apply(plugin = "org.jlleitschuh.gradle.ktlint")
+
+    configure<KtlintExtension> {
+        ignoreFailures.set(false)
+        android.set(false)
+        verbose.set(true)
+        outputToConsole.set(true)
+        filter {
+            include("**/src/**/*.kt")
+        }
+    }
 
     configure<DetektExtension> {
         buildUponDefaultConfig = true

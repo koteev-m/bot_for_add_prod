@@ -28,7 +28,10 @@ class BookingService(
     private val holdTtl: Duration = Duration.ofMinutes(HOLD_TTL_MINUTES)
 
     /** Places a hold on a table. */
-    suspend fun hold(req: HoldRequest, idemKey: String): Either<BookingError, HoldResponse> =
+    suspend fun hold(
+        req: HoldRequest,
+        idemKey: String,
+    ): Either<BookingError, HoldResponse> =
         runCatching {
             withContext(Dispatchers.IO) {
                 val event =
@@ -70,7 +73,10 @@ class BookingService(
         }.getOrElse { e -> Either.Left(BookingError.Internal("hold failed", e)) }
 
     /** Confirms a booking, optionally using existing hold. */
-    suspend fun confirm(req: ConfirmRequest, idemKey: String): Either<BookingError, BookingSummary> =
+    suspend fun confirm(
+        req: ConfirmRequest,
+        idemKey: String,
+    ): Either<BookingError, BookingSummary> =
         runCatching {
             withContext(Dispatchers.IO) {
                 val event =
@@ -161,7 +167,10 @@ class BookingService(
             0
         }
 
-    private fun BookingRecord.toSummary(clubId: Long?, totalDeposit: BigDecimal): BookingSummary =
+    private fun BookingRecord.toSummary(
+        clubId: Long?,
+        totalDeposit: BigDecimal,
+    ): BookingSummary =
         BookingSummary(
             id = id,
             clubId = clubId ?: 0L,

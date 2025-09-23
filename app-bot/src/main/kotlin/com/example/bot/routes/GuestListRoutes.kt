@@ -9,8 +9,8 @@ import com.example.bot.club.GuestListRepository
 import com.example.bot.club.RejectedRow
 import com.example.bot.data.club.GuestListCsvParser
 import com.example.bot.data.security.Role
-import com.example.bot.security.rbac.authorize
 import com.example.bot.security.rbac.RbacContext
+import com.example.bot.security.rbac.authorize
 import com.example.bot.security.rbac.rbacContext
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -36,7 +36,10 @@ import java.time.ZoneOffset
 import kotlin.io.use
 
 /** Registers guest list management routes. */
-fun Application.guestListRoutes(repository: GuestListRepository, parser: GuestListCsvParser) {
+fun Application.guestListRoutes(
+    repository: GuestListRepository,
+    parser: GuestListCsvParser,
+) {
     routing {
         authorize(
             Role.OWNER,
@@ -93,8 +96,16 @@ fun Application.guestListRoutes(repository: GuestListRepository, parser: GuestLi
 
             post("/api/guest-lists/{listId}/import") {
                 val listIdParam = call.parameters.getOrFail("listId")
-                val listId = listIdParam.toLongOrNull() ?: throw BadRequestException("Invalid listId")
-                val list = repository.getList(listId) ?: throw BadRequestException("List not found")
+                val listId = listIdParam.toLongOrNull()
+                if (listId == null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid listId"))
+                    return@post
+                }
+                val list = repository.getList(listId)
+                if (list == null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "List not found"))
+                    return@post
+                }
                 val context = call.rbacContext()
                 if (!context.canAccess(list)) {
                     call.respond(HttpStatusCode.Forbidden, mapOf("error" to "forbidden"))
@@ -103,14 +114,16 @@ fun Application.guestListRoutes(repository: GuestListRepository, parser: GuestLi
                 val dryRun = call.request.queryParameters["dry_run"].toBooleanStrictOrNull() ?: false
                 val type = call.request.contentType()
                 if (!type.match(ContentType.Text.CSV) && type != TSV_CONTENT_TYPE) {
-                    throw BadRequestException("Expected text/csv body")
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Expected text/csv body"))
+                    return@post
                 }
                 val payload = call.receiveText()
                 if (payload.isBlank()) {
-                    throw BadRequestException("Empty body")
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Empty body"))
+                    return@post
                 }
                 val report =
-                    runCatching {
+                    try {
                         performGuestListImport(
                             repository = repository,
                             parser = parser,
@@ -118,8 +131,10 @@ fun Application.guestListRoutes(repository: GuestListRepository, parser: GuestLi
                             input = payload.byteInputStream(StandardCharsets.UTF_8),
                             dryRun = dryRun,
                         )
-                    }.getOrElse { ex ->
-                        throw BadRequestException(ex.message ?: "Import failed")
+                    } catch (ex: Exception) {
+                        val message = ex.message ?: "Import failed"
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to message))
+                        return@post
                     }
                 val wantsCsv = call.wantsCsv()
                 if (wantsCsv) {
@@ -155,11 +170,12 @@ internal suspend fun performGuestListImport(
 }
 
 internal fun GuestListImportReport.toSummary(dryRun: Boolean): String {
-    val prefix = if (dryRun) {
-        "Dry run: $accepted rows would be imported"
-    } else {
-        "Imported $accepted rows"
-    }
+    val prefix =
+        if (dryRun) {
+            "Dry run: $accepted rows would be imported"
+        } else {
+            "Imported $accepted rows"
+        }
     return if (rejected.isEmpty()) {
         "$prefix. No errors."
     } else {
@@ -310,7 +326,22 @@ private fun GuestListImportReport.toResponse(): ImportReportResponse {
 
 private fun List<GuestListEntryView>.toExportCsv(): String {
     val builder = StringBuilder()
-    builder.appendLine("entry_id,list_id,club_id,list_title,owner_type,owner_user_id,full_name,phone,guests_count,status,notes,list_created_at")
+    builder.appendLine(
+        listOf(
+            "entry_id",
+            "list_id",
+            "club_id",
+            "list_title",
+            "owner_type",
+            "owner_user_id",
+            "full_name",
+            "phone",
+            "guests_count",
+            "status",
+            "notes",
+            "list_created_at",
+        ).joinToString(","),
+    )
     for (item in this) {
         builder.append(item.id)
         builder.append(',')
@@ -361,7 +392,10 @@ private fun ApplicationCall.wantsCsv(): Boolean {
     if (request.queryParameters["format"]?.equals("csv", ignoreCase = true) == true) {
         return true
     }
-    return request.acceptItems().any { header -> header.value.equals(ContentType.Text.CSV.toString(), ignoreCase = true) }
+    return request.acceptItems().any {
+            header ->
+        header.value.equals(ContentType.Text.CSV.toString(), ignoreCase = true)
+    }
 }
 
 private fun String?.toBooleanStrictOrNull(): Boolean? {

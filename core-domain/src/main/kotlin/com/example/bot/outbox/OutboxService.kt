@@ -10,7 +10,12 @@ import java.util.UUID
  */
 interface OutboxService {
     /** Enqueues a notification. */
-    suspend fun enqueue(kind: String, chatId: Long, threadId: Long?, payload: String)
+    suspend fun enqueue(
+        kind: String,
+        chatId: Long,
+        threadId: Long?,
+        payload: String,
+    )
 }
 
 /** Simple DTO representing an outbox record. */

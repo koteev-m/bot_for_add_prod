@@ -8,7 +8,10 @@ import java.util.UUID
  * Read-only operations for bookings and holds.
  */
 interface BookingReadRepository {
-    suspend fun findEvent(clubId: Long, startUtc: Instant): EventDto?
+    suspend fun findEvent(
+        clubId: Long,
+        startUtc: Instant,
+    ): EventDto?
 
     suspend fun findTable(tableId: Long): TableDto?
 
@@ -46,7 +49,10 @@ interface BookingWriteRepository {
         idempotencyKey: String,
     ): BookingRecord
 
-    suspend fun updateStatus(id: UUID, status: String)
+    suspend fun updateStatus(
+        id: UUID,
+        status: String,
+    )
 }
 
 /** Simple event projection for repository. */

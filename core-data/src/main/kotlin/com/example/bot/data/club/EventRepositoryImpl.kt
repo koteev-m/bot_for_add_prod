@@ -4,9 +4,6 @@ import com.example.bot.club.Event
 import com.example.bot.club.EventRepository
 import com.example.bot.data.booking.EventsTable
 import com.example.bot.data.db.withTxRetry
-import java.time.Instant
-import java.time.ZoneOffset
-import kotlin.ranges.ClosedRange
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SortOrder
@@ -14,9 +11,15 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.between
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.time.Instant
+import java.time.ZoneOffset
+import kotlin.ranges.ClosedRange
 
 class EventRepositoryImpl(private val database: Database) : EventRepository {
-    override suspend fun listByClub(clubId: Long, dateRange: ClosedRange<Instant>): List<Event> {
+    override suspend fun listByClub(
+        clubId: Long,
+        dateRange: ClosedRange<Instant>,
+    ): List<Event> {
         val start = dateRange.start.atOffset(ZoneOffset.UTC)
         val end = dateRange.endInclusive.atOffset(ZoneOffset.UTC)
         return withTxRetry {

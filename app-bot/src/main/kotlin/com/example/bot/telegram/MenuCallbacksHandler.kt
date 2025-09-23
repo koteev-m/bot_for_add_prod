@@ -1,15 +1,26 @@
 package com.example.bot.telegram
 
+import com.example.bot.availability.AvailabilityService
+import com.example.bot.availability.NightDto
 import com.example.bot.data.repo.ClubDto
 import com.example.bot.data.repo.ClubRepository
 import com.example.bot.i18n.BotTexts
+import com.example.bot.telegram.tokens.ClubTokenCodec
+import com.example.bot.telegram.tokens.NightTokenCodec
 import com.pengrad.telegrambot.TelegramBot
+import com.pengrad.telegrambot.model.CallbackQuery
 import com.pengrad.telegrambot.model.Update
+import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.request.AnswerCallbackQuery
 import com.pengrad.telegrambot.request.SendMessage
-import java.time.Instant
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
-import kotlinx.coroutines.runBlocking
+import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
+import java.util.Locale
 
 /**
  * Handles callback-based navigation for inline menus.
@@ -19,118 +30,191 @@ class MenuCallbacksHandler(
     private val keyboards: Keyboards,
     private val texts: BotTexts,
     private val clubRepository: ClubRepository,
+    private val availability: AvailabilityService,
+    private val uiScope: CoroutineScope,
 ) {
     private val logger = LoggerFactory.getLogger(MenuCallbacksHandler::class.java)
 
     fun handle(update: Update) {
-        val callbackQuery = update.callbackQuery() ?: return
+        val callbackQuery: CallbackQuery = update.callbackQuery() ?: return
         val data = callbackQuery.data() ?: return
-        val route = data.substringBefore(DELIMITER, data)
-        logger.debug("Handling {} callback", route)
-
         val message = callbackQuery.message()
         val chatId = message?.chat()?.id()
         val threadId = message?.messageThreadId()
+        val lang = callbackQuery.from()?.languageCode()
 
-        try {
-            when {
-                data == MENU_CLUBS && chatId != null -> {
-                    val lang = callbackQuery.from()?.languageCode()
-                    val clubs = loadClubs()
-                    val request =
-                        SendMessage(chatId, buildClubSelectionMessage(clubs, lang))
-                            .replyMarkup(clubsKeyboard(clubs))
-                    threadId?.let { request.messageThreadId(it) }
-                    bot.execute(request)
+        // Stop Telegram's spinner immediately to avoid blocking UI.
+        bot.execute(AnswerCallbackQuery(callbackQuery.id()))
+
+        val route = data.substringBefore(DELIMITER, data)
+        logger.debug("ui.menu route={}", route)
+
+        when {
+            data == MENU_CLUBS && chatId != null ->
+                uiScope.launch {
+                    val clubs = safeLoadClubs()
+                    val text = buildClubSelectionMessage(clubs, lang)
+                    val clubButtons = clubs.map { club -> ClubTokenCodec.encode(club.id) to club.name }
+                    val markup = keyboards.clubsKeyboard(clubButtons)
+                    send(chatId, threadId, text, markup)
                 }
 
-                data.startsWith(CLUB_PREFIX) ->
-                    handleClubSelection(data.removePrefix(CLUB_PREFIX), chatId, threadId)
+            data.startsWith(CLUB_PREFIX) && chatId != null ->
+                uiScope.launch {
+                    val token = data.removePrefix(CLUB_PREFIX)
+                    val clubId = ClubTokenCodec.decode(token)
+                    if (clubId == null) {
+                        logger.warn("Malformed club token: {}", token)
+                        val text =
+                            if (isEnglish(lang)) {
+                                "We couldn't recognize this club. Please refresh the list."
+                            } else {
+                                "Не удалось распознать клуб. Обновите список клубов."
+                            }
+                        send(chatId, threadId, text)
+                        return@launch
+                    }
 
-                data.startsWith(NIGHT_PREFIX) ->
-                    handleNightSelection(data.removePrefix(NIGHT_PREFIX), chatId, threadId)
+                    val nights = safeLoadNights(clubId)
+                    if (nights == null) {
+                        val text =
+                            if (isEnglish(lang)) {
+                                "Failed to load nights. Please try again."
+                            } else {
+                                "Не получилось загрузить ночи. Попробуйте ещё раз."
+                            }
+                        send(chatId, threadId, text)
+                        return@launch
+                    }
+                    if (nights.isEmpty()) {
+                        val text =
+                            if (isEnglish(lang)) {
+                                "No open nights available right now. Please check back later."
+                            } else {
+                                "Сейчас нет ночей с открытым бронированием. Загляните позже."
+                            }
+                        send(chatId, threadId, text)
+                        return@launch
+                    }
 
-                else -> Unit
+                    val buttons =
+                        nights.map { night ->
+                            NightTokenCodec.encode(clubId, night.eventStartUtc) to formatNightLabel(night, lang)
+                        }
+                    val text = buildNightsSelectionMessage(nights, lang)
+                    val markup = keyboards.nightsKeyboard(buttons)
+                    send(chatId, threadId, text, markup)
+                }
+
+            data.startsWith(NIGHT_PREFIX) && chatId != null ->
+                uiScope.launch {
+                    val token = data.removePrefix(NIGHT_PREFIX)
+                    val decoded = NightTokenCodec.decode(token)
+                    if (decoded == null) {
+                        logger.warn("Malformed night token: {}", token)
+                        return@launch
+                    }
+                    val (_, startUtc) = decoded
+                    send(chatId, threadId, texts.chooseTable(lang) + "\n" + startUtc.toString())
+                }
+
+            else -> Unit
+        }
+    }
+
+    private suspend fun safeLoadClubs(limit: Int = CLUB_LIST_LIMIT): List<ClubDto> =
+        withContext(Dispatchers.IO) {
+            try {
+                clubRepository.listClubs(limit)
+            } catch (ex: Exception) {
+                logger.error("Failed to load clubs", ex)
+                emptyList()
             }
-        } finally {
-            bot.execute(AnswerCallbackQuery(callbackQuery.id()))
         }
+
+    private suspend fun safeLoadNights(
+        clubId: Long,
+        limit: Int = NIGHT_LIST_LIMIT,
+    ): List<NightDto>? =
+        withContext(Dispatchers.IO) {
+            try {
+                availability.listOpenNights(clubId, limit)
+            } catch (ex: Exception) {
+                logger.error("Failed to load nights for club {}", clubId, ex)
+                null
+            }
+        }
+
+    private fun send(
+        chatId: Long,
+        threadId: Int?,
+        text: String,
+        markup: InlineKeyboardMarkup? = null,
+    ) {
+        val request = SendMessage(chatId, text)
+        markup?.let { request.replyMarkup(it) }
+        threadId?.let { request.messageThreadId(it) }
+        bot.execute(request)
     }
 
-    private fun loadClubs(limit: Int = CLUB_LIST_LIMIT): List<ClubDto> {
-        return try {
-            runBlocking { clubRepository.listClubs(limit) }
-        } catch (ex: Exception) {
-            logger.error("Failed to load clubs", ex)
-            emptyList()
-        }
-    }
-
-    private fun clubsKeyboard(clubs: List<ClubDto>) =
-        keyboards.clubsKeyboard(clubs.map { club -> ClubTokenCodec.encode(club.id) to club.name })
-
-    private fun buildClubSelectionMessage(clubs: List<ClubDto>, lang: String?): String {
+    private fun buildClubSelectionMessage(
+        clubs: List<ClubDto>,
+        lang: String?,
+    ): String {
         val header = texts.menu(lang).chooseClub
         if (clubs.isEmpty()) return header
         val details =
-            clubs
-                .joinToString(separator = "\n") { club ->
-                    buildString {
-                        append("• ")
-                        append(club.name)
-                        val description = club.shortDescription?.takeIf { it.isNotBlank() }
-                        if (description != null) {
-                            append(" — ")
-                            append(description)
-                        }
+            clubs.joinToString("\n") { club ->
+                buildString {
+                    append("• ")
+                    append(club.name)
+                    val description = club.shortDescription?.takeIf { it.isNotBlank() }
+                    if (description != null) {
+                        append(" — ")
+                        append(description)
                     }
                 }
-        return buildString {
-            appendLine(header)
-            appendLine()
-            append(details)
-        }
+            }
+        return "$header\n\n$details"
     }
 
-    private fun handleClubSelection(token: String, chatId: Long?, threadId: Int?) {
-        val clubId = ClubTokenCodec.decode(token)
-        if (clubId == null) {
-            logger.warn("Ignoring malformed club token: {}", token)
-            return
-        }
-        logger.debug("Resolved club token {} to id {}", token, clubId)
-        if (chatId != null) {
-            val request = SendMessage(chatId, "Выбран клуб #$clubId")
-            threadId?.let { request.messageThreadId(it) }
-            bot.execute(request)
-        }
+    private fun buildNightsSelectionMessage(
+        nights: List<NightDto>,
+        lang: String?,
+    ): String {
+        val header = if (isEnglish(lang)) "Choose a night:" else "Выберите ночь:"
+        if (nights.isEmpty()) return header
+        val details = nights.joinToString("\n") { night -> "• ${formatNightLabel(night, lang)}" }
+        return "$header\n\n$details"
     }
 
-    private fun handleNightSelection(token: String, chatId: Long?, threadId: Int?) {
-        val decoded = NightTokenCodec.decode(token)
-        if (decoded == null) {
-            logger.warn("Ignoring malformed night token: {}", token)
-            return
-        }
-        val (clubId, startUtc) = decoded
-        logger.debug("Resolved night token {} to club {} at {}", token, clubId, startUtc)
-        if (chatId != null) {
-            val request = SendMessage(chatId, "Ночь клуба #$clubId · $startUtc")
-            threadId?.let { request.messageThreadId(it) }
-            bot.execute(request)
-        }
+    private fun formatNightLabel(
+        night: NightDto,
+        lang: String?,
+    ): String {
+        val locale = if (isEnglish(lang)) Locale.ENGLISH else RUSSIAN_LOCALE
+        val dateFormatter = DateTimeFormatter.ofPattern("d MMM", locale)
+        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm", locale)
+        val day =
+            night.openLocal.dayOfWeek
+                .getDisplayName(TextStyle.SHORT, locale)
+                .replaceFirstChar { ch -> if (ch.isLowerCase()) ch.titlecase(locale) else ch.toString() }
+        val date = night.openLocal.format(dateFormatter)
+        val start = night.openLocal.format(timeFormatter)
+        val end = night.closeLocal.format(timeFormatter)
+        val base = "$day, $date · $start–$end"
+        return if (night.isSpecial) "✨ $base" else base
     }
 
-    companion object {
-        fun clubCallbackData(clubId: Long): String = CLUB_PREFIX + ClubTokenCodec.encode(clubId)
+    private fun isEnglish(lang: String?): Boolean = lang?.startsWith("en", ignoreCase = true) == true
 
-        fun nightCallbackData(clubId: Long, startUtc: Instant): String =
-            NIGHT_PREFIX + NightTokenCodec.encode(clubId, startUtc)
+    private companion object {
+        private const val DELIMITER = ":"
+        private const val MENU_CLUBS = "menu:clubs"
+        private const val CLUB_PREFIX = "club:"
+        private const val NIGHT_PREFIX = "night:"
+        private const val CLUB_LIST_LIMIT = 8
+        private const val NIGHT_LIST_LIMIT = 8
+        private val RUSSIAN_LOCALE: Locale = Locale("ru", "RU")
     }
 }
-
-private const val DELIMITER = ":"
-private const val MENU_CLUBS = "menu:clubs"
-private const val CLUB_PREFIX = "club:"
-private const val NIGHT_PREFIX = "night:"
-private const val CLUB_LIST_LIMIT = 10

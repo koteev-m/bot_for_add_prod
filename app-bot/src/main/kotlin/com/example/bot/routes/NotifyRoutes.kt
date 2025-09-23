@@ -1,8 +1,8 @@
 package com.example.bot.routes
 
+import com.example.bot.data.security.Role
 import com.example.bot.notifications.NotifyMessage
 import com.example.bot.notifications.ParseMode
-import com.example.bot.data.security.Role
 import com.example.bot.security.rbac.authorize
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -60,7 +60,10 @@ class CampaignService {
         return dto
     }
 
-    fun update(id: Long, req: CampaignUpdateRequest): CampaignDto? {
+    fun update(
+        id: Long,
+        req: CampaignUpdateRequest,
+    ): CampaignDto? {
         val dto = campaigns[id] ?: return null
         req.title?.let { dto.title = it }
         req.text?.let { dto.text = sanitize(it, req.parseMode) }
@@ -71,7 +74,10 @@ class CampaignService {
 
     fun list(): List<CampaignDto> = campaigns.values.sortedBy { it.id }
 
-    fun schedule(id: Long, req: ScheduleRequest): CampaignDto? {
+    fun schedule(
+        id: Long,
+        req: ScheduleRequest,
+    ): CampaignDto? {
         val dto = campaigns[id] ?: return null
         dto.cron = req.cron
         dto.startsAt = req.startsAt
@@ -79,7 +85,10 @@ class CampaignService {
         return dto
     }
 
-    fun setStatus(id: Long, status: CampaignStatus): CampaignDto? {
+    fun setStatus(
+        id: Long,
+        status: CampaignStatus,
+    ): CampaignDto? {
         val dto = campaigns[id] ?: return null
         dto.status = status
         return dto
@@ -98,7 +107,10 @@ class TxNotifyService {
 }
 
 /** Escapes text for HTML or MarkdownV2. */
-private fun sanitize(text: String, mode: ParseMode?): String {
+private fun sanitize(
+    text: String,
+    mode: ParseMode?,
+): String {
     return when (mode) {
         ParseMode.HTML -> text.replace("<", "&lt;").replace(">", "&gt;")
         ParseMode.MARKDOWNV2 ->
@@ -113,7 +125,10 @@ private fun sanitize(text: String, mode: ParseMode?): String {
  * Registers notification and campaign routes.
  */
 @Suppress("LongMethod", "ThrowsCount")
-fun Application.notifyRoutes(tx: TxNotifyService, campaigns: CampaignService) {
+fun Application.notifyRoutes(
+    tx: TxNotifyService,
+    campaigns: CampaignService,
+) {
     routing {
         post("/api/notify/tx") {
             val msg = call.receive<NotifyMessage>()

@@ -8,8 +8,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.containers.PostgreSQLContainer
-import java.time.Instant
 import testing.RequiresDocker
+import java.time.Instant
 
 @RequiresDocker
 @Tag("it")

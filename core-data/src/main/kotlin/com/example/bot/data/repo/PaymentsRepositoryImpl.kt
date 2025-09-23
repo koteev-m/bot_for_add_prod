@@ -59,7 +59,10 @@ class PaymentsRepositoryImpl(private val db: Database) : PaymentsRepository {
 
     override suspend fun markPending(id: UUID) = updateStatus(id, "PENDING")
 
-    override suspend fun markCaptured(id: UUID, externalId: String?) {
+    override suspend fun markCaptured(
+        id: UUID,
+        externalId: String?,
+    ) {
         return newSuspendedTransaction(db = db) {
             PaymentsTable.update({ PaymentsTable.id eq id }) {
                 it[status] = "CAPTURED"
@@ -69,7 +72,10 @@ class PaymentsRepositoryImpl(private val db: Database) : PaymentsRepository {
         }
     }
 
-    override suspend fun markDeclined(id: UUID, reason: String) {
+    override suspend fun markDeclined(
+        id: UUID,
+        reason: String,
+    ) {
         return newSuspendedTransaction(db = db) {
             PaymentsTable.update({ PaymentsTable.id eq id }) {
                 it[status] = "DECLINED"
@@ -79,7 +85,10 @@ class PaymentsRepositoryImpl(private val db: Database) : PaymentsRepository {
         }
     }
 
-    override suspend fun markRefunded(id: UUID, externalId: String?) {
+    override suspend fun markRefunded(
+        id: UUID,
+        externalId: String?,
+    ) {
         return newSuspendedTransaction(db = db) {
             PaymentsTable.update({ PaymentsTable.id eq id }) {
                 it[status] = "REFUNDED"
@@ -98,7 +107,10 @@ class PaymentsRepositoryImpl(private val db: Database) : PaymentsRepository {
         }
     }
 
-    private suspend fun updateStatus(id: UUID, status: String) {
+    private suspend fun updateStatus(
+        id: UUID,
+        status: String,
+    ) {
         return newSuspendedTransaction(db = db) {
             PaymentsTable.update({ PaymentsTable.id eq id }) {
                 it[PaymentsTable.status] = status

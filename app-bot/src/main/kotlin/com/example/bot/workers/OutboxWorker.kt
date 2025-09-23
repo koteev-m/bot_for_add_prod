@@ -4,20 +4,22 @@ import com.example.bot.config.BotLimits
 import com.example.bot.data.booking.core.BookingCoreResult
 import com.example.bot.data.booking.core.OutboxMessage
 import com.example.bot.data.booking.core.OutboxRepository
-import java.time.Clock
-import java.time.Duration
-import java.time.Instant
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.random.Random
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.JsonObject
 import org.slf4j.LoggerFactory
+import java.time.Clock
+import java.time.Duration
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.random.Random
 
 interface SendPort {
-    suspend fun send(topic: String, payload: JsonObject): SendOutcome
+    suspend fun send(
+        topic: String,
+        payload: JsonObject,
+    ): SendOutcome
 }
 
 sealed interface SendOutcome {
@@ -79,7 +81,10 @@ class OutboxWorker(
         }
     }
 
-    private suspend fun handleRetryable(message: OutboxMessage, cause: Throwable) {
+    private suspend fun handleRetryable(
+        message: OutboxMessage,
+        cause: Throwable,
+    ) {
         val delayDuration = computeBackoff(message.attempts + 1)
         val nextAttemptAt = clock.instant().plus(delayDuration)
         val reason = cause.message ?: cause.javaClass.simpleName
@@ -105,7 +110,10 @@ class OutboxWorker(
         }
     }
 
-    private suspend fun handleFatal(message: OutboxMessage, cause: Throwable) {
+    private suspend fun handleFatal(
+        message: OutboxMessage,
+        cause: Throwable,
+    ) {
         logger.error("Fatal error sending outbox message {}", message.id, cause)
         val delayDuration = computeBackoff(1)
         val nextAttemptAt = clock.instant().plus(delayDuration)

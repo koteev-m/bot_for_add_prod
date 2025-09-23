@@ -29,8 +29,8 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.RouteSelector
 import io.ktor.server.routing.RouteSelectorEvaluation
-import io.ktor.server.routing.application
 import io.ktor.server.routing.RoutingResolveContext
+import io.ktor.server.routing.application
 import io.ktor.server.routing.intercept
 import io.ktor.util.AttributeKey
 import kotlinx.serialization.json.Json
@@ -89,31 +89,32 @@ private val doubleReceiveLock = Any()
 /**
  * RBAC plugin responsible for injecting request context and audit logging.
  */
-val RbacPlugin = createApplicationPlugin(name = "RbacPlugin", createConfiguration = ::RbacConfig) {
-    val state = pluginConfig.buildState()
-    installDoubleReceiveIfNeeded(application)
-    application.attributes.put(rbacStateKey, state)
+val RbacPlugin =
+    createApplicationPlugin(name = "RbacPlugin", createConfiguration = ::RbacConfig) {
+        val state = pluginConfig.buildState()
+        installDoubleReceiveIfNeeded(application)
+        application.attributes.put(rbacStateKey, state)
 
-    onCall { call ->
-        val accessState = AccessLogState()
-        call.attributes.put(accessLogStateKey, accessState)
-        val resolution = state.resolve(call)
-        call.attributes.put(rbacResolutionKey, resolution)
-    }
+        onCall { call ->
+            val accessState = AccessLogState()
+            call.attributes.put(accessLogStateKey, accessState)
+            val resolution = state.resolve(call)
+            call.attributes.put(rbacResolutionKey, resolution)
+        }
 
-    application.intercept(ApplicationCallPipeline.Call) {
-        proceed()
-        if (!call.attributes.contains(accessLogStateKey)) {
-            return@intercept
+        application.intercept(ApplicationCallPipeline.Call) {
+            proceed()
+            if (!call.attributes.contains(accessLogStateKey)) {
+                return@intercept
+            }
+            if (!call.attributes.contains(rbacResolutionKey)) {
+                return@intercept
+            }
+            val access = call.attributes[accessLogStateKey]
+            val resolution = call.attributes[rbacResolutionKey]
+            state.logFinalDecision(call, access, resolution)
         }
-        if (!call.attributes.contains(rbacResolutionKey)) {
-            return@intercept
-        }
-        val access = call.attributes[accessLogStateKey]
-        val resolution = call.attributes[rbacResolutionKey]
-        state.logFinalDecision(call, access, resolution)
     }
-}
 
 private fun installDoubleReceiveIfNeeded(application: Application) {
     if (application.pluginOrNull(DoubleReceive) != null) {
@@ -129,7 +130,10 @@ private fun installDoubleReceiveIfNeeded(application: Application) {
 /**
  * DSL entry point for enforcing role based access.
  */
-fun Route.authorize(vararg roles: Role, block: Route.() -> Unit) {
+fun Route.authorize(
+    vararg roles: Role,
+    block: Route.() -> Unit,
+) {
     val required = roles.toSet()
     val state = application.attributes[rbacStateKey]
     val authorizedRoute = createChild(PluginRouteSelector("authorize"))
@@ -157,38 +161,44 @@ fun Route.authorize(vararg roles: Role, block: Route.() -> Unit) {
 /**
  * Applies club scope rules to nested routes.
  */
-fun Route.clubScoped(scope: ClubScope, block: Route.() -> Unit) {
+fun Route.clubScoped(
+    scope: ClubScope,
+    block: Route.() -> Unit,
+) {
     val state = application.attributes[rbacStateKey]
     val scopedRoute = createChild(PluginRouteSelector("clubScoped"))
     scopedRoute.intercept(ApplicationCallPipeline.Plugins) {
         val access = call.attributes[accessLogStateKey]
         access.scopeRequired = true
         val resolution = call.attributes[rbacResolutionKey]
-        val context = when (resolution) {
-            is RbacResolution.Failure -> {
-                state.handleFailure(call, access, resolution)
-                finish()
-                return@intercept
+        val context =
+            when (resolution) {
+                is RbacResolution.Failure -> {
+                    state.handleFailure(call, access, resolution)
+                    finish()
+                    return@intercept
+                }
+                is RbacResolution.Success -> resolution
             }
-            is RbacResolution.Success -> resolution
-        }
         val clubId = state.clubScopeResolver.resolve(call)
         val hasGlobalRole = context.roles.any { it in successRoles }
-        val allowed = when (scope) {
-            ClubScope.Own -> {
-                when {
-                    clubId == null -> false
-                    hasGlobalRole -> true
-                    else -> clubId in context.clubIds
+        val allowed =
+            when (scope) {
+                ClubScope.Own -> {
+                    when {
+                        clubId == null -> false
+                        hasGlobalRole -> true
+                        else -> clubId in context.clubIds
+                    }
                 }
+                ClubScope.Any -> hasGlobalRole
             }
-            ClubScope.Any -> hasGlobalRole
-        }
         if (!allowed) {
-            val reason = when (scope) {
-                ClubScope.Own -> if (clubId == null) "club_missing" else "club_scope_violation"
-                ClubScope.Any -> "global_role_required"
-            }
+            val reason =
+                when (scope) {
+                    ClubScope.Own -> if (clubId == null) "club_missing" else "club_scope_violation"
+                    ClubScope.Any -> "global_role_required"
+                }
             state.handleForbidden(call, access, context, reason, clubId)
             finish()
         } else {
@@ -202,7 +212,10 @@ fun Route.clubScoped(scope: ClubScope, block: Route.() -> Unit) {
 }
 
 private class PluginRouteSelector(private val label: String) : RouteSelector() {
-    override suspend fun evaluate(context: RoutingResolveContext, segmentIndex: Int): RouteSelectorEvaluation {
+    override suspend fun evaluate(
+        context: RoutingResolveContext,
+        segmentIndex: Int,
+    ): RouteSelectorEvaluation {
         return RouteSelectorEvaluation.Constant
     }
 
@@ -260,11 +273,16 @@ internal data class RbacState(
         }
     }
 
-    suspend fun handleFailure(call: ApplicationCall, access: AccessLogState, failure: RbacResolution.Failure) {
-        val reason = when (failure.reason) {
-            FailureReason.MissingPrincipal -> "missing_principal"
-            FailureReason.UserNotFound -> "user_not_found"
-        }
+    suspend fun handleFailure(
+        call: ApplicationCall,
+        access: AccessLogState,
+        failure: RbacResolution.Failure,
+    ) {
+        val reason =
+            when (failure.reason) {
+                FailureReason.MissingPrincipal -> "missing_principal"
+                FailureReason.UserNotFound -> "user_not_found"
+            }
         if (!access.logged) {
             logDecision(call, null, "access_denied", reason, null)
             access.logged = true
@@ -313,10 +331,11 @@ internal data class RbacState(
     ) {
         val userId = success?.user?.id
         val ip = call.request.local.remoteAddress
-        val meta = buildJsonObject {
-            put("reason", reason)
-            put("method", call.request.httpMethod.value)
-        }
+        val meta =
+            buildJsonObject {
+                put("reason", reason)
+                put("method", call.request.httpMethod.value)
+            }
         withIdempotencyMdc(call) {
             auditLogRepository.log(
                 userId = userId,
@@ -331,7 +350,10 @@ internal data class RbacState(
     }
 }
 
-private suspend fun withIdempotencyMdc(call: ApplicationCall, block: suspend () -> Unit) {
+private suspend fun withIdempotencyMdc(
+    call: ApplicationCall,
+    block: suspend () -> Unit,
+) {
     val key = call.request.header("Idempotency-Key") ?: call.request.queryParameters["idempotency_key"]
     if (key == null) {
         block()
@@ -354,11 +376,12 @@ private data class ClubResolution(val clubId: Long?)
  */
 class ClubScopeResolver(private val bodyKeys: Set<String> = setOf("clubId", "club_id")) {
     suspend fun resolve(call: ApplicationCall): Long? {
-        val explicit = if (call.attributes.contains(CLUB_ID_ATTRIBUTE)) {
-            call.attributes[CLUB_ID_ATTRIBUTE]
-        } else {
-            null
-        }
+        val explicit =
+            if (call.attributes.contains(CLUB_ID_ATTRIBUTE)) {
+                call.attributes[CLUB_ID_ATTRIBUTE]
+            } else {
+                null
+            }
         val cachedHolder =
             if (call.attributes.contains(clubResolutionKey)) {
                 call.attributes[clubResolutionKey]

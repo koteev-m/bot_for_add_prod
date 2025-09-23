@@ -1,10 +1,10 @@
 package com.example.bot.data.booking.core
 
 import com.example.bot.data.booking.BookingStatus
+import kotlinx.serialization.json.JsonObject
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
-import kotlinx.serialization.json.JsonObject
 
 sealed interface BookingCoreError {
     data object DuplicateActiveBooking : BookingCoreError

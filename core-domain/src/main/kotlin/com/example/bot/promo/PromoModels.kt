@@ -21,6 +21,7 @@ sealed interface PromoLinkError {
 
 sealed interface PromoLinkResult<out T> {
     data class Success<T>(val value: T) : PromoLinkResult<T>
+
     data class Failure(val error: PromoLinkError) : PromoLinkResult<Nothing>
 }
 
@@ -36,7 +37,10 @@ interface PromoLinkRepository {
 
     suspend fun get(id: Long): PromoLink?
 
-    suspend fun listByPromoter(promoterUserId: Long, clubId: Long? = null): List<PromoLink>
+    suspend fun listByPromoter(
+        promoterUserId: Long,
+        clubId: Long? = null,
+    ): List<PromoLink>
 
     suspend fun deactivate(id: Long): PromoLinkResult<Unit>
 }
@@ -60,6 +64,7 @@ sealed interface PromoAttributionError {
 
 sealed interface PromoAttributionResult<out T> {
     data class Success<T>(val value: T) : PromoAttributionResult<T>
+
     data class Failure(val error: PromoAttributionError) : PromoAttributionResult<Nothing>
 }
 
@@ -96,6 +101,7 @@ sealed interface BookingTemplateError {
 
 sealed interface BookingTemplateResult<out T> {
     data class Success<T>(val value: T) : BookingTemplateResult<T>
+
     data class Failure(val error: BookingTemplateError) : BookingTemplateResult<Nothing>
 }
 
@@ -120,7 +126,10 @@ interface BookingTemplateRepository {
 
     suspend fun listByOwner(promoterUserId: Long): List<BookingTemplate>
 
-    suspend fun listByClub(clubId: Long, onlyActive: Boolean = true): List<BookingTemplate>
+    suspend fun listByClub(
+        clubId: Long,
+        onlyActive: Boolean = true,
+    ): List<BookingTemplate>
 
     suspend fun applyTemplateSignature(id: Long): BookingTemplateResult<BookingTemplateSignature>
 }

@@ -69,11 +69,18 @@ class NotifySender(
 
     private sealed interface SendOutcome {
         data object Success : SendOutcome
+
         data class Retry(val delayMs: Long) : SendOutcome
+
         data class Fail(val result: SendResult) : SendOutcome
     }
 
-    suspend fun sendMessage(chatId: Long, text: String, threadId: Int? = null, dedupKey: String? = null): SendResult {
+    suspend fun sendMessage(
+        chatId: Long,
+        text: String,
+        threadId: Int? = null,
+        dedupKey: String? = null,
+    ): SendResult {
         val req = SendMessage(chatId, text)
         threadId?.let { req.messageThreadId(it) }
         return execute(req, chatId, dedupKey)
@@ -210,18 +217,18 @@ class NotifySender(
                     isServerError(code) -> {
                         if (attempt >= maxAttempts) {
                             incRetryable()
-                            SendOutcome.Fail(SendResult.RetryableError("code=${code} desc=${desc}"))
+                            SendOutcome.Fail(SendResult.RetryableError("code=$code desc=$desc"))
                         } else {
                             SendOutcome.Retry(backoffDelay(attempt))
                         }
                     }
                     code == HttpStatusCode.BadRequest.value || code == HttpStatusCode.Forbidden.value -> {
                         incPermanent()
-                        SendOutcome.Fail(SendResult.PermanentError("code=${code} desc=${desc}"))
+                        SendOutcome.Fail(SendResult.PermanentError("code=$code desc=$desc"))
                     }
                     else -> {
                         incPermanent()
-                        SendOutcome.Fail(SendResult.PermanentError("code=${code} desc=${desc}"))
+                        SendOutcome.Fail(SendResult.PermanentError("code=$code desc=$desc"))
                     }
                 }
             }

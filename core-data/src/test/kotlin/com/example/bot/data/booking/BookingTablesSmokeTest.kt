@@ -4,7 +4,6 @@ import com.example.bot.data.audit.AuditLogTable
 import com.example.bot.data.notifications.NotificationsOutboxTable
 import com.example.bot.data.notifications.OutboxStatus
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class BookingTablesSmokeTest {

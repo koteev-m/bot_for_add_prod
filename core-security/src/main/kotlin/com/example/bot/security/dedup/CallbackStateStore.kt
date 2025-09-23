@@ -18,7 +18,10 @@ class CallbackStateStore<T>(private val ttl: Duration = Duration.ofMinutes(DEFAU
     /**
      * Associates [token] with [state]. Any existing value is replaced and the TTL refreshed.
      */
-    fun put(token: String, state: T) {
+    fun put(
+        token: String,
+        state: T,
+    ) {
         val expiry = Instant.now().plus(ttl)
         store[token] = Entry(state, expiry)
     }

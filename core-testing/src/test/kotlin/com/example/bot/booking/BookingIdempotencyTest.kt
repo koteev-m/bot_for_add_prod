@@ -1,14 +1,14 @@
 package com.example.bot.booking
 
-import com.example.bot.booking.legacy.BookingService as LegacyBookingService
-import com.example.bot.booking.legacy.ConfirmRequest as LegacyConfirmRequest
-import com.example.bot.booking.legacy.Either as LegacyEither
 import com.example.bot.data.booking.InMemoryBookingRepository
 import com.example.bot.data.outbox.InMemoryOutboxService
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import java.math.BigDecimal
 import java.time.Instant
+import com.example.bot.booking.legacy.BookingService as LegacyBookingService
+import com.example.bot.booking.legacy.ConfirmRequest as LegacyConfirmRequest
+import com.example.bot.booking.legacy.Either as LegacyEither
 
 class BookingIdempotencyTest :
     StringSpec({

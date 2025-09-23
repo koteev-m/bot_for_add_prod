@@ -1,34 +1,7 @@
 root = true
 
-[*]
-charset = utf-8
-indent_style = space
-indent_size = 4
-end_of_line = lf
-insert_final_newline = true
-trim_trailing_whitespace = true
-
 [*.{kt,kts}]
-ktlint_code_style = intellij_idea
+ktlint_code_style = ktlint_official
+indent_size = 4
+insert_final_newline = true
 max_line_length = 120
-
-# Temporary relaxed Ktlint 1.3 rules
-ktlint_standard_class-signature = enabled
-ktlint_standard_multiline-expression-wrapping = enabled
-ktlint_standard_chain-method-continuation = enabled
-ktlint_standard_trailing-comma-on-declaration-site = enabled
-ktlint_standard_trailing-comma-on-call-site = enabled
-ij_kotlin_allow_trailing_comma = true
-ktlint_standard_function-expression-body = disabled
-ktlint_standard_function-signature = disabled
-
-# Temporarily disable rules requiring manual refactors
-ktlint_standard_no-wildcard-imports = disabled
-ktlint_standard_filename = disabled
-ktlint_standard_max-line-length = disabled
-
-# Keep essential rules enabled
-ktlint_standard_no-unused-imports = enabled
-ktlint_standard_import-ordering = enabled
-ktlint_standard_no-consecutive-blank-lines = enabled
-ktlint_standard_blank-line-before-declaration = enabled

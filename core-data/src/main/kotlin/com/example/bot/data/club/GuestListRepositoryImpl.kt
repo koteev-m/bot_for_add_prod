@@ -13,9 +13,6 @@ import com.example.bot.club.GuestListStatus
 import com.example.bot.club.ParsedGuest
 import com.example.bot.club.RejectedRow
 import com.example.bot.data.db.withTxRetry
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.ResultRow
@@ -35,6 +32,9 @@ import org.jetbrains.exposed.sql.lowerCase
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
 
 class GuestListRepositoryImpl(
     private val database: Database,
@@ -85,7 +85,11 @@ class GuestListRepositoryImpl(
         }
     }
 
-    override suspend fun listListsByClub(clubId: Long, page: Int, size: Int): List<GuestList> {
+    override suspend fun listListsByClub(
+        clubId: Long,
+        page: Int,
+        size: Int,
+    ): List<GuestList> {
         require(page >= 0) { "page must be non-negative" }
         require(size > 0) { "size must be positive" }
         val offset = page.toLong() * size
@@ -281,7 +285,7 @@ class GuestListRepositoryImpl(
                     val like = "%${escapeLike(name.lowercase())}%"
                     condition =
                         condition and
-                            (GuestListEntriesTable.fullName.lowerCase() like like)
+                        (GuestListEntriesTable.fullName.lowerCase() like like)
                 }
                 filter.phoneQuery?.trim()?.takeIf { it.isNotEmpty() }?.let { phone ->
                     val normalized = sanitizePhoneQuery(phone)

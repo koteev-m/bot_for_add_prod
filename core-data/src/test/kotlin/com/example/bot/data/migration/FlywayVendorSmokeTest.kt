@@ -9,10 +9,10 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.DockerClientFactory
 import org.testcontainers.containers.PostgreSQLContainer
+import testing.RequiresDocker
 import java.math.BigDecimal
 import java.sql.Connection
 import java.util.UUID
-import testing.RequiresDocker
 
 @RequiresDocker
 @Tag("it")
@@ -51,7 +51,13 @@ class FlywayVendorSmokeTest {
         }
     }
 
-    private fun migrate(jdbcUrl: String, user: String, password: String, driver: String, vendor: String) {
+    private fun migrate(
+        jdbcUrl: String,
+        user: String,
+        password: String,
+        driver: String,
+        vendor: String,
+    ) {
         val flyway =
             Flyway.configure()
                 .dataSource(jdbcUrl, user, password)
@@ -102,12 +108,16 @@ class FlywayVendorSmokeTest {
         }
     }
 
-    private fun assertJsonColumnType(connection: Connection, expectedType: String) {
+    private fun assertJsonColumnType(
+        connection: Connection,
+        expectedType: String,
+    ) {
         val metadata = connection.metaData
-        val schemaPattern = connection.schema ?: when (metadata.databaseProductName.lowercase()) {
-            "postgresql" -> "public"
-            else -> null
-        }
+        val schemaPattern =
+            connection.schema ?: when (metadata.databaseProductName.lowercase()) {
+                "postgresql" -> "public"
+                else -> null
+            }
         metadata.getColumns(connection.catalog, schemaPattern, "notifications_outbox", "payload").use { columns ->
             require(columns.next()) { "notifications_outbox.payload column not found" }
             val typeName = columns.getString("TYPE_NAME").lowercase()

@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 interface NotifyIdempotencyStore {
     fun seen(key: String): Boolean
+
     fun mark(key: String)
 }
 
@@ -16,7 +17,6 @@ class InMemoryNotifyIdempotencyStore(
         System.getenv("NOTIFY_IDEMPOTENCY_TTL_HOURS")?.toLongOrNull()?.let(Duration::ofHours)
             ?: BotLimits.notifyIdempotencyTtl,
 ) : NotifyIdempotencyStore {
-
     private data class Entry(val timestamp: Instant)
 
     private val ttl: Duration = ttl
@@ -56,4 +56,3 @@ class InMemoryNotifyIdempotencyStore(
         }
     }
 }
-

@@ -8,12 +8,12 @@ import com.example.bot.data.booking.core.BookingRepository
 import com.example.bot.data.booking.core.OutboxRepository
 import com.example.bot.data.db.withTxRetry
 import com.example.bot.promo.PromoAttributionCoordinator
-import java.time.Duration
-import java.time.Instant
-import java.util.UUID
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.time.Duration
+import java.time.Instant
+import java.util.UUID
 
 sealed interface BookingCmdResult {
     data class HoldCreated(val holdId: UUID) : BookingCmdResult
@@ -47,7 +47,10 @@ class BookingService(
     private val auditLogRepository: AuditLogRepository,
     private val promoAttribution: PromoAttributionCoordinator = PromoAttributionCoordinator.Noop,
 ) {
-    suspend fun hold(req: HoldRequest, idempotencyKey: String): BookingCmdResult =
+    suspend fun hold(
+        req: HoldRequest,
+        idempotencyKey: String,
+    ): BookingCmdResult =
         withTxRetry {
             val existingHold = holdRepository.findHoldByIdempotencyKey(idempotencyKey)
             if (existingHold != null) {
@@ -58,14 +61,24 @@ class BookingService(
                         existingHold.slotEnd == req.slotEnd &&
                         existingHold.guests == req.guestsCount
                 return@withTxRetry if (matchesRequest) {
-                    log("booking.hold", req.clubId, "idempotent", buildJsonObject {
-                        put("holdId", existingHold.id.toString())
-                    })
+                    log(
+                        "booking.hold",
+                        req.clubId,
+                        "idempotent",
+                        buildJsonObject {
+                            put("holdId", existingHold.id.toString())
+                        },
+                    )
                     BookingCmdResult.HoldCreated(existingHold.id)
                 } else {
-                    log("booking.hold", req.clubId, "idem_conflict", buildJsonObject {
-                        put("existingHoldId", existingHold.id.toString())
-                    })
+                    log(
+                        "booking.hold",
+                        req.clubId,
+                        "idem_conflict",
+                        buildJsonObject {
+                            put("existingHoldId", existingHold.id.toString())
+                        },
+                    )
                     BookingCmdResult.IdempotencyConflict
                 }
             }
@@ -118,7 +131,10 @@ class BookingService(
             }
         }
 
-    suspend fun confirm(holdId: UUID, idempotencyKey: String): BookingCmdResult =
+    suspend fun confirm(
+        holdId: UUID,
+        idempotencyKey: String,
+    ): BookingCmdResult =
         withTxRetry {
             val existingBooking = bookingRepository.findByIdempotencyKey(idempotencyKey)
             if (existingBooking != null) {
@@ -163,9 +179,14 @@ class BookingService(
             val activeExists =
                 bookingRepository.existsActiveFor(hold.tableId, hold.slotStart, hold.slotEnd)
             if (activeExists) {
-                log("booking.confirm", hold.clubId, "duplicate_active", buildJsonObject {
-                    put("holdId", hold.id.toString())
-                })
+                log(
+                    "booking.confirm",
+                    hold.clubId,
+                    "duplicate_active",
+                    buildJsonObject {
+                        put("holdId", hold.id.toString())
+                    },
+                )
                 return@withTxRetry BookingCmdResult.DuplicateActiveBooking
             }
 
@@ -222,13 +243,17 @@ class BookingService(
             }
         }
 
-    suspend fun finalize(bookingId: UUID, telegramUserId: Long? = null): BookingCmdResult =
+    suspend fun finalize(
+        bookingId: UUID,
+        telegramUserId: Long? = null,
+    ): BookingCmdResult =
         withTxRetry {
             val booking = bookingRepository.findById(bookingId)
-            val record = booking ?: run {
-                log("booking.finalize", null, "not_found", null)
-                return@withTxRetry BookingCmdResult.NotFound
-            }
+            val record =
+                booking ?: run {
+                    log("booking.finalize", null, "not_found", null)
+                    return@withTxRetry BookingCmdResult.NotFound
+                }
 
             promoAttribution.attachPending(record.id, telegramUserId)
 
@@ -250,7 +275,12 @@ class BookingService(
             BookingCmdResult.Booked(record.id)
         }
 
-    private suspend fun log(action: String, clubId: Long?, outcome: String, meta: JsonObject?) {
+    private suspend fun log(
+        action: String,
+        clubId: Long?,
+        outcome: String,
+        meta: JsonObject?,
+    ) {
         auditLogRepository.log(
             userId = null,
             action = action,
@@ -262,4 +292,3 @@ class BookingService(
         )
     }
 }
-

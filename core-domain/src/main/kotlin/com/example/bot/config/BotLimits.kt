@@ -2,6 +2,7 @@ package com.example.bot.config
 
 import java.time.Duration
 
+@Suppress("ktlint:standard:property-naming")
 object BotLimits {
     object RateLimit {
         const val TOKEN_BUCKET_MIN_CAPACITY: Double = 1.0

@@ -17,7 +17,11 @@ object PaymentsService {
     /**
      * Creates invoice based on provided [input] and [policy].
      */
-    suspend fun createInvoice(input: ConfirmInput, policy: PaymentPolicy, idemKey: String): InvoiceInfo {
+    suspend fun createInvoice(
+        input: ConfirmInput,
+        policy: PaymentPolicy,
+        idemKey: String,
+    ): InvoiceInfo {
         val total = input.minDeposit.multiply(BigDecimal(input.guestsCount))
         val id = UUID.randomUUID().toString()
         val currency = if (policy.mode == PaymentMode.STARS_DIGITAL) "XTR" else policy.currency

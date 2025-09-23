@@ -27,9 +27,10 @@ data class HealthConfig(val dbTimeoutMs: Long) {
 }
 
 data class LocalBotApiConfig(val enabled: Boolean, val apiId: String?, val apiHash: String?, val baseUrl: String?) {
-    fun safe(): String = "LocalBotAPI(enabled=$enabled, apiId=${maskSecret(
-        apiId,
-    )}, apiHash=${maskSecret(apiHash)}, baseUrl=$baseUrl)"
+    fun safe(): String =
+        "LocalBotAPI(enabled=$enabled, apiId=${maskSecret(
+            apiId,
+        )}, apiHash=${maskSecret(apiHash)}, baseUrl=$baseUrl)"
 }
 
 data class HqEndpoints(
@@ -78,11 +79,12 @@ data class AppConfig(
 
         fun fromEnv(): AppConfig {
             val profile = env("APP_PROFILE")?.let { AppProfile.valueOf(it.uppercase()) } ?: AppProfile.DEV
-            val runMode = if (envBool("TELEGRAM_USE_POLLING", false)) {
-                BotRunMode.POLLING
-            } else {
-                BotRunMode.WEBHOOK
-            }
+            val runMode =
+                if (envBool("TELEGRAM_USE_POLLING", false)) {
+                    BotRunMode.POLLING
+                } else {
+                    BotRunMode.WEBHOOK
+                }
             val bot =
                 BotConfig(
                     token = envRequired("TELEGRAM_BOT_TOKEN"),
@@ -171,7 +173,6 @@ data class AppConfig(
                 )
             return AppConfig(profile, runMode, bot, webhook, db, workers, health, localApi, hq, clubs)
         }
-
     }
 
     fun toSafeString(): String {

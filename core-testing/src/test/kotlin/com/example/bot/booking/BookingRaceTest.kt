@@ -1,9 +1,5 @@
 package com.example.bot.booking
 
-import com.example.bot.booking.legacy.BookingError as LegacyBookingError
-import com.example.bot.booking.legacy.BookingService as LegacyBookingService
-import com.example.bot.booking.legacy.ConfirmRequest as LegacyConfirmRequest
-import com.example.bot.booking.legacy.Either as LegacyEither
 import com.example.bot.data.booking.InMemoryBookingRepository
 import com.example.bot.data.outbox.InMemoryOutboxService
 import io.kotest.core.spec.style.StringSpec
@@ -12,6 +8,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import java.math.BigDecimal
 import java.time.Instant
+import com.example.bot.booking.legacy.BookingError as LegacyBookingError
+import com.example.bot.booking.legacy.BookingService as LegacyBookingService
+import com.example.bot.booking.legacy.ConfirmRequest as LegacyConfirmRequest
+import com.example.bot.booking.legacy.Either as LegacyEither
 
 class BookingRaceTest :
     StringSpec({
@@ -31,7 +31,11 @@ class BookingRaceTest :
                 val r2 = b.await()
                 val successes = listOf(r1, r2).count { it is LegacyEither.Right }
                 successes shouldBe 1
-                val conflicts = listOf(r1, r2).count { (it as? LegacyEither.Left)?.value is LegacyBookingError.Conflict }
+                val conflicts =
+                    listOf(
+                        r1,
+                        r2,
+                    ).count { (it as? LegacyEither.Left)?.value is LegacyBookingError.Conflict }
                 conflicts shouldBe 1
             }
         }

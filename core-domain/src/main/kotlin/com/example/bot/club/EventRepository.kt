@@ -10,7 +10,10 @@ interface EventRepository {
     /**
      * Lists events for the given [clubId] that start within [dateRange].
      */
-    suspend fun listByClub(clubId: Long, dateRange: ClosedRange<Instant>): List<Event>
+    suspend fun listByClub(
+        clubId: Long,
+        dateRange: ClosedRange<Instant>,
+    ): List<Event>
 
     /**
      * Loads an event by its identifier.

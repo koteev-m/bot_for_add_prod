@@ -1,5 +1,13 @@
 package com.example.tools.perf
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -16,14 +24,6 @@ import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.time.toKotlinDuration
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.joinAll
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 
 data class Args(
     val baseUrl: String,
@@ -52,7 +52,10 @@ private const val PERCENTILE_MEDIAN = 0.50
 private const val PERCENTILE_P95 = 0.95
 
 private fun parseArgs(raw: Array<String>): Args {
-    fun get(name: String, def: String? = null): String? =
+    fun get(
+        name: String,
+        def: String? = null,
+    ): String? =
         raw.asSequence()
             .mapNotNull {
                 val p = it.trim()
@@ -64,14 +67,22 @@ private fun parseArgs(raw: Array<String>): Args {
             }
             .toMap()[name] ?: def
 
-    fun durationSeconds(name: String, default: Duration, minSeconds: Long): Duration =
+    fun durationSeconds(
+        name: String,
+        default: Duration,
+        minSeconds: Long,
+    ): Duration =
         get(name, default.seconds.toString())
             ?.toLongOrNull()
             ?.coerceAtLeast(minSeconds)
             ?.let(Duration::ofSeconds)
             ?: default
 
-    fun durationMillis(name: String, default: Duration, minMillis: Long): Duration =
+    fun durationMillis(
+        name: String,
+        default: Duration,
+        minMillis: Long,
+    ): Duration =
         get(name, default.toMillis().toString())
             ?.toLongOrNull()
             ?.coerceAtLeast(minMillis)
@@ -137,16 +148,17 @@ suspend fun main(vararg raw: String) {
 
     if (!args.warmup.isZero) {
         val endWarmup = System.nanoTime() + args.warmup.toNanos()
-        val jobs = (1..args.workers).map {
-            scope.launch {
-                var idx = 0
-                while (System.nanoTime() < endWarmup) {
-                    val endpoint = args.endpoints[idx % args.endpoints.size]
-                    doOne(http, args.baseUrl, endpoint)
-                    idx++
+        val jobs =
+            (1..args.workers).map {
+                scope.launch {
+                    var idx = 0
+                    while (System.nanoTime() < endWarmup) {
+                        val endpoint = args.endpoints[idx % args.endpoints.size]
+                        doOne(http, args.baseUrl, endpoint)
+                        idx++
+                    }
                 }
             }
-        }
         jobs.joinAll()
     }
 
@@ -154,39 +166,40 @@ suspend fun main(vararg raw: String) {
     val targetDelay =
         if (args.targetRps > 0) {
             val perWorker = max(1.0, args.targetRps.toDouble() / args.workers.toDouble())
-                Duration.ofNanos((ONE_SECOND_NANOS / perWorker).toLong())
+            Duration.ofNanos((ONE_SECOND_NANOS / perWorker).toLong())
         } else {
             Duration.ZERO
         }
 
-    val jobs = (1..args.workers).map { w ->
-        scope.launch(Dispatchers.IO) {
-            var idx = w % args.endpoints.size
-            var nextTime = System.nanoTime()
-            while (System.nanoTime() < testEnd) {
-                if (!targetDelay.isZero) {
-                    val now = System.nanoTime()
-                    if (now < nextTime) {
-                        val sleepDuration = Duration.ofNanos(nextTime - now)
-                        delay(sleepDuration.toKotlinDuration())
+    val jobs =
+        (1..args.workers).map { w ->
+            scope.launch(Dispatchers.IO) {
+                var idx = w % args.endpoints.size
+                var nextTime = System.nanoTime()
+                while (System.nanoTime() < testEnd) {
+                    if (!targetDelay.isZero) {
+                        val now = System.nanoTime()
+                        if (now < nextTime) {
+                            val sleepDuration = Duration.ofNanos(nextTime - now)
+                            delay(sleepDuration.toKotlinDuration())
+                        }
+                        nextTime += targetDelay.toNanos()
                     }
-                    nextTime += targetDelay.toNanos()
-                }
-                val endpoint = args.endpoints[idx % args.endpoints.size]
-                idx++
-                val startedAt = System.nanoTime()
-                metrics.started.incrementAndGet()
-                val status = doOne(http, args.baseUrl, endpoint)
-                val took = Duration.ofNanos(System.nanoTime() - startedAt)
-                if (status in HTTP_SUCCESS_MIN..HTTP_SUCCESS_MAX) {
-                    metrics.successful.incrementAndGet()
-                    metrics.latencies.add(took)
-                } else {
-                    metrics.errors.incrementAndGet()
+                    val endpoint = args.endpoints[idx % args.endpoints.size]
+                    idx++
+                    val startedAt = System.nanoTime()
+                    metrics.started.incrementAndGet()
+                    val status = doOne(http, args.baseUrl, endpoint)
+                    val took = Duration.ofNanos(System.nanoTime() - startedAt)
+                    if (status in HTTP_SUCCESS_MIN..HTTP_SUCCESS_MAX) {
+                        metrics.successful.incrementAndGet()
+                        metrics.latencies.add(took)
+                    } else {
+                        metrics.errors.incrementAndGet()
+                    }
                 }
             }
         }
-    }
 
     jobs.joinAll()
     scope.cancel()
@@ -220,7 +233,10 @@ suspend fun main(vararg raw: String) {
     }
 }
 
-private fun percentile(values: List<Duration>, q: Double): Duration? {
+private fun percentile(
+    values: List<Duration>,
+    q: Double,
+): Duration? {
     if (values.isEmpty()) return null
     val sorted = values.toMutableList().sorted()
     val idx = min(sorted.size - 1, max(0, ceil(q * sorted.size).toInt() - 1))
@@ -250,32 +266,37 @@ private fun printReport(
     println("RPS: $rpsFormatted")
     println("p50: $p50Millis ms, p95: $p95Millis ms, SLA p95 <= $assertP95Millis ms")
     val errorRateFormatted = "%.6f".format(Locale.ROOT, errRate)
-    val json = buildString {
-        append('{')
-        append("\"total\":")
-        append(total)
-        append(",\"ok\":")
-        append(ok)
-        append(",\"errors\":")
-        append(err)
-        append(",\"errorRate\":")
-        append(errorRateFormatted)
-        append(",\"rps\":")
-        append(rpsFormatted)
-        append(",\"p50Ms\":")
-        append(p50Millis)
-        append(",\"p95Ms\":")
-        append(p95Millis)
-        append(",\"assertP95Ms\":")
-        append(assertP95Millis)
-        append(",\"maxErrorRate\":")
-        append(args.maxErrorRate)
-        append('}')
-    }
+    val json =
+        buildString {
+            append('{')
+            append("\"total\":")
+            append(total)
+            append(",\"ok\":")
+            append(ok)
+            append(",\"errors\":")
+            append(err)
+            append(",\"errorRate\":")
+            append(errorRateFormatted)
+            append(",\"rps\":")
+            append(rpsFormatted)
+            append(",\"p50Ms\":")
+            append(p50Millis)
+            append(",\"p95Ms\":")
+            append(p95Millis)
+            append(",\"assertP95Ms\":")
+            append(assertP95Millis)
+            append(",\"maxErrorRate\":")
+            append(args.maxErrorRate)
+            append('}')
+        }
     println(json)
 }
 
-private suspend fun doOne(client: HttpClient, baseUrl: String, endpoint: String): Int {
+private suspend fun doOne(
+    client: HttpClient,
+    baseUrl: String,
+    endpoint: String,
+): Int {
     val uri = URI.create(if (endpoint.startsWith("/")) "$baseUrl$endpoint" else "$baseUrl/$endpoint")
     val request =
         HttpRequest.newBuilder()

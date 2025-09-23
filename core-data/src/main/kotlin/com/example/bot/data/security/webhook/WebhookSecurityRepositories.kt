@@ -42,7 +42,12 @@ class SuspiciousIpRepository(
     private val db: Database,
     private val clock: Clock = Clock.systemUTC(),
 ) {
-    suspend fun record(ip: String, userAgent: String?, reason: SuspiciousIpReason, details: String? = null): Long {
+    suspend fun record(
+        ip: String,
+        userAgent: String?,
+        reason: SuspiciousIpReason,
+        details: String? = null,
+    ): Long {
         val now = Instant.now(clock).toOffsetDateTime()
         return newSuspendedTransaction(context = Dispatchers.IO, db = db) {
             SuspiciousIpTable.insert {
@@ -79,6 +84,7 @@ class SuspiciousIpRepository(
 
 sealed interface DedupResult {
     data class FirstSeen(val updateId: Long) : DedupResult
+
     data class Duplicate(
         val updateId: Long,
         val firstSeenAt: Instant,

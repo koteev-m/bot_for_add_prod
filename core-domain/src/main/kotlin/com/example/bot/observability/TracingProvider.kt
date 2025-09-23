@@ -16,7 +16,10 @@ import io.opentelemetry.sdk.trace.export.SpanExporter
 object TracingProvider {
     data class Tracing(val tracer: Tracer, val sdk: SdkTracerProvider)
 
-    fun create(endpoint: String, headers: Map<String, String> = emptyMap()): Tracing {
+    fun create(
+        endpoint: String,
+        headers: Map<String, String> = emptyMap(),
+    ): Tracing {
         val exporter =
             OtlpGrpcSpanExporter
                 .builder()
