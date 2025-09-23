@@ -1,6 +1,6 @@
 package com.example.bot.telegram.ott
 
-import com.example.bot.telegram.ott.TemplateOttPayload
+import com.example.bot.telegram.MenuCallbacksHandler
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.CallbackQuery
 import com.pengrad.telegrambot.model.Update
@@ -27,36 +27,41 @@ class CallbackTokenService(
 /** Мини-handler `callback_query` с примером ветвления по payload. */
 class CallbackQueryHandler(
     private val bot: TelegramBot,
-    private val tokenService: CallbackTokenService
+    private val tokenService: CallbackTokenService,
+    private val menuCallbacksHandler: MenuCallbacksHandler,
 ) {
 
     fun handle(update: Update) {
-        val callbackQuery: CallbackQuery? = update.callbackQuery()
-        val token: String? = callbackQuery?.data()
-        val payload: OttPayload? = token?.let(tokenService::consume)
+        val callbackQuery: CallbackQuery = update.callbackQuery() ?: return
+        val data: String = callbackQuery.data() ?: return
 
-        return when {
-            callbackQuery == null -> Unit
-            token == null -> Unit
-            payload == null -> {
+        if (isMenuCallback(data)) {
+            menuCallbacksHandler.handle(update)
+        } else {
+            val payload: OttPayload? = tokenService.consume(data)
+            if (payload == null) {
                 // устарело/повтор — показываем alert, ничего не делаем
                 bot.execute(
                     AnswerCallbackQuery(callbackQuery.id())
                         .text("Кнопка устарела, обновите экран.")
                         .showAlert(true)
                 )
-                Unit
-            }
-            else -> {
+            } else {
                 when (payload) {
                     is BookTableAction -> handleBookTable(callbackQuery, payload)
                     is TemplateOttPayload -> {
                         bot.execute(AnswerCallbackQuery(callbackQuery.id()))
-                        Unit
                     }
                 }
             }
         }
+    }
+
+    private fun isMenuCallback(data: String): Boolean {
+        if (data == NOOP_CALLBACK) {
+            return true
+        }
+        return MENU_PREFIXES.any { prefix -> data.startsWith(prefix) }
     }
 
     private fun handleBookTable(cq: CallbackQuery, p: BookTableAction) {
@@ -70,4 +75,7 @@ class CallbackQueryHandler(
         bot.execute(AnswerCallbackQuery(cq.id()))
     }
 }
+
+private val MENU_PREFIXES = listOf("menu:", "club:", "night:", "tbl:", "pg:")
+private const val NOOP_CALLBACK = "noop"
 
