@@ -2,6 +2,7 @@ package com.example.bot
 
 import com.example.bot.i18n.BotTexts
 import com.example.bot.telegram.Keyboards
+import com.example.bot.telegram.ClubTokenCodec
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.ints.shouldBeLessThan
 
@@ -11,7 +12,7 @@ class CallbackDataBudgetTest :
         val kb = Keyboards(texts)
 
         "callback data under limit" {
-            val clubs = (1..3).map { "t$it" to "Club $it" }
+            val clubs = (1..3).map { ClubTokenCodec.encode(it.toLong()) to "Club $it" }
             val clubKb = kb.clubsKeyboard(clubs)
             clubKb.inlineKeyboard().flatMap { it.toList() }.forEach { btn ->
                 btn.callbackData?.length?.let { it shouldBeLessThan 64 }
