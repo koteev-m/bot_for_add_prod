@@ -27,14 +27,14 @@ object UiBookingMetrics {
     private const val PERCENTILE_99 = 0.99
 
     fun bind(registry: MeterRegistry) {
-        registry.gauge("ui.menu.clicks.atomic", menuClicks)
-        registry.gauge("ui.nights.rendered.atomic", nightsRendered)
-        registry.gauge("ui.tables.rendered.atomic", tablesRendered)
-        registry.gauge("ui.tables.pages.atomic", pagesRendered)
-        registry.gauge("ui.table.chosen.atomic", tableChosen)
-        registry.gauge("ui.guests.chosen.atomic", guestsChosen)
-        registry.gauge("ui.booking.success.atomic", bookingSuccess)
-        registry.gauge("ui.booking.error.atomic", bookingError)
+        registry.gauge("ui.menu.clicks", menuClicks)
+        registry.gauge("ui.nights.rendered", nightsRendered)
+        registry.gauge("ui.tables.rendered", tablesRendered)
+        registry.gauge("ui.tables.pages", pagesRendered)
+        registry.gauge("ui.table.chosen", tableChosen)
+        registry.gauge("ui.guests.chosen", guestsChosen)
+        registry.gauge("ui.booking.success", bookingSuccess)
+        registry.gauge("ui.booking.error", bookingError)
 
         listTablesTimer =
             Timer.builder("ui.tables.fetch.duration.ms")
