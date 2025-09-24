@@ -57,6 +57,17 @@ class BotTextsTest {
     }
 
     @Test
+    fun `table label localized`() {
+        val ruLabel = texts.tableLabel("ru", 7, 150_00L)
+        val enLabel = texts.tableLabel("en", 7, 150_00L)
+
+        assertAll(
+            { assertEquals("Стол 7 · от 150 ₽", ruLabel) },
+            { assertEquals("Table 7 · from 150", enLabel) },
+        )
+    }
+
+    @Test
     fun `receipt texts localized`() {
         assertAll(
             { assertEquals("Бронь подтверждена ✅", texts.bookingConfirmedTitle(null)) },

@@ -3,6 +3,7 @@
 package com.example.bot.telegram
 
 import com.example.bot.availability.TableAvailabilityDto
+import com.example.bot.availability.minDepositMinor
 import com.example.bot.text.BotTexts
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
@@ -62,6 +63,7 @@ class Keyboards(private val texts: BotTexts) {
         tables: List<TableAvailabilityDto>,
         page: Int,
         pageSize: Int,
+        lang: String?,
         encode: (TableAvailabilityDto) -> String,
     ): InlineKeyboardMarkup {
         val start = (page - 1) * pageSize
@@ -70,7 +72,7 @@ class Keyboards(private val texts: BotTexts) {
             slice
                 .map { t ->
                     arrayOf(
-                        InlineKeyboardButton("Table ${t.tableNumber} · от ${t.minDeposit}₽")
+                        InlineKeyboardButton(texts.tableLabel(lang, t.tableNumber, t.minDepositMinor()))
                             .callbackData(encode(t).ensureTablePrefix()),
                     )
                 }.toMutableList()
