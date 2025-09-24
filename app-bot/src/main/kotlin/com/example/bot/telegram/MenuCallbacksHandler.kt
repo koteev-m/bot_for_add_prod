@@ -8,6 +8,7 @@ import com.example.bot.booking.BookingService
 import com.example.bot.booking.HoldRequest
 import com.example.bot.data.repo.ClubDto
 import com.example.bot.data.repo.ClubRepository
+import com.example.bot.metrics.UiBookingMetrics
 import com.example.bot.telegram.tokens.ClubTokenCodec
 import com.example.bot.telegram.tokens.DecodedGuests
 import com.example.bot.telegram.tokens.GuestsSelectCodec
@@ -27,6 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
+import org.slf4j.MDC
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
@@ -60,8 +62,20 @@ class MenuCallbacksHandler(
         // Stop Telegram's spinner immediately to avoid blocking UI.
         bot.execute(AnswerCallbackQuery(callbackQuery.id()))
 
-        val route = data.substringBefore(DELIMITER, data)
-        logger.debug("ui.menu route={}", route)
+        val routeTag =
+            when {
+                data == MENU_CLUBS -> MENU_CLUBS
+                data.startsWith(CLUB_PREFIX) -> CLUB_PREFIX
+                data.startsWith(NIGHT_PREFIX) -> NIGHT_PREFIX
+                data.startsWith(PAGE_PREFIX) -> PAGE_PREFIX
+                data.startsWith(TABLE_PREFIX) -> TABLE_PREFIX
+                data.startsWith(GUEST_PREFIX) -> GUEST_PREFIX
+                else -> null
+            }
+        if (routeTag != null) {
+            UiBookingMetrics.menuClicks.incrementAndGet()
+            logger.info("ui.menu.route route={}", routeTag)
+        }
 
         when {
             data == MENU_CLUBS && chatId != null ->
@@ -71,6 +85,7 @@ class MenuCallbacksHandler(
                     val clubButtons = clubs.map { club -> ClubTokenCodec.encode(club.id) to club.name }
                     val markup = keyboards.clubsKeyboard(clubButtons)
                     send(chatId, threadId, text, markup)
+                    UiBookingMetrics.nightsRendered.incrementAndGet()
                 }
 
             data.startsWith(CLUB_PREFIX) && chatId != null ->
@@ -78,7 +93,7 @@ class MenuCallbacksHandler(
                     val token = data.removePrefix(CLUB_PREFIX)
                     val clubId = ClubTokenCodec.decode(token)
                     if (clubId == null) {
-                        logger.warn("Malformed club token: {}", token)
+                        logger.warn("ui.menu.malformed tokenType=club")
                         send(chatId, threadId, texts.buttonExpired(lang))
                         return@launch
                     }
@@ -100,6 +115,7 @@ class MenuCallbacksHandler(
                     val text = buildNightsSelectionMessage(nights, lang)
                     val markup = keyboards.nightsKeyboard(buttons)
                     send(chatId, threadId, text, markup)
+                    UiBookingMetrics.nightsRendered.incrementAndGet()
                 }
 
             data.startsWith(NIGHT_PREFIX) && chatId != null ->
@@ -107,39 +123,54 @@ class MenuCallbacksHandler(
                     val token = data.removePrefix(NIGHT_PREFIX)
                     val decoded = NightTokenCodec.decode(token)
                     if (decoded == null) {
-                        logger.warn("Malformed night token: {}", token)
+                        logger.warn("ui.menu.malformed tokenType=night")
                         send(chatId, threadId, texts.sessionExpired(lang), keyboards.startMenu(lang))
                         return@launch
                     }
                     val (clubId, startUtc) = decoded
                     chatUiSession.putNightContext(chatId, threadId, clubId, startUtc)
                     logger.info("ui.night.select clubId={} start={}", clubId, startUtc)
-                    renderTablesPage(chatId, threadId, lang, clubId, startUtc, page = 1)
+                    val tables =
+                        withContext(Dispatchers.IO) {
+                            UiBookingMetrics.timeListTables { availability.listFreeTables(clubId, startUtc) }
+                        }
+                    renderTablesPage(chatId, threadId, lang, clubId, startUtc, page = 1, preloadedTables = tables)
                 }
 
             data.startsWith(PAGE_PREFIX) && chatId != null ->
                 uiScope.launch {
                     val pageNumber = data.removePrefix(PAGE_PREFIX).toIntOrNull()
                     if (pageNumber == null) {
-                        logger.warn("Malformed page token: {}", data)
+                        logger.warn("ui.menu.malformed tokenType=page")
                         send(chatId, threadId, texts.sessionExpired(lang), keyboards.startMenu(lang))
                         return@launch
                     }
                     val context = chatUiSession.getNightContext(chatId, threadId)
                     if (context == null) {
-                        logger.warn("No night context for chat {} thread {}", chatId, threadId)
+                        logger.warn("ui.menu.context_missing route=pg")
                         send(chatId, threadId, texts.sessionExpired(lang), keyboards.startMenu(lang))
                         return@launch
                     }
                     chatUiSession.putNightContext(chatId, threadId, context.clubId, context.startUtc)
-                    renderTablesPage(chatId, threadId, lang, context.clubId, context.startUtc, pageNumber)
+                    val rendered =
+                        renderTablesPage(
+                            chatId,
+                            threadId,
+                            lang,
+                            context.clubId,
+                            context.startUtc,
+                            pageNumber,
+                        )
+                    if (rendered) {
+                        UiBookingMetrics.pagesRendered.incrementAndGet()
+                    }
                 }
 
             data.startsWith(TABLE_PREFIX) && chatId != null ->
                 uiScope.launch {
                     val decodedTable = TableSelectCodec.decode(data)
                     if (decodedTable == null) {
-                        logger.warn("Malformed table token: {}", data)
+                        logger.warn("ui.menu.malformed tokenType=tbl")
                         send(chatId, threadId, texts.buttonExpired(lang))
                         return@launch
                     }
@@ -166,13 +197,14 @@ class MenuCallbacksHandler(
                             GuestsSelectCodec.encode(clubId, startUtc, endUtc, tableId, guests)
                         }
                     send(chatId, threadId, texts.chooseGuests(lang), markup)
+                    UiBookingMetrics.tableChosen.incrementAndGet()
                 }
 
             data.startsWith(GUEST_PREFIX) && chatId != null ->
                 uiScope.launch {
                     val decoded = GuestsSelectCodec.decode(data)
                     if (decoded == null) {
-                        logger.warn("Malformed guests token: {}", data)
+                        logger.warn("ui.menu.malformed tokenType=g")
                         send(chatId, threadId, texts.buttonExpired(lang))
                         return@launch
                     }
@@ -192,7 +224,7 @@ class MenuCallbacksHandler(
         chatId: Long,
         threadId: Int?,
         lang: String?,
-    ): UUID? {
+    ): BookingCmdResult {
         val holdResult =
             withContext(Dispatchers.IO) {
                 bookingService.hold(
@@ -216,15 +248,15 @@ class MenuCallbacksHandler(
             decoded.guests,
         )
         return when (holdResult) {
-            is BookingCmdResult.HoldCreated -> holdResult.holdId
+            is BookingCmdResult.HoldCreated -> holdResult
             BookingCmdResult.DuplicateActiveBooking -> {
                 send(chatId, threadId, texts.tableTaken(lang))
-                null
+                holdResult
             }
 
             BookingCmdResult.IdempotencyConflict -> {
                 send(chatId, threadId, texts.tooManyRequests(lang))
-                null
+                holdResult
             }
 
             else -> {
@@ -236,7 +268,7 @@ class MenuCallbacksHandler(
                     decoded.startUtc.epochSecond,
                 )
                 send(chatId, threadId, texts.unknownError(lang))
-                null
+                holdResult
             }
         }
     }
@@ -248,7 +280,7 @@ class MenuCallbacksHandler(
         chatId: Long,
         threadId: Int?,
         lang: String?,
-    ): UUID? {
+    ): BookingCmdResult {
         val confirmResult =
             withContext(Dispatchers.IO) {
                 bookingService.confirm(holdId, "$idemKey:confirm")
@@ -262,21 +294,21 @@ class MenuCallbacksHandler(
             decoded.guests,
         )
         return when (confirmResult) {
-            is BookingCmdResult.Booked -> confirmResult.bookingId
-            is BookingCmdResult.AlreadyBooked -> confirmResult.bookingId
+            is BookingCmdResult.Booked -> confirmResult
+            is BookingCmdResult.AlreadyBooked -> confirmResult
             BookingCmdResult.HoldExpired -> {
                 send(chatId, threadId, texts.holdExpired(lang))
-                null
+                confirmResult
             }
 
             BookingCmdResult.DuplicateActiveBooking -> {
                 send(chatId, threadId, texts.tableTaken(lang))
-                null
+                confirmResult
             }
 
             BookingCmdResult.IdempotencyConflict -> {
                 send(chatId, threadId, texts.tooManyRequests(lang))
-                null
+                confirmResult
             }
 
             BookingCmdResult.NotFound -> {
@@ -288,7 +320,7 @@ class MenuCallbacksHandler(
                     decoded.guests,
                 )
                 send(chatId, threadId, texts.unknownError(lang))
-                null
+                confirmResult
             }
 
             else -> {
@@ -300,7 +332,7 @@ class MenuCallbacksHandler(
                     decoded.startUtc.epochSecond,
                 )
                 send(chatId, threadId, texts.unknownError(lang))
-                null
+                confirmResult
             }
         }
     }
@@ -314,7 +346,7 @@ class MenuCallbacksHandler(
         chatId: Long,
         threadId: Int?,
         lang: String?,
-    ) {
+    ): BookingCmdResult {
         val finalizeResult =
             withContext(Dispatchers.IO) {
                 bookingService.finalize(
@@ -333,6 +365,10 @@ class MenuCallbacksHandler(
 
         when (finalizeResult) {
             is BookingCmdResult.Booked -> {
+                val receipt = buildReceipt(lang, decoded, slotEnd, table)
+                send(chatId, threadId, receipt)
+            }
+            is BookingCmdResult.AlreadyBooked -> {
                 val receipt = buildReceipt(lang, decoded, slotEnd, table)
                 send(chatId, threadId, receipt)
             }
@@ -368,6 +404,7 @@ class MenuCallbacksHandler(
                 send(chatId, threadId, texts.unknownError(lang))
             }
         }
+        return finalizeResult
     }
 
     private suspend fun safeLoadClubs(limit: Int = CLUB_LIST_LIMIT): List<ClubDto> =
@@ -412,13 +449,14 @@ class MenuCallbacksHandler(
         clubId: Long,
         startUtc: Instant,
         page: Int,
-    ) {
-        val tables = safeLoadTables(clubId, startUtc)
+        preloadedTables: List<TableAvailabilityDto>? = null,
+    ): Boolean {
+        val tables = preloadedTables ?: safeLoadTables(clubId, startUtc)
         val totalTables = tables.size
         if (totalTables == 0) {
             logger.info("ui.tables.page page={} size={} total={}", 1, TABLES_PAGE_SIZE, totalTables)
             send(chatId, threadId, texts.noTables(lang))
-            return
+            return false
         }
         val endUtc = resolveNightEndUtc(clubId, startUtc) ?: startUtc.plus(DEFAULT_NIGHT_DURATION)
         val totalPages = maxOf((totalTables + TABLES_PAGE_SIZE - 1) / TABLES_PAGE_SIZE, 1)
@@ -429,6 +467,8 @@ class MenuCallbacksHandler(
             }
         logger.info("ui.tables.page page={} size={} total={}", targetPage, TABLES_PAGE_SIZE, totalTables)
         send(chatId, threadId, texts.chooseTable(lang), markup)
+        UiBookingMetrics.tablesRendered.incrementAndGet()
+        return true
     }
 
     private suspend fun handleGuestSelection(
@@ -438,53 +478,169 @@ class MenuCallbacksHandler(
         lang: String?,
         decoded: DecodedGuests,
     ) {
-        val tables = safeLoadTables(decoded.clubId, decoded.startUtc)
-        val table = tables.firstOrNull { it.tableId == decoded.tableId }
-        if (table == null || table.capacity <= 0) {
-            logger.info(
-                "ui.tbl.unavailable clubId={} tableId={} startSec={}",
-                decoded.clubId,
-                decoded.tableId,
-                decoded.startUtc.epochSecond,
+        UiBookingMetrics.guestsChosen.incrementAndGet()
+        val mdcPairs =
+            listOf(
+                "clubId" to decoded.clubId.toString(),
+                "tableId" to decoded.tableId.toString(),
+                "startUtcSec" to decoded.startUtc.epochSecond.toString(),
+                "step" to "booking",
             )
-            send(chatId, threadId, texts.tableTaken(lang))
-        } else {
-            val slotEnd =
-                if (decoded.endUtc.isAfter(decoded.startUtc)) {
-                    decoded.endUtc
-                } else {
-                    decoded.startUtc.plus(DEFAULT_NIGHT_DURATION)
+        mdcPairs.forEach { (key, value) -> MDC.put(key, value) }
+        val outcome =
+            try {
+                UiBookingMetrics.timeBookingTotal {
+                    processBookingFlow(callbackQuery, chatId, threadId, lang, decoded)
                 }
-            val idemKey =
-                "uiflow:$chatId:${decoded.clubId}:${decoded.tableId}:${decoded.startUtc.epochSecond}:${decoded.guests}"
-            logger.info(
-                "ui.tbl.select clubId={} tableId={} startSec={} guests={}",
-                decoded.clubId,
-                decoded.tableId,
-                decoded.startUtc.epochSecond,
-                decoded.guests,
-            )
+            } catch (ex: Exception) {
+                logger.warn("ui.booking.exception", ex)
+                send(chatId, threadId, texts.unknownError(lang))
+                BookingOutcome(success = false, reason = "unexpected")
+            } finally {
+                mdcPairs.forEach { (key, _) -> MDC.remove(key) }
+            }
+        if (outcome.success) {
+            UiBookingMetrics.bookingSuccess.incrementAndGet()
+        } else {
+            UiBookingMetrics.bookingError.incrementAndGet()
+        }
+        logger.info(
+            "ui.booking.outcome outcome={} reason={}",
+            if (outcome.success) "success" else "error",
+            outcome.reason,
+        )
+    }
 
-            val holdId =
-                attemptHold(
-                    decoded = decoded,
-                    slotEnd = slotEnd,
-                    idemKey = idemKey,
-                    chatId = chatId,
-                    threadId = threadId,
-                    lang = lang,
-                )
-            if (holdId != null) {
-                val bookingId =
-                    attemptConfirm(
-                        holdId = holdId,
-                        decoded = decoded,
-                        idemKey = idemKey,
-                        chatId = chatId,
-                        threadId = threadId,
-                        lang = lang,
+    private suspend fun processBookingFlow(
+        callbackQuery: CallbackQuery,
+        chatId: Long,
+        threadId: Int?,
+        lang: String?,
+        decoded: DecodedGuests,
+    ): BookingOutcome {
+        val tables = safeLoadTables(decoded.clubId, decoded.startUtc)
+        val table =
+            tables.firstOrNull { it.tableId == decoded.tableId && it.capacity > 0 }
+                ?: run {
+                    logger.info(
+                        "ui.tbl.unavailable clubId={} tableId={} startSec={}",
+                        decoded.clubId,
+                        decoded.tableId,
+                        decoded.startUtc.epochSecond,
                     )
-                if (bookingId != null) {
+                    send(chatId, threadId, texts.tableTaken(lang))
+                    return BookingOutcome(success = false, reason = "not_found")
+                }
+        val slotEnd =
+            if (decoded.endUtc.isAfter(decoded.startUtc)) {
+                decoded.endUtc
+            } else {
+                decoded.startUtc.plus(DEFAULT_NIGHT_DURATION)
+            }
+        val idemKey =
+            "uiflow:$chatId:${decoded.clubId}:${decoded.tableId}:${decoded.startUtc.epochSecond}:${decoded.guests}"
+        logger.info(
+            "ui.tbl.select clubId={} tableId={} startSec={} guests={}",
+            decoded.clubId,
+            decoded.tableId,
+            decoded.startUtc.epochSecond,
+            decoded.guests,
+        )
+
+        val holdResult =
+            attemptHold(
+                decoded = decoded,
+                slotEnd = slotEnd,
+                idemKey = idemKey,
+                chatId = chatId,
+                threadId = threadId,
+                lang = lang,
+            )
+        val holdStageOutcome = holdOutcome(holdResult)
+        return if (holdStageOutcome != null) {
+            holdStageOutcome
+        } else {
+            continueBookingFlow(
+                callbackQuery = callbackQuery,
+                chatId = chatId,
+                threadId = threadId,
+                lang = lang,
+                decoded = decoded,
+                table = table,
+                slotEnd = slotEnd,
+                idemKey = idemKey,
+                holdResult = holdResult as BookingCmdResult.HoldCreated,
+            )
+        }
+    }
+
+    private data class BookingOutcome(
+        val success: Boolean,
+        val reason: String,
+    )
+
+    private fun holdOutcome(result: BookingCmdResult): BookingOutcome? =
+        when (result) {
+            is BookingCmdResult.HoldCreated -> null
+            BookingCmdResult.DuplicateActiveBooking -> BookingOutcome(success = false, reason = "duplicate")
+            BookingCmdResult.IdempotencyConflict -> BookingOutcome(success = false, reason = "conflict")
+            else -> BookingOutcome(success = false, reason = "unexpected")
+        }
+
+    private fun confirmOutcome(result: BookingCmdResult): BookingOutcome? =
+        when (result) {
+            is BookingCmdResult.Booked -> null
+            is BookingCmdResult.AlreadyBooked -> null
+            BookingCmdResult.HoldExpired -> BookingOutcome(success = false, reason = "expired")
+            BookingCmdResult.DuplicateActiveBooking -> BookingOutcome(success = false, reason = "duplicate")
+            BookingCmdResult.IdempotencyConflict -> BookingOutcome(success = false, reason = "conflict")
+            BookingCmdResult.NotFound -> BookingOutcome(success = false, reason = "not_found")
+            else -> BookingOutcome(success = false, reason = "unexpected")
+        }
+
+    private fun finalizeOutcome(result: BookingCmdResult): BookingOutcome =
+        when (result) {
+            is BookingCmdResult.Booked -> BookingOutcome(success = true, reason = "booked")
+            is BookingCmdResult.AlreadyBooked -> BookingOutcome(success = true, reason = "already_booked")
+            BookingCmdResult.NotFound -> BookingOutcome(success = false, reason = "not_found")
+            BookingCmdResult.IdempotencyConflict -> BookingOutcome(success = false, reason = "conflict")
+            BookingCmdResult.DuplicateActiveBooking -> BookingOutcome(success = false, reason = "duplicate")
+            else -> BookingOutcome(success = false, reason = "unexpected")
+        }
+
+    private suspend fun continueBookingFlow(
+        callbackQuery: CallbackQuery,
+        chatId: Long,
+        threadId: Int?,
+        lang: String?,
+        decoded: DecodedGuests,
+        table: TableAvailabilityDto,
+        slotEnd: Instant,
+        idemKey: String,
+        holdResult: BookingCmdResult.HoldCreated,
+    ): BookingOutcome {
+        val confirmResult =
+            attemptConfirm(
+                holdId = holdResult.holdId,
+                decoded = decoded,
+                idemKey = idemKey,
+                chatId = chatId,
+                threadId = threadId,
+                lang = lang,
+            )
+        val confirmOutcome = confirmOutcome(confirmResult)
+        if (confirmOutcome != null) {
+            return confirmOutcome
+        }
+        val bookingId =
+            when (confirmResult) {
+                is BookingCmdResult.Booked -> confirmResult.bookingId
+                is BookingCmdResult.AlreadyBooked -> confirmResult.bookingId
+                else -> null
+            }
+        val finalOutcome =
+            if (bookingId != null) {
+                val finalizeResult =
                     attemptFinalize(
                         bookingId = bookingId,
                         decoded = decoded,
@@ -495,9 +651,11 @@ class MenuCallbacksHandler(
                         threadId = threadId,
                         lang = lang,
                     )
-                }
+                finalizeOutcome(finalizeResult)
+            } else {
+                BookingOutcome(success = false, reason = "unexpected")
             }
-        }
+        return finalOutcome
     }
 
     private suspend fun safeLoadTables(
@@ -506,7 +664,7 @@ class MenuCallbacksHandler(
     ): List<TableAvailabilityDto> =
         withContext(Dispatchers.IO) {
             try {
-                availability.listFreeTables(clubId, startUtc)
+                UiBookingMetrics.timeListTables { availability.listFreeTables(clubId, startUtc) }
             } catch (ex: Exception) {
                 logger.error("Failed to load tables for club {} start {}", clubId, startUtc, ex)
                 emptyList()
@@ -639,7 +797,6 @@ class MenuCallbacksHandler(
         } ?: ZoneOffset.UTC
 
     private companion object {
-        private const val DELIMITER = ":"
         private const val MENU_CLUBS = "menu:clubs"
         private const val CLUB_PREFIX = "club:"
         private const val NIGHT_PREFIX = "night:"

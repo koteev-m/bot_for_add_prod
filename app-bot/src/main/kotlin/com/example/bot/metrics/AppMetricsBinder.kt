@@ -34,5 +34,8 @@ object AppMetricsBinder {
         // DB metrics (20.2)
         registry.gauge("db.tx.retries.atomic", DbMetrics.txRetries)
         registry.gauge("db.query.slow.count.atomic", DbMetrics.slowQueryCount)
+
+        // UI booking metrics
+        UiBookingMetrics.bind(registry)
     }
 }
