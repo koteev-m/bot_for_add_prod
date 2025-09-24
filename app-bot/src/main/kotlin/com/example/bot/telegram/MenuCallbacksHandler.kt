@@ -2,11 +2,15 @@ package com.example.bot.telegram
 
 import com.example.bot.availability.AvailabilityService
 import com.example.bot.availability.NightDto
+import com.example.bot.availability.TableAvailabilityDto
 import com.example.bot.data.repo.ClubDto
 import com.example.bot.data.repo.ClubRepository
 import com.example.bot.i18n.BotTexts
 import com.example.bot.telegram.tokens.ClubTokenCodec
+import com.example.bot.telegram.tokens.DecodedTable
 import com.example.bot.telegram.tokens.NightTokenCodec
+import com.example.bot.telegram.tokens.TableSelectCodec
+import com.example.bot.telegram.ui.ChatUiSessionStore
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.CallbackQuery
 import com.pengrad.telegrambot.model.Update
@@ -18,6 +22,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
+import java.time.Duration
+import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
@@ -25,12 +31,14 @@ import java.util.Locale
 /**
  * Handles callback-based navigation for inline menus.
  */
+@Suppress("TooManyFunctions")
 class MenuCallbacksHandler(
     private val bot: TelegramBot,
     private val keyboards: Keyboards,
     private val texts: BotTexts,
     private val clubRepository: ClubRepository,
     private val availability: AvailabilityService,
+    private val chatUiSession: ChatUiSessionStore,
     private val uiScope: CoroutineScope,
 ) {
     private val logger = LoggerFactory.getLogger(MenuCallbacksHandler::class.java)
@@ -112,11 +120,52 @@ class MenuCallbacksHandler(
                     val decoded = NightTokenCodec.decode(token)
                     if (decoded == null) {
                         logger.warn("Malformed night token: {}", token)
+                        send(chatId, threadId, texts.sessionExpired(lang), keyboards.startMenu(lang))
                         return@launch
                     }
-                    val (_, startUtc) = decoded
-                    send(chatId, threadId, texts.chooseTable(lang) + "\n" + startUtc.toString())
+                    val (clubId, startUtc) = decoded
+                    chatUiSession.putNightContext(chatId, threadId, clubId, startUtc)
+                    logger.info("ui.night.select clubId={} start={}", clubId, startUtc)
+                    renderTablesPage(chatId, threadId, lang, clubId, startUtc, page = 1)
                 }
+
+            data.startsWith(PAGE_PREFIX) && chatId != null ->
+                uiScope.launch {
+                    val pageNumber = data.removePrefix(PAGE_PREFIX).toIntOrNull()
+                    if (pageNumber == null) {
+                        logger.warn("Malformed page token: {}", data)
+                        send(chatId, threadId, texts.sessionExpired(lang), keyboards.startMenu(lang))
+                        return@launch
+                    }
+                    val context = chatUiSession.getNightContext(chatId, threadId)
+                    if (context == null) {
+                        logger.warn("No night context for chat {} thread {}", chatId, threadId)
+                        send(chatId, threadId, texts.sessionExpired(lang), keyboards.startMenu(lang))
+                        return@launch
+                    }
+                    chatUiSession.putNightContext(chatId, threadId, context.clubId, context.startUtc)
+                    renderTablesPage(chatId, threadId, lang, context.clubId, context.startUtc, pageNumber)
+                }
+
+            data.startsWith(TABLE_PREFIX) && chatId != null ->
+                uiScope.launch {
+                    val decoded = TableSelectCodec.decode(data)
+                    if (decoded == null) {
+                        logger.warn("Malformed table token: {}", data)
+                        val text =
+                            if (isEnglish(lang)) {
+                                "The button has expired, please refresh the screen."
+                            } else {
+                                "Кнопка устарела, обновите экран."
+                            }
+                        send(chatId, threadId, text)
+                        return@launch
+                    }
+                    val text = buildTableConfirmationMessage(decoded, lang)
+                    send(chatId, threadId, text)
+                }
+
+            data == NOOP_CALLBACK -> Unit
 
             else -> Unit
         }
@@ -155,6 +204,64 @@ class MenuCallbacksHandler(
         markup?.let { request.replyMarkup(it) }
         threadId?.let { request.messageThreadId(it) }
         bot.execute(request)
+    }
+
+    private suspend fun renderTablesPage(
+        chatId: Long,
+        threadId: Int?,
+        lang: String?,
+        clubId: Long,
+        startUtc: Instant,
+        page: Int,
+    ) {
+        val tables = safeLoadTables(clubId, startUtc)
+        val totalTables = tables.size
+        if (totalTables == 0) {
+            logger.info("ui.tables.page page={} size={} total={}", 1, TABLES_PAGE_SIZE, totalTables)
+            send(chatId, threadId, texts.noTables(lang))
+            return
+        }
+        val endUtc = resolveNightEndUtc(clubId, startUtc) ?: startUtc.plus(DEFAULT_NIGHT_DURATION)
+        val totalPages = maxOf((totalTables + TABLES_PAGE_SIZE - 1) / TABLES_PAGE_SIZE, 1)
+        val targetPage = page.coerceIn(1, totalPages)
+        val markup =
+            keyboards.tablesKeyboard(tables, targetPage, TABLES_PAGE_SIZE) { dto ->
+                TableSelectCodec.encode(clubId, startUtc, endUtc, dto.tableId)
+            }
+        logger.info("ui.tables.page page={} size={} total={}", targetPage, TABLES_PAGE_SIZE, totalTables)
+        send(chatId, threadId, texts.chooseTable(lang), markup)
+    }
+
+    private suspend fun safeLoadTables(
+        clubId: Long,
+        startUtc: Instant,
+    ): List<TableAvailabilityDto> =
+        withContext(Dispatchers.IO) {
+            try {
+                availability.listFreeTables(clubId, startUtc)
+            } catch (ex: Exception) {
+                logger.error("Failed to load tables for club {} start {}", clubId, startUtc, ex)
+                emptyList()
+            }
+        }
+
+    private suspend fun resolveNightEndUtc(
+        clubId: Long,
+        startUtc: Instant,
+    ): Instant? {
+        val nights = safeLoadNights(clubId) ?: return null
+        return nights.firstOrNull { it.eventStartUtc == startUtc }?.eventEndUtc
+    }
+
+    private fun buildTableConfirmationMessage(
+        decoded: DecodedTable,
+        lang: String?,
+    ): String {
+        return if (isEnglish(lang)) {
+            "Table #${decoded.tableId} selected • club ${decoded.clubId} • night ${decoded.startUtc}"
+        } else {
+            "Выбран стол #${decoded.tableId} • клуб ${decoded.clubId} • ночь ${decoded.startUtc}"
+        }
     }
 
     private fun buildClubSelectionMessage(
@@ -213,6 +320,11 @@ class MenuCallbacksHandler(
         private const val MENU_CLUBS = "menu:clubs"
         private const val CLUB_PREFIX = "club:"
         private const val NIGHT_PREFIX = "night:"
+        private const val PAGE_PREFIX = "pg:"
+        private const val TABLE_PREFIX = "tbl:"
+        private const val TABLES_PAGE_SIZE = 8
+        private const val NOOP_CALLBACK = "noop"
+        private val DEFAULT_NIGHT_DURATION: Duration = Duration.ofHours(8)
         private const val CLUB_LIST_LIMIT = 8
         private const val NIGHT_LIST_LIMIT = 8
         private val RUSSIAN_LOCALE: Locale = Locale("ru", "RU")

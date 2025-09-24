@@ -24,6 +24,8 @@ import com.example.bot.telegram.ott.BookTableAction
 import com.example.bot.telegram.ott.CallbackQueryHandler
 import com.example.bot.telegram.ott.CallbackTokenService
 import com.example.bot.telegram.ott.KeyboardFactory
+import com.example.bot.telegram.ui.ChatUiSessionStore
+import com.example.bot.telegram.ui.InMemoryChatUiSessionStore
 import com.example.bot.workers.OutboxWorker
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.UpdatesListener
@@ -74,7 +76,8 @@ fun Application.module() {
             single { CallbackTokenService() }
             single<ClubRepository> { ExposedClubRepository(get()) }
             single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
-            single { MenuCallbacksHandler(get(), get(), get(), get(), get(), get()) }
+            single<ChatUiSessionStore> { InMemoryChatUiSessionStore() }
+            single { MenuCallbacksHandler(get(), get(), get(), get(), get(), get(), get()) }
             single { CallbackQueryHandler(get(), get(), get()) }
         }
     install(Koin) {

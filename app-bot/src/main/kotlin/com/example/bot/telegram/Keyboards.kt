@@ -71,7 +71,7 @@ class Keyboards(private val texts: BotTexts) {
                 .map { t ->
                     arrayOf(
                         InlineKeyboardButton("Table ${t.tableNumber} · от ${t.minDeposit}₽")
-                            .callbackData("tbl:${encode(t)}"),
+                            .callbackData(encode(t).ensureTablePrefix()),
                     )
                 }.toMutableList()
         val totalPages = (tables.size + pageSize - 1) / pageSize
@@ -115,3 +115,8 @@ class Keyboards(private val texts: BotTexts) {
 }
 
 private const val GUESTS_PER_ROW = 4
+private const val TABLE_PREFIX = "tbl:"
+
+private fun String.ensureTablePrefix(): String {
+    return if (startsWith(TABLE_PREFIX)) this else TABLE_PREFIX + this
+}
