@@ -319,7 +319,7 @@ class MenuCallbacksHandler(
                     decoded.startUtc.epochSecond,
                     decoded.guests,
                 )
-                send(chatId, threadId, texts.unknownError(lang))
+                send(chatId, threadId, texts.bookingNotFound(lang))
                 confirmResult
             }
 
@@ -733,7 +733,7 @@ class MenuCallbacksHandler(
             "${texts.receiptDate(lang)}: $dateLine",
             "${texts.receiptTable(lang)}: #$tableNumber",
             "${texts.receiptGuests(lang)}: $guests",
-            "${texts.receiptDepositFrom(lang)}: $deposit ₽",
+            "${texts.receiptDepositFrom(lang)}: $deposit",
         ).joinToString("\n")
     }
 
