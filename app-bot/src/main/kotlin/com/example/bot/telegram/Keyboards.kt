@@ -3,7 +3,7 @@
 package com.example.bot.telegram
 
 import com.example.bot.availability.TableAvailabilityDto
-import com.example.bot.i18n.BotTexts
+import com.example.bot.text.BotTexts
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 

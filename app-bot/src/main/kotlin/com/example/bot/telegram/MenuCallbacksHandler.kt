@@ -8,13 +8,14 @@ import com.example.bot.booking.BookingService
 import com.example.bot.booking.HoldRequest
 import com.example.bot.data.repo.ClubDto
 import com.example.bot.data.repo.ClubRepository
-import com.example.bot.i18n.BotTexts
 import com.example.bot.telegram.tokens.ClubTokenCodec
 import com.example.bot.telegram.tokens.DecodedGuests
 import com.example.bot.telegram.tokens.GuestsSelectCodec
 import com.example.bot.telegram.tokens.NightTokenCodec
 import com.example.bot.telegram.tokens.TableSelectCodec
 import com.example.bot.telegram.ui.ChatUiSessionStore
+import com.example.bot.text.BotLocales
+import com.example.bot.text.BotTexts
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.CallbackQuery
 import com.pengrad.telegrambot.model.Update
@@ -26,13 +27,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
-import java.text.NumberFormat
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle
-import java.util.Locale
 import java.util.UUID
 
 /**
@@ -81,35 +79,17 @@ class MenuCallbacksHandler(
                     val clubId = ClubTokenCodec.decode(token)
                     if (clubId == null) {
                         logger.warn("Malformed club token: {}", token)
-                        val text =
-                            if (isEnglish(lang)) {
-                                "We couldn't recognize this club. Please refresh the list."
-                            } else {
-                                "Не удалось распознать клуб. Обновите список клубов."
-                            }
-                        send(chatId, threadId, text)
+                        send(chatId, threadId, texts.buttonExpired(lang))
                         return@launch
                     }
 
                     val nights = safeLoadNights(clubId)
                     if (nights == null) {
-                        val text =
-                            if (isEnglish(lang)) {
-                                "Failed to load nights. Please try again."
-                            } else {
-                                "Не получилось загрузить ночи. Попробуйте ещё раз."
-                            }
-                        send(chatId, threadId, text)
+                        send(chatId, threadId, texts.nightsLoadError(lang))
                         return@launch
                     }
                     if (nights.isEmpty()) {
-                        val text =
-                            if (isEnglish(lang)) {
-                                "No open nights available right now. Please check back later."
-                            } else {
-                                "Сейчас нет ночей с открытым бронированием. Загляните позже."
-                            }
-                        send(chatId, threadId, text)
+                        send(chatId, threadId, texts.noNights(lang))
                         return@launch
                     }
 
@@ -255,7 +235,7 @@ class MenuCallbacksHandler(
                     decoded.tableId,
                     decoded.startUtc.epochSecond,
                 )
-                send(chatId, threadId, holdFailedText(lang))
+                send(chatId, threadId, texts.unknownError(lang))
                 null
             }
         }
@@ -307,7 +287,7 @@ class MenuCallbacksHandler(
                     decoded.startUtc.epochSecond,
                     decoded.guests,
                 )
-                send(chatId, threadId, confirmFailedText(lang))
+                send(chatId, threadId, texts.unknownError(lang))
                 null
             }
 
@@ -319,7 +299,7 @@ class MenuCallbacksHandler(
                     decoded.tableId,
                     decoded.startUtc.epochSecond,
                 )
-                send(chatId, threadId, confirmFailedText(lang))
+                send(chatId, threadId, texts.unknownError(lang))
                 null
             }
         }
@@ -365,7 +345,7 @@ class MenuCallbacksHandler(
                     decoded.startUtc.epochSecond,
                     decoded.guests,
                 )
-                send(chatId, threadId, bookingNotFoundText(lang))
+                send(chatId, threadId, texts.bookingNotFound(lang))
             }
 
             BookingCmdResult.IdempotencyConflict -> {
@@ -385,7 +365,7 @@ class MenuCallbacksHandler(
                     decoded.startUtc.epochSecond,
                     decoded.guests,
                 )
-                send(chatId, threadId, confirmFailedText(lang))
+                send(chatId, threadId, texts.unknownError(lang))
             }
         }
     }
@@ -556,26 +536,46 @@ class MenuCallbacksHandler(
     ): String {
         val clubName = resolveClubName(decoded.clubId) ?: decoded.clubId.toString()
         val night = findNight(decoded.clubId, decoded.startUtc)
-        val eventWindow = formatEventWindow(night, decoded.startUtc, slotEnd, lang)
-        val depositEstimate = table.minDeposit.toLong() * decoded.guests
-        val formattedDeposit = formatCurrency(depositEstimate, lang)
-        val clubLine = if (isEnglish(lang)) "Club: $clubName" else "Клуб: $clubName"
-        val dateLine = if (isEnglish(lang)) "Date: $eventWindow" else "Дата: $eventWindow"
-        val tableLine = if (isEnglish(lang)) "Table: #${table.tableNumber}" else "Стол: #${table.tableNumber}"
-        val guestsLine = if (isEnglish(lang)) "Guests: ${decoded.guests}" else "Гостей: ${decoded.guests}"
-        val depositLine =
-            if (isEnglish(lang)) {
-                "Deposit: from $formattedDeposit ₽"
-            } else {
-                "Депозит: от $formattedDeposit ₽"
-            }
+        val zone = resolveZone(night?.timezone)
+        val endUtc = if (night != null) night.eventEndUtc else slotEnd
+        val safeEnd = if (endUtc.isAfter(decoded.startUtc)) endUtc else decoded.startUtc.plus(DEFAULT_NIGHT_DURATION)
+        val depositFromMinor = table.minDeposit.toLong() * decoded.guests * 100L
+        return formatReceipt(
+            lang = lang,
+            clubName = clubName,
+            zone = zone,
+            startUtc = decoded.startUtc,
+            endUtc = safeEnd,
+            tableNumber = table.tableNumber,
+            guests = decoded.guests,
+            depositFromMinor = depositFromMinor,
+        )
+    }
+
+    private fun formatReceipt(
+        lang: String?,
+        clubName: String,
+        zone: ZoneId,
+        startUtc: Instant,
+        endUtc: Instant,
+        tableNumber: String,
+        guests: Int,
+        depositFromMinor: Long,
+    ): String {
+        val locale = BotLocales.resolve(lang)
+        val day = BotLocales.dayNameShort(startUtc, zone, locale)
+        val date = BotLocales.dateDMmm(startUtc, zone, locale)
+        val start = BotLocales.timeHHmm(startUtc, zone, locale)
+        val end = BotLocales.timeHHmm(endUtc, zone, locale)
+        val dateLine = "$day, $date · $start–$end"
+        val deposit = BotLocales.money(depositFromMinor, locale)
         return listOf(
             texts.bookingConfirmedTitle(lang),
-            clubLine,
-            dateLine,
-            tableLine,
-            guestsLine,
-            depositLine,
+            "${texts.receiptClub(lang)}: $clubName",
+            "${texts.receiptDate(lang)}: $dateLine",
+            "${texts.receiptTable(lang)}: #$tableNumber",
+            "${texts.receiptGuests(lang)}: $guests",
+            "${texts.receiptDepositFrom(lang)}: $deposit ₽",
         ).joinToString("\n")
     }
 
@@ -583,60 +583,6 @@ class MenuCallbacksHandler(
         val clubs = safeLoadClubs(CLUB_LOOKUP_LIMIT)
         return clubs.firstOrNull { it.id == clubId }?.name
     }
-
-    private fun formatEventWindow(
-        night: NightDto?,
-        startUtc: Instant,
-        endUtc: Instant,
-        lang: String?,
-    ): String {
-        return if (night != null) {
-            formatNightLabel(night, lang)
-        } else {
-            val locale = if (isEnglish(lang)) Locale.ENGLISH else RUSSIAN_LOCALE
-            val dateFormatter = DateTimeFormatter.ofPattern("d MMM", locale)
-            val timeFormatter = DateTimeFormatter.ofPattern("HH:mm", locale)
-            val startZoned = startUtc.atZone(ZoneOffset.UTC)
-            val endZoned = endUtc.atZone(ZoneOffset.UTC)
-            val day =
-                startZoned.dayOfWeek
-                    .getDisplayName(TextStyle.SHORT, locale)
-                    .replaceFirstChar { ch -> if (ch.isLowerCase()) ch.titlecase(locale) else ch.toString() }
-            val date = startZoned.format(dateFormatter)
-            val start = startZoned.format(timeFormatter)
-            val end = endZoned.format(timeFormatter)
-            "$day, $date · $start–$end"
-        }
-    }
-
-    private fun formatCurrency(
-        amount: Long,
-        lang: String?,
-    ): String {
-        val locale = if (isEnglish(lang)) Locale.ENGLISH else RUSSIAN_LOCALE
-        return NumberFormat.getIntegerInstance(locale).format(amount)
-    }
-
-    private fun holdFailedText(lang: String?) =
-        if (isEnglish(lang)) {
-            "We couldn't hold the table. Please try again."
-        } else {
-            "Не получилось удержать стол, попробуйте ещё раз."
-        }
-
-    private fun confirmFailedText(lang: String?) =
-        if (isEnglish(lang)) {
-            "We couldn't confirm the booking. Please try again."
-        } else {
-            "Не получилось подтвердить бронь. Попробуйте ещё раз."
-        }
-
-    private fun bookingNotFoundText(lang: String?) =
-        if (isEnglish(lang)) {
-            "Booking not found. Please try again."
-        } else {
-            "Бронь не найдена, попробуйте ещё раз."
-        }
 
     private fun buildClubSelectionMessage(
         clubs: List<ClubDto>,
@@ -663,7 +609,7 @@ class MenuCallbacksHandler(
         nights: List<NightDto>,
         lang: String?,
     ): String {
-        val header = if (isEnglish(lang)) "Choose a night:" else "Выберите ночь:"
+        val header = texts.chooseNight(lang)
         if (nights.isEmpty()) return header
         val details = nights.joinToString("\n") { night -> "• ${formatNightLabel(night, lang)}" }
         return "$header\n\n$details"
@@ -673,21 +619,24 @@ class MenuCallbacksHandler(
         night: NightDto,
         lang: String?,
     ): String {
-        val locale = if (isEnglish(lang)) Locale.ENGLISH else RUSSIAN_LOCALE
-        val dateFormatter = DateTimeFormatter.ofPattern("d MMM", locale)
-        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm", locale)
-        val day =
-            night.openLocal.dayOfWeek
-                .getDisplayName(TextStyle.SHORT, locale)
-                .replaceFirstChar { ch -> if (ch.isLowerCase()) ch.titlecase(locale) else ch.toString() }
-        val date = night.openLocal.format(dateFormatter)
-        val start = night.openLocal.format(timeFormatter)
-        val end = night.closeLocal.format(timeFormatter)
+        val locale = BotLocales.resolve(lang)
+        val zone = resolveZone(night.timezone)
+        val day = BotLocales.dayNameShort(night.eventStartUtc, zone, locale)
+        val date = BotLocales.dateDMmm(night.eventStartUtc, zone, locale)
+        val start = BotLocales.timeHHmm(night.eventStartUtc, zone, locale)
+        val end = BotLocales.timeHHmm(night.eventEndUtc, zone, locale)
         val base = "$day, $date · $start–$end"
         return if (night.isSpecial) "✨ $base" else base
     }
 
-    private fun isEnglish(lang: String?): Boolean = lang?.startsWith("en", ignoreCase = true) == true
+    private fun resolveZone(timezone: String?): ZoneId =
+        timezone?.let {
+            try {
+                ZoneId.of(it)
+            } catch (_: Exception) {
+                ZoneOffset.UTC
+            }
+        } ?: ZoneOffset.UTC
 
     private companion object {
         private const val DELIMITER = ":"
@@ -704,6 +653,5 @@ class MenuCallbacksHandler(
         private const val CLUB_LIST_LIMIT = 8
         private const val CLUB_LOOKUP_LIMIT = 32
         private const val NIGHT_LIST_LIMIT = 8
-        private val RUSSIAN_LOCALE: Locale = Locale("ru", "RU")
     }
 }

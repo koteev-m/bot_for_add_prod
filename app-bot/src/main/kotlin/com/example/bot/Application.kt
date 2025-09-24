@@ -5,7 +5,6 @@ import com.example.bot.data.repo.ClubRepository
 import com.example.bot.data.repo.ExposedClubRepository
 import com.example.bot.di.bookingModule
 import com.example.bot.di.securityModule
-import com.example.bot.i18n.BotTexts
 import com.example.bot.metrics.AppMetricsBinder
 import com.example.bot.plugins.installAppConfig
 import com.example.bot.plugins.installMetrics
@@ -26,6 +25,7 @@ import com.example.bot.telegram.ott.CallbackTokenService
 import com.example.bot.telegram.ott.KeyboardFactory
 import com.example.bot.telegram.ui.ChatUiSessionStore
 import com.example.bot.telegram.ui.InMemoryChatUiSessionStore
+import com.example.bot.text.BotTexts
 import com.example.bot.workers.OutboxWorker
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.UpdatesListener

@@ -2,8 +2,8 @@ package com.example.bot
 
 import com.example.bot.availability.TableAvailabilityDto
 import com.example.bot.availability.TableStatus
-import com.example.bot.i18n.BotTexts
 import com.example.bot.telegram.Keyboards
+import com.example.bot.text.BotTexts
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 
