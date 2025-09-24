@@ -74,7 +74,7 @@ class MenuCallbacksHandler(
                 else -> null
             }
         if (routeTag != null) {
-            UiBookingMetrics.menuClicks.incrementAndGet()
+            UiBookingMetrics.incMenuClicks()
             logger.info("ui.menu.route route={}", routeTag)
         }
 
@@ -86,7 +86,7 @@ class MenuCallbacksHandler(
                     val clubButtons = clubs.map { club -> ClubTokenCodec.encode(club.id) to club.name }
                     val markup = keyboards.clubsKeyboard(clubButtons)
                     send(chatId, threadId, text, markup)
-                    UiBookingMetrics.nightsRendered.incrementAndGet()
+                    UiBookingMetrics.incNightsRendered()
                 }
 
             data.startsWith(CLUB_PREFIX) && chatId != null ->
@@ -116,7 +116,7 @@ class MenuCallbacksHandler(
                     val text = buildNightsSelectionMessage(nights, lang)
                     val markup = keyboards.nightsKeyboard(buttons)
                     send(chatId, threadId, text, markup)
-                    UiBookingMetrics.nightsRendered.incrementAndGet()
+                    UiBookingMetrics.incNightsRendered()
                 }
 
             data.startsWith(NIGHT_PREFIX) && chatId != null ->
@@ -163,7 +163,7 @@ class MenuCallbacksHandler(
                             pageNumber,
                         )
                     if (rendered) {
-                        UiBookingMetrics.pagesRendered.incrementAndGet()
+                        UiBookingMetrics.incPagesRendered()
                     }
                 }
 
@@ -198,7 +198,7 @@ class MenuCallbacksHandler(
                             GuestsSelectCodec.encode(clubId, startUtc, endUtc, tableId, guests)
                         }
                     send(chatId, threadId, texts.chooseGuests(lang), markup)
-                    UiBookingMetrics.tableChosen.incrementAndGet()
+                    UiBookingMetrics.incTableChosen()
                 }
 
             data.startsWith(GUEST_PREFIX) && chatId != null ->
@@ -468,7 +468,7 @@ class MenuCallbacksHandler(
             }
         logger.info("ui.tables.page page={} size={} total={}", targetPage, TABLES_PAGE_SIZE, totalTables)
         send(chatId, threadId, texts.chooseTable(lang), markup)
-        UiBookingMetrics.tablesRendered.incrementAndGet()
+        UiBookingMetrics.incTablesRendered()
         return true
     }
 
@@ -479,7 +479,7 @@ class MenuCallbacksHandler(
         lang: String?,
         decoded: DecodedGuests,
     ) {
-        UiBookingMetrics.guestsChosen.incrementAndGet()
+        UiBookingMetrics.incGuestsChosen()
         val mdcPairs =
             listOf(
                 "clubId" to decoded.clubId.toString(),
@@ -501,9 +501,9 @@ class MenuCallbacksHandler(
                 mdcPairs.forEach { (key, _) -> MDC.remove(key) }
             }
         if (outcome.success) {
-            UiBookingMetrics.bookingSuccess.incrementAndGet()
+            UiBookingMetrics.incBookingSuccess()
         } else {
-            UiBookingMetrics.bookingError.incrementAndGet()
+            UiBookingMetrics.incBookingError()
         }
         logger.info(
             "ui.booking.outcome outcome={} reason={}",
@@ -727,11 +727,7 @@ class MenuCallbacksHandler(
         val start = BotLocales.timeHHmm(startUtc, zone, locale)
         val end = BotLocales.timeHHmm(endUtc, zone, locale)
         val dateLine = "$day, $date · $start–$end"
-        val deposit = BotLocales.money(depositFromMinor, locale)
-        val depositDisplay =
-            BotLocales.currencySymbol(lang).takeIf { it.isNotEmpty() }?.let { symbol ->
-                "$deposit $symbol"
-            } ?: deposit
+        val depositDisplay = BotLocales.money(depositFromMinor, locale) + texts.receiptCurrencySuffix(lang)
         return listOf(
             texts.bookingConfirmedTitle(lang),
             "${texts.receiptClub(lang)}: $clubName",

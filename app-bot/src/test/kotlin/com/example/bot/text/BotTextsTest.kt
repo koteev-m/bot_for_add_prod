@@ -68,6 +68,15 @@ class BotTextsTest {
     }
 
     @Test
+    fun `receipt currency suffix localized`() {
+        assertAll(
+            { assertEquals(" ₽", texts.receiptCurrencySuffix(null)) },
+            { assertEquals(" ₽", texts.receiptCurrencySuffix("ru")) },
+            { assertEquals("", texts.receiptCurrencySuffix("en")) },
+        )
+    }
+
+    @Test
     fun `receipt texts localized`() {
         assertAll(
             { assertEquals("Бронь подтверждена ✅", texts.bookingConfirmedTitle(null)) },
