@@ -103,7 +103,7 @@ class Keyboards(private val texts: BotTexts) {
         val rows = mutableListOf<Array<InlineKeyboardButton>>()
         var row = mutableListOf<InlineKeyboardButton>()
         for (i in 1..capacity) {
-            row += InlineKeyboardButton(i.toString()).callbackData("g:${encode(i)}")
+            row += InlineKeyboardButton(i.toString()).callbackData(encode(i).ensureGuestPrefix())
             if (row.size == GUESTS_PER_ROW) {
                 rows += row.toTypedArray()
                 row = mutableListOf()
@@ -116,7 +116,12 @@ class Keyboards(private val texts: BotTexts) {
 
 private const val GUESTS_PER_ROW = 4
 private const val TABLE_PREFIX = "tbl:"
+private const val GUEST_PREFIX = "g:"
 
 private fun String.ensureTablePrefix(): String {
     return if (startsWith(TABLE_PREFIX)) this else TABLE_PREFIX + this
+}
+
+private fun String.ensureGuestPrefix(): String {
+    return if (startsWith(GUEST_PREFIX)) this else GUEST_PREFIX + this
 }

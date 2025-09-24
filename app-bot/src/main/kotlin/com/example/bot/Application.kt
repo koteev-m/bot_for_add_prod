@@ -77,7 +77,7 @@ fun Application.module() {
             single<ClubRepository> { ExposedClubRepository(get()) }
             single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
             single<ChatUiSessionStore> { InMemoryChatUiSessionStore() }
-            single { MenuCallbacksHandler(get(), get(), get(), get(), get(), get(), get()) }
+            single { MenuCallbacksHandler(get(), get(), get(), get(), get(), get(), get(), get()) }
             single { CallbackQueryHandler(get(), get(), get()) }
         }
     install(Koin) {

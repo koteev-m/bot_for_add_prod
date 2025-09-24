@@ -3,6 +3,7 @@ package com.example.bot.i18n
 /**
  * Localized bot texts used across guest flow.
  */
+@Suppress("TooManyFunctions")
 class BotTexts {
     /**
      * Returns greeting text based on [lang]. Defaults to Russian.
@@ -30,6 +31,39 @@ class BotTexts {
      * Prompt shown before table selection.
      */
     fun chooseTable(lang: String?): String = if (lang.isEnglish()) "Choose a table:" else "Выберите стол:"
+
+    fun chooseGuests(lang: String?) =
+        if (lang.isEnglish()) "Choose number of guests:" else "Выберите количество гостей:"
+
+    fun buttonExpired(lang: String?) =
+        if (lang.isEnglish()) {
+            "The button has expired, please refresh the screen."
+        } else {
+            "Кнопка устарела, обновите экран."
+        }
+
+    fun tableTaken(lang: String?) =
+        if (lang.isEnglish()) {
+            "This table is already taken. Please choose another one."
+        } else {
+            "Стол уже занят. Выберите другой, пожалуйста."
+        }
+
+    fun tooManyRequests(lang: String?) =
+        if (lang.isEnglish()) {
+            "Too many requests. Please try again."
+        } else {
+            "Слишком много запросов. Попробуйте ещё раз."
+        }
+
+    fun holdExpired(lang: String?) =
+        if (lang.isEnglish()) {
+            "Hold expired. Please try again."
+        } else {
+            "Пауза истекла. Попробуйте снова."
+        }
+
+    fun bookingConfirmedTitle(lang: String?) = if (lang.isEnglish()) "Booking confirmed ✅" else "Бронь подтверждена ✅"
 
     fun sessionExpired(lang: String?) =
         if (lang.isEnglish()) {
