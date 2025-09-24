@@ -56,9 +56,6 @@ class CallbackQueryHandler(
     }
 
     private fun isMenuCallback(data: String): Boolean {
-        if (data == NOOP_CALLBACK) {
-            return true
-        }
         return MENU_PREFIXES.any { prefix -> data.startsWith(prefix) }
     }
 
@@ -77,5 +74,14 @@ class CallbackQueryHandler(
     }
 }
 
-private val MENU_PREFIXES = listOf("menu:", "club:", "night:", "tbl:", "pg:")
 private const val NOOP_CALLBACK = "noop"
+private val MENU_PREFIXES =
+    listOf(
+        "menu:",
+        "club:",
+        "night:",
+        "tbl:",
+        "pg:",
+        "g:",
+        NOOP_CALLBACK,
+    )
