@@ -16,7 +16,8 @@ class PaginationTest :
             }
 
         "creates navigation buttons" {
-            val keyboard = kb.tablesKeyboard(tables, page = 1, pageSize = 5) { it.tableId.toString() }
+            val keyboard =
+                kb.tablesKeyboard(tables, page = 1, pageSize = 5, lang = "ru") { it.tableId.toString() }
             val rows = keyboard.inlineKeyboard()
             rows.last().shouldHaveSize(2) // indicator and next on first page
         }

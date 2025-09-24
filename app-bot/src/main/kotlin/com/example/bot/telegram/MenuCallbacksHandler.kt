@@ -3,6 +3,7 @@ package com.example.bot.telegram
 import com.example.bot.availability.AvailabilityService
 import com.example.bot.availability.NightDto
 import com.example.bot.availability.TableAvailabilityDto
+import com.example.bot.availability.minDepositMinor
 import com.example.bot.booking.BookingCmdResult
 import com.example.bot.booking.BookingService
 import com.example.bot.booking.HoldRequest
@@ -462,7 +463,7 @@ class MenuCallbacksHandler(
         val totalPages = maxOf((totalTables + TABLES_PAGE_SIZE - 1) / TABLES_PAGE_SIZE, 1)
         val targetPage = page.coerceIn(1, totalPages)
         val markup =
-            keyboards.tablesKeyboard(tables, targetPage, TABLES_PAGE_SIZE) { dto ->
+            keyboards.tablesKeyboard(tables, targetPage, TABLES_PAGE_SIZE, lang) { dto ->
                 TableSelectCodec.encode(clubId, startUtc, endUtc, dto.tableId)
             }
         logger.info("ui.tables.page page={} size={} total={}", targetPage, TABLES_PAGE_SIZE, totalTables)
@@ -697,7 +698,7 @@ class MenuCallbacksHandler(
         val zone = resolveZone(night?.timezone)
         val endUtc = if (night != null) night.eventEndUtc else slotEnd
         val safeEnd = if (endUtc.isAfter(decoded.startUtc)) endUtc else decoded.startUtc.plus(DEFAULT_NIGHT_DURATION)
-        val depositFromMinor = table.minDeposit.toLong() * decoded.guests * 100L
+        val depositFromMinor = table.minDepositMinor() * decoded.guests
         return formatReceipt(
             lang = lang,
             clubName = clubName,
@@ -727,13 +728,17 @@ class MenuCallbacksHandler(
         val end = BotLocales.timeHHmm(endUtc, zone, locale)
         val dateLine = "$day, $date · $start–$end"
         val deposit = BotLocales.money(depositFromMinor, locale)
+        val depositDisplay =
+            BotLocales.currencySymbol(lang).takeIf { it.isNotEmpty() }?.let { symbol ->
+                "$deposit $symbol"
+            } ?: deposit
         return listOf(
             texts.bookingConfirmedTitle(lang),
             "${texts.receiptClub(lang)}: $clubName",
             "${texts.receiptDate(lang)}: $dateLine",
             "${texts.receiptTable(lang)}: #$tableNumber",
             "${texts.receiptGuests(lang)}: $guests",
-            "${texts.receiptDepositFrom(lang)}: $deposit",
+            "${texts.receiptDepositFrom(lang)}: $depositDisplay",
         ).joinToString("\n")
     }
 

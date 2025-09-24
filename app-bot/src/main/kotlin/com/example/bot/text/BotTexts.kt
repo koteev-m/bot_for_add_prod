@@ -44,6 +44,28 @@ class BotTexts {
             "Выберите количество гостей:"
         }
 
+    fun tableLabel(
+        lang: String?,
+        tableNumber: Int,
+        minDepositMinor: Long,
+    ): String = tableLabel(lang, tableNumber.toString(), minDepositMinor)
+
+    fun tableLabel(
+        lang: String?,
+        tableNumber: String,
+        minDepositMinor: Long,
+    ): String {
+        val locale = BotLocales.resolve(lang)
+        val amount = BotLocales.money(minDepositMinor, locale)
+        return if (isEn(lang)) {
+            "Table $tableNumber · from $amount"
+        } else {
+            val symbol = BotLocales.currencySymbol(lang)
+            val suffix = if (symbol.isNotEmpty()) " $symbol" else ""
+            "Стол $tableNumber · от $amount$suffix"
+        }
+    }
+
     // ====== Фоллбеки/ошибки ======
     fun sessionExpired(lang: String?): String =
         if (isEn(lang)) {

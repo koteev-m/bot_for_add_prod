@@ -39,6 +39,8 @@ data class TableAvailabilityDto(
     val status: TableStatus,
 )
 
+fun TableAvailabilityDto.minDepositMinor(): Long = minDeposit.toLong() * 100L
+
 /**
  * Internal representation of a table entity.
  */
