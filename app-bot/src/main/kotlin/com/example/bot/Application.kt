@@ -1,11 +1,13 @@
 package com.example.bot
 
+import com.example.bot.booking.BookingService
 import com.example.bot.config.BotLimits
 import com.example.bot.data.repo.ClubRepository
 import com.example.bot.data.repo.ExposedClubRepository
 import com.example.bot.di.bookingModule
 import com.example.bot.di.securityModule
 import com.example.bot.metrics.AppMetricsBinder
+import com.example.bot.plugins.configureSecurity
 import com.example.bot.plugins.installAppConfig
 import com.example.bot.plugins.installMetrics
 import com.example.bot.plugins.installMigrationsAndDatabase
@@ -16,6 +18,7 @@ import com.example.bot.render.DefaultHallRenderer
 import com.example.bot.routes.hallImageRoute
 import com.example.bot.routes.healthRoute
 import com.example.bot.routes.readinessRoute
+import com.example.bot.routes.securedRoutes
 import com.example.bot.server.installServerTuning
 import com.example.bot.telegram.Keyboards
 import com.example.bot.telegram.MenuCallbacksHandler
@@ -31,10 +34,12 @@ import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.UpdatesListener
 import com.pengrad.telegrambot.model.Update
 import com.pengrad.telegrambot.request.SendMessage
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStarted
 import io.ktor.server.application.ApplicationStopped
 import io.ktor.server.application.install
+import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +70,7 @@ fun Application.module() {
     // 4) Observability (18.4)
     installRequestLogging()
     installMetrics()
+    install(ContentNegotiation) { json() }
     AppMetricsBinder.bindAll(meterRegistry())
 
     val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN") ?: BotLimits.Demo.FALLBACK_TOKEN
@@ -85,10 +91,13 @@ fun Application.module() {
         modules(bookingModule, securityModule, telegramModule)
     }
 
+    configureSecurity()
+
     val outboxWorker by inject<OutboxWorker>()
     val bot by inject<TelegramBot>()
     val ottService by inject<CallbackTokenService>()
     val callbackHandler by inject<CallbackQueryHandler>()
+    val bookingService by inject<BookingService>()
     var workerJob: Job? = null
     environment.monitor.subscribe(ApplicationStarted) {
         workerJob = launch { outboxWorker.run() }
@@ -104,6 +113,8 @@ fun Application.module() {
         hallImageRoute(renderer) { _, _ -> demoStateKey }
         // … остальные маршруты приложения
     }
+
+    securedRoutes(bookingService)
 
     // Telegram bot demo integration
     bot.setUpdatesListener(

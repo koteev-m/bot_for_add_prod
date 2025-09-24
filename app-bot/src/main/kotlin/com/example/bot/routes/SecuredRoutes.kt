@@ -1,5 +1,6 @@
 package com.example.bot.routes
 
+import com.example.bot.booking.BookingService
 import com.example.bot.data.security.Role
 import com.example.bot.security.rbac.ClubScope
 import com.example.bot.security.rbac.authorize
@@ -15,8 +16,9 @@ import io.ktor.server.routing.routing
 /**
  * Example secured HTTP routes using RBAC DSL.
  */
-fun Application.securedRoutes() {
+fun Application.securedRoutes(bookingService: BookingService) {
     routing {
+        securedBookingRoutes(bookingService)
         authorize(Role.OWNER, Role.GLOBAL_ADMIN, Role.HEAD_MANAGER) {
             get("/api/admin/overview") {
                 call.respondText("overview")
