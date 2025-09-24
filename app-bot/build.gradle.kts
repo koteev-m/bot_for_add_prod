@@ -55,6 +55,7 @@ dependencies {
     testImplementation(libs.kotest.runner)
     testImplementation(libs.kotest.assertions)
     testImplementation(libs.mockk)
+    testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.h2)
     testImplementation(libs.postgres)
     testImplementation(libs.testcontainers.postgresql)
