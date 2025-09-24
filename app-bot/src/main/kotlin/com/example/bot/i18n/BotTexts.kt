@@ -31,6 +31,20 @@ class BotTexts {
      */
     fun chooseTable(lang: String?): String = if (lang.isEnglish()) "Choose a table:" else "Выберите стол:"
 
+    fun sessionExpired(lang: String?) =
+        if (lang.isEnglish()) {
+            "The session has expired, please start over."
+        } else {
+            "Сессия устарела, начните выбор заново."
+        }
+
+    fun noTables(lang: String?) =
+        if (lang.isEnglish()) {
+            "No free tables for this night."
+        } else {
+            "Свободных столов на эту ночь нет."
+        }
+
     data class Menu(val chooseClub: String, val myBookings: String, val ask: String, val music: String)
 
     private fun String?.isEnglish(): Boolean = this?.startsWith("en", ignoreCase = true) == true
