@@ -18,13 +18,6 @@ object BotLocales {
             RU
         }
 
-    fun currencySymbol(lang: String?): String =
-        if (lang?.startsWith("en", ignoreCase = true) == true) {
-            ""
-        } else {
-            "₽"
-        }
-
     fun dayNameShort(
         instant: Instant,
         zone: ZoneId,

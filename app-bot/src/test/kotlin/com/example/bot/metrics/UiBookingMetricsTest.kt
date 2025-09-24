@@ -13,14 +13,6 @@ class UiBookingMetricsTest {
 
     @BeforeEach
     fun setUp() {
-        UiBookingMetrics.menuClicks.set(0)
-        UiBookingMetrics.nightsRendered.set(0)
-        UiBookingMetrics.tablesRendered.set(0)
-        UiBookingMetrics.pagesRendered.set(0)
-        UiBookingMetrics.tableChosen.set(0)
-        UiBookingMetrics.guestsChosen.set(0)
-        UiBookingMetrics.bookingSuccess.set(0)
-        UiBookingMetrics.bookingError.set(0)
         registry = SimpleMeterRegistry()
         UiBookingMetrics.bind(registry)
     }
@@ -32,23 +24,23 @@ class UiBookingMetricsTest {
 
     @Test
     fun `counters are exposed via gauges`() {
-        UiBookingMetrics.menuClicks.incrementAndGet()
-        UiBookingMetrics.nightsRendered.incrementAndGet()
-        UiBookingMetrics.tablesRendered.incrementAndGet()
-        UiBookingMetrics.pagesRendered.incrementAndGet()
-        UiBookingMetrics.tableChosen.incrementAndGet()
-        UiBookingMetrics.guestsChosen.incrementAndGet()
-        UiBookingMetrics.bookingSuccess.incrementAndGet()
-        UiBookingMetrics.bookingError.incrementAndGet()
+        UiBookingMetrics.incMenuClicks()
+        UiBookingMetrics.incNightsRendered()
+        UiBookingMetrics.incTablesRendered()
+        UiBookingMetrics.incPagesRendered()
+        UiBookingMetrics.incTableChosen()
+        UiBookingMetrics.incGuestsChosen()
+        UiBookingMetrics.incBookingSuccess()
+        UiBookingMetrics.incBookingError()
 
-        assertEquals(1.0, registry.get("ui.menu.clicks").gauge().value())
-        assertEquals(1.0, registry.get("ui.nights.rendered").gauge().value())
-        assertEquals(1.0, registry.get("ui.tables.rendered").gauge().value())
-        assertEquals(1.0, registry.get("ui.tables.pages").gauge().value())
-        assertEquals(1.0, registry.get("ui.table.chosen").gauge().value())
-        assertEquals(1.0, registry.get("ui.guests.chosen").gauge().value())
-        assertEquals(1.0, registry.get("ui.booking.success").gauge().value())
-        assertEquals(1.0, registry.get("ui.booking.error").gauge().value())
+        assertEquals(1.0, registry.get("ui.menu.clicks").counter().count())
+        assertEquals(1.0, registry.get("ui.nights.rendered").counter().count())
+        assertEquals(1.0, registry.get("ui.tables.rendered").counter().count())
+        assertEquals(1.0, registry.get("ui.tables.pages").counter().count())
+        assertEquals(1.0, registry.get("ui.table.chosen").counter().count())
+        assertEquals(1.0, registry.get("ui.guests.chosen").counter().count())
+        assertEquals(1.0, registry.get("ui.booking.success").counter().count())
+        assertEquals(1.0, registry.get("ui.booking.error").counter().count())
     }
 
     @Test

@@ -60,11 +60,11 @@ class BotTexts {
         return if (isEn(lang)) {
             "Table $tableNumber · from $amount"
         } else {
-            val symbol = BotLocales.currencySymbol(lang)
-            val suffix = if (symbol.isNotEmpty()) " $symbol" else ""
-            "Стол $tableNumber · от $amount$suffix"
+            "Стол $tableNumber · от $amount${receiptCurrencySuffix(lang)}"
         }
     }
+
+    fun receiptCurrencySuffix(lang: String?): String = if (isEn(lang)) "" else " ₽"
 
     // ====== Фоллбеки/ошибки ======
     fun sessionExpired(lang: String?): String =
