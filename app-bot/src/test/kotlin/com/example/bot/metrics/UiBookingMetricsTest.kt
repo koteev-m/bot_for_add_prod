@@ -41,14 +41,14 @@ class UiBookingMetricsTest {
         UiBookingMetrics.bookingSuccess.incrementAndGet()
         UiBookingMetrics.bookingError.incrementAndGet()
 
-        assertEquals(1.0, registry.get("ui.menu.clicks.atomic").gauge().value())
-        assertEquals(1.0, registry.get("ui.nights.rendered.atomic").gauge().value())
-        assertEquals(1.0, registry.get("ui.tables.rendered.atomic").gauge().value())
-        assertEquals(1.0, registry.get("ui.tables.pages.atomic").gauge().value())
-        assertEquals(1.0, registry.get("ui.table.chosen.atomic").gauge().value())
-        assertEquals(1.0, registry.get("ui.guests.chosen.atomic").gauge().value())
-        assertEquals(1.0, registry.get("ui.booking.success.atomic").gauge().value())
-        assertEquals(1.0, registry.get("ui.booking.error.atomic").gauge().value())
+        assertEquals(1.0, registry.get("ui.menu.clicks").gauge().value())
+        assertEquals(1.0, registry.get("ui.nights.rendered").gauge().value())
+        assertEquals(1.0, registry.get("ui.tables.rendered").gauge().value())
+        assertEquals(1.0, registry.get("ui.tables.pages").gauge().value())
+        assertEquals(1.0, registry.get("ui.table.chosen").gauge().value())
+        assertEquals(1.0, registry.get("ui.guests.chosen").gauge().value())
+        assertEquals(1.0, registry.get("ui.booking.success").gauge().value())
+        assertEquals(1.0, registry.get("ui.booking.error").gauge().value())
     }
 
     @Test
