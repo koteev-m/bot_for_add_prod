@@ -1,0 +1,160 @@
+package com.example.bot.text
+
+@Suppress("TooManyFunctions")
+class BotTexts {
+    // ====== Общие ======
+    fun greeting(lang: String?): String =
+        if (isEn(lang)) {
+            "Welcome!"
+        } else {
+            "Привет!"
+        }
+
+    fun isEn(lang: String?): Boolean = lang?.startsWith("en", true) == true
+
+    // ====== Меню / кнопки ======
+    data class Menu(val chooseClub: String, val myBookings: String, val ask: String, val music: String)
+
+    fun menu(lang: String?): Menu =
+        if (isEn(lang)) {
+            Menu("Choose club", "My bookings", "Ask a question", "Music")
+        } else {
+            Menu("Выбрать клуб", "Мои бронирования", "Задать вопрос", "Музыка")
+        }
+
+    // ====== Заголовки шагов ======
+    fun chooseNight(lang: String?): String =
+        if (isEn(lang)) {
+            "Choose a night:"
+        } else {
+            "Выберите ночь:"
+        }
+
+    fun chooseTable(lang: String?): String =
+        if (isEn(lang)) {
+            "Choose a table:"
+        } else {
+            "Выберите стол:"
+        }
+
+    fun chooseGuests(lang: String?): String =
+        if (isEn(lang)) {
+            "Choose number of guests:"
+        } else {
+            "Выберите количество гостей:"
+        }
+
+    // ====== Фоллбеки/ошибки ======
+    fun sessionExpired(lang: String?): String =
+        if (isEn(lang)) {
+            "The session has expired, please start over."
+        } else {
+            "Сессия устарела, начните выбор заново."
+        }
+
+    fun buttonExpired(lang: String?): String =
+        if (isEn(lang)) {
+            "The button has expired, please refresh the screen."
+        } else {
+            "Кнопка устарела, обновите экран."
+        }
+
+    fun nightsLoadError(lang: String?): String =
+        if (isEn(lang)) {
+            "Failed to load nights. Please try again."
+        } else {
+            "Не получилось загрузить ночи. Попробуйте ещё раз."
+        }
+
+    fun noNights(lang: String?): String =
+        if (isEn(lang)) {
+            "No open nights available right now. Please check back later."
+        } else {
+            "Сейчас нет ночей с открытым бронированием. Загляните позже."
+        }
+
+    fun noTables(lang: String?): String =
+        if (isEn(lang)) {
+            "No free tables for this night."
+        } else {
+            "Свободных столов на эту ночь нет."
+        }
+
+    fun tableTaken(lang: String?): String =
+        if (isEn(lang)) {
+            "This table is already taken. Please choose another one."
+        } else {
+            "Стол уже занят. Выберите другой, пожалуйста."
+        }
+
+    fun tooManyRequests(lang: String?): String =
+        if (isEn(lang)) {
+            "Too many requests. Please try again."
+        } else {
+            "Слишком много запросов. Попробуйте ещё раз."
+        }
+
+    fun holdExpired(lang: String?): String =
+        if (isEn(lang)) {
+            "Hold expired. Please try again."
+        } else {
+            "Пауза истекла. Попробуйте снова."
+        }
+
+    fun bookingNotFound(lang: String?): String =
+        if (isEn(lang)) {
+            "Booking not found. Please try again."
+        } else {
+            "Бронь не найдена. Попробуйте ещё раз."
+        }
+
+    fun unknownError(lang: String?): String =
+        if (isEn(lang)) {
+            "Unexpected error. Please try later."
+        } else {
+            "Неожиданная ошибка. Пожалуйста, попробуйте позже."
+        }
+
+    // ====== Чеки/подтверждения ======
+    fun bookingConfirmedTitle(lang: String?): String =
+        if (isEn(lang)) {
+            "Booking confirmed ✅"
+        } else {
+            "Бронь подтверждена ✅"
+        }
+
+    fun receiptClub(lang: String?): String =
+        if (isEn(lang)) {
+            "Club"
+        } else {
+            "Клуб"
+        }
+
+    fun receiptDate(lang: String?): String =
+        if (isEn(lang)) {
+            "Date"
+        } else {
+            "Дата"
+        }
+
+    fun receiptTable(lang: String?): String =
+        if (isEn(lang)) {
+            "Table"
+        } else {
+            "Стол"
+        }
+
+    fun receiptGuests(lang: String?): String =
+        if (isEn(lang)) {
+            "Guests"
+        } else {
+            "Гостей"
+        }
+
+    fun receiptDepositFrom(lang: String?): String =
+        if (isEn(lang)) {
+            "Deposit from"
+        } else {
+            "Депозит от"
+        }
+}

@@ -1,9 +1,9 @@
 package com.example.bot
 
-import com.example.bot.i18n.BotTexts
 import com.example.bot.promo.PromoAttributionService
 import com.example.bot.telegram.GuestFlowHandler
 import com.example.bot.telegram.Keyboards
+import com.example.bot.text.BotTexts
 import com.google.gson.Gson
 import com.pengrad.telegrambot.model.Update
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup

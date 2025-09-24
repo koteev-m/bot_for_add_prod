@@ -1,9 +1,9 @@
 package com.example.bot.telegram
 
-import com.example.bot.i18n.BotTexts
 import com.example.bot.promo.PromoAttributionService
 import com.example.bot.promo.PromoLinkIssueResult
 import com.example.bot.promo.PromoStartResult
+import com.example.bot.text.BotTexts
 import com.pengrad.telegrambot.model.Update
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.response.BaseResponse
