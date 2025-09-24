@@ -38,7 +38,7 @@ class RateLimitConfig {
     var subjectPathPrefixes: List<String> =
         listOf(
             "/webhook",
-            "/api/bookings/confirm",
+            "/api/clubs/",
             "/api/guest-lists/import",
         )
 

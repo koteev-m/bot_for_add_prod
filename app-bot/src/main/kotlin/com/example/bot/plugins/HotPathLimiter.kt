@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicLong
  */
 class HotPathLimiterConfig {
     /**
-     * Список префиксов путей, к которым применяем лимит (например, ["/webhook", "/api/bookings/confirm"]).
+     * Список префиксов путей, к которым применяем лимит (например, ["/webhook", "/api/clubs/"]).
      */
     var pathPrefixes: List<String> = emptyList()
 
@@ -99,7 +99,7 @@ fun Application.installHotPathLimiterDefaults() {
     val defaults =
         listOf(
             "/webhook",
-            "/api/bookings/confirm",
+            "/api/clubs/",
             "/api/guest-lists/import",
         )
     install(HotPathLimiter) {

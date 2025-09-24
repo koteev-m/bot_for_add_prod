@@ -17,6 +17,7 @@ import java.util.UUID
 /**
  * Defines HTTP routes for booking operations.
  */
+@Deprecated(message = "Replaced by /api/clubs/{clubId}/bookings/* under RBAC")
 fun Route.bookingRoutes(service: BookingService) {
     route("bookings") {
         post("/hold") {

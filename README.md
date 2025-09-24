@@ -11,6 +11,10 @@ This repository contains a Kotlin multi-module project built with Gradle Kotlin 
 - `core-security` – RBAC and request signature utilities.
 - `core-testing` – Shared test fixtures.
 
+## Booking API
+
+- Protected booking endpoints require RBAC access: `POST /api/clubs/{clubId}/bookings/hold` and `POST /api/clubs/{clubId}/bookings/confirm` (both expect an `Idempotency-Key` header).
+
 ## Building
 
 ```bash
