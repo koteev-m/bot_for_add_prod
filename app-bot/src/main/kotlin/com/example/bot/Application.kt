@@ -19,6 +19,7 @@ import com.example.bot.routes.hallImageRoute
 import com.example.bot.routes.healthRoute
 import com.example.bot.routes.readinessRoute
 import com.example.bot.routes.securedRoutes
+import com.example.bot.routes.webAppRoutes
 import com.example.bot.server.installServerTuning
 import com.example.bot.telegram.Keyboards
 import com.example.bot.telegram.MenuCallbacksHandler
@@ -114,6 +115,7 @@ fun Application.module() {
         // … остальные маршруты приложения
     }
 
+    webAppRoutes()
     securedRoutes(bookingService)
 
     // Telegram bot demo integration
