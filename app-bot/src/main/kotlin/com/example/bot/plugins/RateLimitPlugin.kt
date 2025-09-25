@@ -3,6 +3,7 @@ package com.example.bot.plugins
 import com.example.bot.config.BotLimits
 import com.example.bot.ratelimit.SubjectBucketStore
 import com.example.bot.ratelimit.TokenBucket
+import com.example.bot.webapp.InitDataPrincipalKey
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -134,9 +135,17 @@ private fun clientIp(call: io.ktor.server.application.ApplicationCall): String {
 
 fun Application.installRateLimitPluginDefaults() {
     install(RateLimitPlugin) {
-        // настройки уже берутся из ENV; путь и extractor можно переопределить при необходимости
-        // subjectKeyExtractor = { call ->
-        //     call.request.header("X-Telegram-Chat-Id") ?: call.request.queryParameters["chatId"]
-        // }
+        subjectKeyExtractor = { call ->
+            val initDataPrincipal =
+                if (call.attributes.contains(InitDataPrincipalKey)) {
+                    call.attributes[InitDataPrincipalKey]
+                } else {
+                    null
+                }
+            initDataPrincipal?.userId?.toString()
+                ?: call.request.header("X-Chat-Id")
+                ?: call.request.header("X-Telegram-Chat-Id")
+                ?: call.request.queryParameters["chatId"]
+        }
     }
 }
