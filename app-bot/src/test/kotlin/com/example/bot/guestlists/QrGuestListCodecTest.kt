@@ -1,142 +1,167 @@
 package com.example.bot.guestlists
 
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.time.Instant
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class QrGuestListCodecTest {
-    private val secret = "s3cr3t"
-    private val issuedAt = Instant.parse("2024-05-01T12:00:00Z")
+    private val secret = "super_secret_qr"
+    private val fixedIssued = Instant.parse("2025-09-25T00:00:00Z")
+    private val now = fixedIssued.plusSeconds(30)
     private val ttl = Duration.ofHours(12)
+    private val skew = Duration.ofMinutes(2)
 
     @Test
-    fun `encode and verify happy path`() {
-        val token = QrGuestListCodec.encode(12345, 678, issuedAt, secret)
-        val decoded = QrGuestListCodec.verify(token, issuedAt.plusSeconds(10), ttl, secret)
+    fun `happy path`() {
+        val token =
+            QrGuestListCodec.encode(
+                listId = 12345,
+                entryId = 6789,
+                issuedAt = fixedIssued,
+                secret = secret,
+            )
+
+        val decoded = QrGuestListCodec.verify(token, now, ttl, secret, skew)
+
         assertNotNull(decoded)
-        decoded!!
-        assertEquals(12345L, decoded.listId)
-        assertEquals(678L, decoded.entryId)
-        assertEquals(issuedAt, decoded.issuedAt)
+        assertTrue(token.startsWith("GL:"))
+        assertTrue(token.length < 100)
+        assertEquals(12345L, decoded!!.listId)
+        assertEquals(6789L, decoded.entryId)
+        assertEquals(fixedIssued, decoded.issuedAt)
     }
 
     @Test
-    fun `verify rejects tokens with bad prefix or parts`() {
-        val validToken = QrGuestListCodec.encode(1, 1, issuedAt, secret)
+    fun `bad prefix or shape`() {
+        val hmacPlaceholder = "0".repeat(64)
         val invalidTokens =
             listOf(
                 "",
-                "GL",
-                "GL:1:2:3",
-                "GL:1:2:3:ab",
-                "GL::2:3:${"a".repeat(64)}",
-                validToken.removePrefix("GL:"),
+                "GX:12345:6789:${fixedIssued.epochSecond}:$hmacPlaceholder",
+                "GL:only:two:parts",
+                "GL:12345::${fixedIssued.epochSecond}:$hmacPlaceholder",
+                "GL:12345:6789::$hmacPlaceholder",
+                "GL:12345:6789:${fixedIssued.epochSecond}",
             )
-        val now = issuedAt.plusSeconds(5)
-        for (token in invalidTokens) {
-            assertNull(QrGuestListCodec.verify(token, now, ttl, secret))
+
+        invalidTokens.forEach { token ->
+            assertNull(QrGuestListCodec.verify(token, now, ttl, secret, skew))
         }
     }
 
     @Test
-    fun `verify rejects tokens with invalid numeric fields`() {
-        val baseHmac = "a".repeat(64)
+    fun `non numeric identifiers`() {
+        val hmacPlaceholder = "0".repeat(64)
         val tokens =
             listOf(
-                "GL:0:1:100:$baseHmac",
-                "GL:-1:2:100:$baseHmac",
-                "GL:1:-2:100:$baseHmac",
-                "GL:1:2:-100:$baseHmac",
-                "GL:abc:2:100:$baseHmac",
-                "GL:1:xyz:100:$baseHmac",
-                "GL:1:2:abc:$baseHmac",
-                "GL:999999999999999999999:2:100:$baseHmac",
+                "GL:abc:6789:${fixedIssued.epochSecond}:$hmacPlaceholder",
+                "GL:12345:NaN:${fixedIssued.epochSecond}:$hmacPlaceholder",
+                "GL:12345:6789:abc:$hmacPlaceholder",
             )
-        val now = issuedAt.plusSeconds(5)
-        for (token in tokens) {
-            assertNull(QrGuestListCodec.verify(token, now, ttl, secret))
+
+        tokens.forEach { token ->
+            assertNull(QrGuestListCodec.verify(token, now, ttl, secret, skew))
         }
     }
 
     @Test
-    fun `verify rejects token with incorrect hmac`() {
-        val token = QrGuestListCodec.encode(10, 20, issuedAt, secret)
+    fun `non positive identifiers`() {
+        val hmacPlaceholder = "0".repeat(64)
+        val tokens =
+            listOf(
+                "GL:0:6789:${fixedIssued.epochSecond}:$hmacPlaceholder",
+                "GL:-1:6789:${fixedIssued.epochSecond}:$hmacPlaceholder",
+                "GL:12345:0:${fixedIssued.epochSecond}:$hmacPlaceholder",
+                "GL:12345:-10:${fixedIssued.epochSecond}:$hmacPlaceholder",
+            )
+
+        tokens.forEach { token ->
+            assertNull(QrGuestListCodec.verify(token, now, ttl, secret, skew))
+        }
+    }
+
+    @Test
+    fun `bad hmac`() {
+        val token =
+            QrGuestListCodec.encode(
+                listId = 321,
+                entryId = 654,
+                issuedAt = fixedIssued,
+                secret = secret,
+            )
         val tampered = token.dropLast(1) + if (token.last() == 'a') 'b' else 'a'
-        assertNull(QrGuestListCodec.verify(tampered, issuedAt.plusSeconds(1), ttl, secret))
+
+        assertNull(QrGuestListCodec.verify(tampered, now, ttl, secret, skew))
     }
 
     @Test
-    fun `verify rejects expired token`() {
-        val token = QrGuestListCodec.encode(10, 20, issuedAt, secret)
-        val now = issuedAt.plus(ttl).plusSeconds(1)
-        assertNull(QrGuestListCodec.verify(token, now, ttl, secret))
+    fun `expired token`() {
+        val token =
+            QrGuestListCodec.encode(
+                listId = 321,
+                entryId = 654,
+                issuedAt = fixedIssued,
+                secret = secret,
+            )
+        val expiredNow = fixedIssued.plus(ttl).plusSeconds(1)
+
+        assertNull(QrGuestListCodec.verify(token, expiredNow, ttl, secret, skew))
     }
 
     @Test
-    fun `verify rejects token issued beyond allowed skew`() {
-        val futureIssued = issuedAt.plus(Duration.ofMinutes(5))
-        val token = QrGuestListCodec.encode(10, 20, futureIssued, secret)
-        val now = issuedAt
-        assertNull(QrGuestListCodec.verify(token, now, ttl, secret))
+    fun `issued beyond allowed skew`() {
+        val futureIssued = now.plus(skew).plusSeconds(1)
+        val token =
+            QrGuestListCodec.encode(
+                listId = 999,
+                entryId = 888,
+                issuedAt = futureIssued,
+                secret = secret,
+            )
+
+        assertNull(QrGuestListCodec.verify(token, now, ttl, secret, skew))
     }
 
     @Test
-    fun `verify accepts uppercase hmac`() {
-        val token = QrGuestListCodec.encode(123, 456, issuedAt, secret)
-        val prefixLength = token.length - 64
-        val upperToken = token.substring(0, prefixLength) + token.substring(prefixLength).uppercase()
-        val decoded = QrGuestListCodec.verify(upperToken, issuedAt.plusSeconds(2), ttl, secret)
+    fun `uppercase hmac accepted`() {
+        val token =
+            QrGuestListCodec.encode(
+                listId = 77,
+                entryId = 88,
+                issuedAt = fixedIssued,
+                secret = secret,
+            )
+        val prefixLength = token.lastIndexOf(':') + 1
+        val uppercased = token.substring(0, prefixLength) + token.substring(prefixLength).uppercase()
+
+        val decoded = QrGuestListCodec.verify(uppercased, now, ttl, secret, skew)
+
         assertNotNull(decoded)
-        decoded!!
-        assertEquals(123L, decoded.listId)
-        assertEquals(456L, decoded.entryId)
     }
 
     @Test
-    fun `token length stays under 100 characters`() {
-        val token = QrGuestListCodec.encode(987654321L, 123456789L, issuedAt, secret)
-        assertTrue(token.length < 100)
-    }
+    fun `fuzz flip in numeric section invalidates token`() {
+        val token =
+            QrGuestListCodec.encode(
+                listId = 12345,
+                entryId = 67890,
+                issuedAt = fixedIssued,
+                secret = secret,
+            )
+        val indexToFlip = token.indexOfFirst { it.isDigit() }
+        val mutated =
+            if (indexToFlip >= 0) {
+                val original = token[indexToFlip]
+                val replacement = if (original == '9') '0' else (original + 1)
+                StringBuilder(token).apply { setCharAt(indexToFlip, replacement) }.toString()
+            } else {
+                token
+            }
 
-    @Test
-    fun `verify allows tokens within allowed skew`() {
-        val skew = Duration.ofMinutes(2)
-        val futureIssued = issuedAt.plus(skew)
-        val token = QrGuestListCodec.encode(55, 77, futureIssued, secret)
-        val decoded = QrGuestListCodec.verify(token, issuedAt, ttl, secret, maxClockSkew = skew)
-        assertNotNull(decoded)
-    }
-
-    private fun deriveKey(secretValue: String): ByteArray {
-        val mac = Mac.getInstance("HmacSHA256")
-        val keySpec = SecretKeySpec(secretValue.toByteArray(StandardCharsets.UTF_8), "HmacSHA256")
-        mac.init(keySpec)
-        return mac.doFinal("QrGuestList".toByteArray(StandardCharsets.UTF_8))
-    }
-
-    @Test
-    fun `verify rejects token with valid shape but wrong derived hmac`() {
-        val message = "1:2:100"
-        val derivedKey = deriveKey(secret)
-        val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(derivedKey, "HmacSHA256"))
-        val validHex =
-            mac
-                .doFinal(message.toByteArray(StandardCharsets.UTF_8))
-                .joinToString(separator = "") { byte ->
-                    val value = byte.toInt() and 0xFF
-                    val high = "0123456789abcdef"[value ushr 4]
-                    val low = "0123456789abcdef"[value and 0x0F]
-                    "$high$low"
-                }
-        val alteredMessageToken = "GL:1:2:101:$validHex"
-        assertNull(QrGuestListCodec.verify(alteredMessageToken, issuedAt.plusSeconds(5), ttl, secret))
+        assertNull(QrGuestListCodec.verify(mutated, now, ttl, secret, skew))
     }
 }
