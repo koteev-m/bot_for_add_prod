@@ -85,6 +85,17 @@ class GuestListRepositoryImpl(
         }
     }
 
+    override suspend fun findEntry(id: Long): GuestListEntry? {
+        return withTxRetry {
+            transaction(database) {
+                GuestListEntriesTable
+                    .select { GuestListEntriesTable.id eq id }
+                    .firstOrNull()
+                    ?.toGuestListEntry()
+            }
+        }
+    }
+
     override suspend fun listListsByClub(
         clubId: Long,
         page: Int,
@@ -203,6 +214,32 @@ class GuestListRepositoryImpl(
                     .orderBy(GuestListEntriesTable.id, SortOrder.ASC)
                     .limit(size, offset)
                     .map { it.toGuestListEntry() }
+            }
+        }
+    }
+
+    override suspend fun markArrived(
+        entryId: Long,
+        at: Instant,
+    ): Boolean {
+        return withTxRetry {
+            transaction(database) {
+                val existing =
+                    GuestListEntriesTable
+                        .select { GuestListEntriesTable.id eq entryId }
+                        .firstOrNull()
+                        ?: return@transaction false
+                val alreadyCheckedIn =
+                    existing[GuestListEntriesTable.status] == GuestListEntryStatus.CHECKED_IN.name &&
+                        existing[GuestListEntriesTable.checkedInAt] != null
+                if (!alreadyCheckedIn) {
+                    GuestListEntriesTable.update({ GuestListEntriesTable.id eq entryId }) {
+                        it[status] = GuestListEntryStatus.CHECKED_IN.name
+                        it[checkedInAt] = at.atOffset(ZoneOffset.UTC)
+                        it[checkedInBy] = null
+                    }
+                }
+                true
             }
         }
     }

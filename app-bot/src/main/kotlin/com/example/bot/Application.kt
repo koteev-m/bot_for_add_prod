@@ -15,6 +15,7 @@ import com.example.bot.plugins.installRateLimitPluginDefaults
 import com.example.bot.plugins.installRequestLogging
 import com.example.bot.plugins.meterRegistry
 import com.example.bot.render.DefaultHallRenderer
+import com.example.bot.routes.checkinRoutes
 import com.example.bot.routes.hallImageRoute
 import com.example.bot.routes.healthRoute
 import com.example.bot.routes.readinessRoute
@@ -48,6 +49,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.koin.dsl.module
+import org.koin.ktor.ext.get
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
@@ -117,6 +119,7 @@ fun Application.module() {
 
     webAppRoutes()
     securedRoutes(bookingService)
+    checkinRoutes(repository = get())
 
     // Telegram bot demo integration
     bot.setUpdatesListener(
