@@ -6,6 +6,8 @@ import com.example.bot.data.repo.ClubRepository
 import com.example.bot.data.repo.ExposedClubRepository
 import com.example.bot.di.bookingModule
 import com.example.bot.di.securityModule
+import com.example.bot.di.webAppModule
+import com.example.bot.guestlists.GuestListRepository
 import com.example.bot.metrics.AppMetricsBinder
 import com.example.bot.plugins.configureSecurity
 import com.example.bot.plugins.installAppConfig
@@ -91,7 +93,7 @@ fun Application.module() {
         }
     install(Koin) {
         slf4jLogger()
-        modules(bookingModule, securityModule, telegramModule)
+        modules(bookingModule, securityModule, webAppModule, telegramModule)
     }
 
     configureSecurity()
@@ -101,6 +103,7 @@ fun Application.module() {
     val ottService by inject<CallbackTokenService>()
     val callbackHandler by inject<CallbackQueryHandler>()
     val bookingService by inject<BookingService>()
+    val guestListRepository: GuestListRepository = get()
     var workerJob: Job? = null
     environment.monitor.subscribe(ApplicationStarted) {
         workerJob = launch { outboxWorker.run() }
@@ -118,8 +121,8 @@ fun Application.module() {
     }
 
     webAppRoutes()
+    checkinRoutes(repository = guestListRepository)
     securedRoutes(bookingService)
-    checkinRoutes(repository = get())
 
     // Telegram bot demo integration
     bot.setUpdatesListener(
