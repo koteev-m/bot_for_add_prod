@@ -15,9 +15,13 @@ import com.example.bot.data.security.UserRepository
 import com.example.bot.data.security.UserRoleRepository
 import com.example.bot.guestlists.GuestListRepository
 import com.example.bot.guestlists.QrGuestListCodec
+import com.example.bot.metrics.AppMetricsBinder
+import com.example.bot.plugins.installMetrics
+import com.example.bot.plugins.meterRegistry
 import com.example.bot.security.auth.TelegramPrincipal
 import com.example.bot.security.rbac.RbacPlugin
 import com.example.bot.webapp.InitDataPrincipalKey
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -31,6 +35,7 @@ import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.request.header
 import io.ktor.server.testing.testApplication
+import io.micrometer.prometheus.PrometheusMeterRegistry
 import io.mockk.mockk
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -80,6 +85,11 @@ class EntryManagerCheckInSmokeTest {
                 )
 
             val path = "/api/clubs/$CLUB_ID/checkin/scan"
+            meterRegistry().clear()
+            AppMetricsBinder.bindAll(meterRegistry())
+            val beforeMetrics = currentPrometheusSnapshot()
+            val totalBefore = beforeMetrics.metricValue("ui_checkin_scan_total")
+            val durationCountBefore = beforeMetrics.metricValue("ui_checkin_scan_duration_ms_seconds_count")
             val first =
                 client.post(path) {
                     contentType(ContentType.Application.Json)
@@ -98,11 +108,26 @@ class EntryManagerCheckInSmokeTest {
                     header("X-Telegram-Username", "entry_mgr")
                     setBody("""{"qr":"$qrToken"}""")
                 }
+            val afterMetrics = currentPrometheusSnapshot()
+            val totalAfter = afterMetrics.metricValue("ui_checkin_scan_total")
+            val durationCountAfter = afterMetrics.metricValue("ui_checkin_scan_duration_ms_seconds_count")
 
             assertAll(
                 { assertEquals(HttpStatusCode.OK, first.status) },
                 { assertTrue(firstBody.contains("\"ARRIVED\"")) },
                 { assertEquals(HttpStatusCode.OK, second.status) },
+                {
+                    assertTrue(totalAfter >= totalBefore + 1.0) {
+                        "expected ui_checkin_scan_total to grow by at least 1, " +
+                            "before=$totalBefore after=$totalAfter"
+                    }
+                },
+                {
+                    assertTrue(durationCountAfter >= durationCountBefore + 1.0) {
+                        "expected ui_checkin_scan_duration_ms_seconds_count to grow by at least 1, " +
+                            "before=$durationCountBefore after=$durationCountAfter"
+                    }
+                },
             )
         }
     }
@@ -121,6 +146,11 @@ class EntryManagerCheckInSmokeTest {
                     fixedNow.epochSecond - 30,
                 )
             val path = "/api/clubs/$CLUB_ID/checkin/scan"
+
+            meterRegistry().clear()
+            AppMetricsBinder.bindAll(meterRegistry())
+            val beforeMetrics = currentPrometheusSnapshot()
+            val errorBefore = beforeMetrics.metricValue("ui_checkin_scan_error_total")
 
             val malformed =
                 client.post(path) {
@@ -143,9 +173,13 @@ class EntryManagerCheckInSmokeTest {
                     setBody("""{"qr":"$expiredQr"}""")
                 }
 
+            val afterMetrics = currentPrometheusSnapshot()
+            val errorAfter = afterMetrics.metricValue("ui_checkin_scan_error_total")
+
             assertAll(
                 { assertEquals(HttpStatusCode.BadRequest, malformed.status) },
                 { assertEquals(HttpStatusCode.BadRequest, expired.status) },
+                { assertTrue(errorAfter >= errorBefore + 2.0) },
             )
         }
     }
@@ -320,6 +354,9 @@ class EntryManagerCheckInSmokeTest {
 }
 
 private fun Application.configureTestApplication(module: Module) {
+    meterRegistry().clear()
+    installMetrics()
+    AppMetricsBinder.bindAll(meterRegistry())
     install(ContentNegotiation) { json() }
     install(Koin) { modules(module) }
     install(RbacPlugin) {
@@ -327,7 +364,12 @@ private fun Application.configureTestApplication(module: Module) {
         userRoleRepository = get()
         auditLogRepository = get()
         principalExtractor = { call ->
-            val initDataPrincipal = call.attributes.getOrNull(InitDataPrincipalKey)
+            val initDataPrincipal =
+                if (call.attributes.contains(InitDataPrincipalKey)) {
+                    call.attributes[InitDataPrincipalKey]
+                } else {
+                    null
+                }
             if (initDataPrincipal != null) {
                 TelegramPrincipal(initDataPrincipal.userId, initDataPrincipal.username)
             } else {
@@ -572,10 +614,25 @@ private fun encodeQr(
     return QrGuestListCodec.encode(listId, entryId, issued, secret)
 }
 
+private fun currentPrometheusSnapshot(): String {
+    val registry = meterRegistry()
+    return (registry as? PrometheusMeterRegistry)?.scrape() ?: ""
+}
+
 private fun tamperLastCharacter(value: String): String {
     if (value.isEmpty()) {
         return value
     }
     val replacement = if (value.last() == '0') '1' else '0'
     return value.dropLast(1) + replacement
+}
+
+private fun String.metricValue(name: String): Double {
+    return lineSequence()
+        .map { it.trim() }
+        .firstOrNull { it.startsWith(name) }
+        ?.substringAfter(' ')
+        ?.trim()
+        ?.toDoubleOrNull()
+        ?: 0.0
 }

@@ -8,7 +8,7 @@ import io.micrometer.core.instrument.MeterRegistry
  */
 object AppMetricsBinder {
     fun bindAll(registry: MeterRegistry) {
-        // UI booking metrics
         UiBookingMetrics.bind(registry)
+        UiCheckinMetrics.bind(registry)
     }
 }
