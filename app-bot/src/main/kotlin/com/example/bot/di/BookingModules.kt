@@ -1,10 +1,12 @@
 package com.example.bot.di
 
 import com.example.bot.booking.BookingService
+import com.example.bot.club.GuestListRepository
 import com.example.bot.data.booking.core.AuditLogRepository
 import com.example.bot.data.booking.core.BookingHoldRepository
 import com.example.bot.data.booking.core.BookingRepository
 import com.example.bot.data.booking.core.OutboxRepository
+import com.example.bot.data.club.GuestListRepositoryImpl
 import com.example.bot.data.notifications.NotificationsOutboxRepository
 import com.example.bot.data.promo.BookingTemplateRepositoryImpl
 import com.example.bot.data.promo.PromoAttributionRepositoryImpl
@@ -36,6 +38,7 @@ val bookingModule =
         single { OutboxRepository(get()) }
         single { NotificationsOutboxRepository(get()) }
         single { AuditLogRepository(get()) }
+        single<GuestListRepository> { GuestListRepositoryImpl(get()) }
         single { PromoLinkRepositoryImpl(get()) }
         single { PromoAttributionRepositoryImpl(get()) }
         single<BookingTemplateRepository> { BookingTemplateRepositoryImpl(get()) }

@@ -5,10 +5,8 @@ import com.example.bot.data.security.Role
 import com.example.bot.security.rbac.ClubScope
 import com.example.bot.security.rbac.authorize
 import com.example.bot.security.rbac.clubScoped
-import com.example.bot.webapp.InitDataAuthPlugin
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
-import io.ktor.server.application.install
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
@@ -35,16 +33,6 @@ fun Application.securedRoutes(bookingService: BookingService) {
             authorize(Role.PROMOTER, Role.CLUB_ADMIN, Role.MANAGER, Role.GUEST) {
                 clubScoped(ClubScope.Own) {
                     post("/tables/{tableId}/booking") { call.respondText("booked") }
-                }
-            }
-        }
-        route("/api/clubs/{clubId}/checkin") {
-            install(InitDataAuthPlugin) {
-                botTokenProvider = { System.getenv("TELEGRAM_BOT_TOKEN") ?: error("TELEGRAM_BOT_TOKEN missing") }
-            }
-            authorize(Role.CLUB_ADMIN, Role.MANAGER, Role.ENTRY_MANAGER) {
-                clubScoped(ClubScope.Own) {
-                    post("/scan") { call.respondText("scan") }
                 }
             }
         }

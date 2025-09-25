@@ -21,6 +21,8 @@ interface GuestListRepository {
 
     suspend fun getList(id: Long): GuestList?
 
+    suspend fun findEntry(id: Long): GuestListEntry?
+
     suspend fun listListsByClub(
         clubId: Long,
         page: Int,
@@ -49,6 +51,11 @@ interface GuestListRepository {
         size: Int,
         statusFilter: GuestListEntryStatus? = null,
     ): List<GuestListEntry>
+
+    suspend fun markArrived(
+        entryId: Long,
+        at: Instant,
+    ): Boolean
 
     suspend fun bulkImport(
         listId: Long,
