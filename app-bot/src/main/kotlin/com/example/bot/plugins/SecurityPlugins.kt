@@ -5,6 +5,7 @@ import com.example.bot.data.security.ExposedUserRepository
 import com.example.bot.data.security.ExposedUserRoleRepository
 import com.example.bot.security.auth.TelegramPrincipal
 import com.example.bot.security.rbac.RbacPlugin
+import com.example.bot.webapp.InitDataPrincipalKey
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -29,8 +30,13 @@ fun Application.configureSecurity() {
         this.userRoleRepository = userRoleRepository
         this.auditLogRepository = auditLogRepository
         principalExtractor = { call ->
-            call.request.header("X-Telegram-Id")?.toLongOrNull()?.let { id ->
-                TelegramPrincipal(id, call.request.header("X-Telegram-Username"))
+            if (call.attributes.contains(InitDataPrincipalKey)) {
+                val principal = call.attributes[InitDataPrincipalKey]
+                TelegramPrincipal(principal.userId, principal.username)
+            } else {
+                call.request.header("X-Telegram-Id")?.toLongOrNull()?.let { id ->
+                    TelegramPrincipal(id, call.request.header("X-Telegram-Username"))
+                }
             }
         }
     }
