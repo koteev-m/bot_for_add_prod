@@ -172,11 +172,12 @@ fun Route.clubScoped(
         val hasGlobalRole = context.roles.any { it in successRoles }
         val allowed =
             when (scope) {
-                ClubScope.Own -> when {
-                    clubId == null -> false
-                    hasGlobalRole -> true
-                    else -> clubId in context.clubIds
-                }
+                ClubScope.Own ->
+                    when {
+                        clubId == null -> false
+                        hasGlobalRole -> true
+                        else -> clubId in context.clubIds
+                    }
                 ClubScope.Any -> hasGlobalRole
             }
         if (!allowed) {
@@ -313,10 +314,11 @@ internal data class RbacState(
     ) {
         val userId = success?.user?.id
         val ip = call.request.local.remoteAddress
-        val meta = buildJsonObject {
-            put("reason", reason)
-            put("method", call.request.httpMethod.value)
-        }
+        val meta =
+            buildJsonObject {
+                put("reason", reason)
+                put("method", call.request.httpMethod.value)
+            }
         withIdempotencyMdc(call) {
             auditLogRepository.log(
                 userId = userId,
