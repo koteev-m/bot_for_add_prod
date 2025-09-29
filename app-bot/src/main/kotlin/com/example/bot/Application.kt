@@ -43,6 +43,8 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStarted
 import io.ktor.server.application.ApplicationStopped
 import io.ktor.server.application.install
+import io.ktor.server.engine.embeddedServer
+import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.CoroutineScope
@@ -55,6 +57,25 @@ import org.koin.ktor.ext.get
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
+
+/** Значения по умолчанию для запуска сервера (выносим «магические» литералы). */
+private const val DEFAULT_HTTP_PORT: Int = 8080
+private const val DEFAULT_BIND_HOST: String = "0.0.0.0"
+
+/**
+ * Точка входа приложения — для Docker/`installDist`.
+ * Стартует Ktor Netty на 0.0.0.0 и порту из ENV PORT (по умолчанию 8080),
+ * вызывая модуль [Application.module].
+ */
+fun main() {
+    val port = System.getenv("PORT")?.toIntOrNull() ?: DEFAULT_HTTP_PORT
+    embeddedServer(
+        factory = Netty,
+        port = port,
+        host = DEFAULT_BIND_HOST,
+        module = Application::module,
+    ).start(wait = true)
+}
 
 @Suppress("unused")
 fun Application.module() {
@@ -79,6 +100,8 @@ fun Application.module() {
     AppMetricsBinder.bindAll(meterRegistry())
 
     val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN") ?: BotLimits.Demo.FALLBACK_TOKEN
+
+    // DI модуль Telegram/бота (pengrad)
     val telegramModule =
         module {
             single { BotTexts() }
@@ -91,6 +114,7 @@ fun Application.module() {
             single { MenuCallbacksHandler(get(), get(), get(), get(), get(), get(), get(), get()) }
             single { CallbackQueryHandler(get(), get(), get()) }
         }
+
     install(Koin) {
         slf4jLogger()
         modules(bookingModule, securityModule, webAppModule, telegramModule)
@@ -104,6 +128,7 @@ fun Application.module() {
     val callbackHandler by inject<CallbackQueryHandler>()
     val bookingService by inject<BookingService>()
     val guestListRepository: GuestListRepository = get()
+
     var workerJob: Job? = null
     environment.monitor.subscribe(ApplicationStarted) {
         workerJob = launch { outboxWorker.run() }
@@ -111,6 +136,7 @@ fun Application.module() {
     environment.monitor.subscribe(ApplicationStopped) {
         workerJob?.cancel()
     }
+
     // 5) Routes
     val renderer = DefaultHallRenderer()
     routing {
@@ -124,7 +150,7 @@ fun Application.module() {
     checkinRoutes(repository = guestListRepository)
     securedRoutes(bookingService)
 
-    // Telegram bot demo integration
+    // Telegram bot (polling demo)
     bot.setUpdatesListener(
         object : UpdatesListener {
             override fun process(updates: MutableList<Update>?): Int {

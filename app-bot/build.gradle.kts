@@ -21,17 +21,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 }
 
 dependencies {
-    implementation(projects.coreDomain)
-    implementation(projects.coreData)
-    implementation(projects.coreTelemetry)
-    implementation(projects.coreSecurity)
-    implementation(libs.exposed.jdbc)
-    implementation(libs.flyway)
-    implementation(libs.micrometer.core)
-    implementation(libs.micrometer.prometheus)
-    implementation(libs.micrometer.tracing.bridge.otel)
-    implementation(libs.opentelemetry.sdk)
-    implementation(libs.opentelemetry.exporter.otlp)
+    // Ktor (через алиасы каталога версий)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.content.negotiation)
@@ -44,12 +34,34 @@ dependencies {
     implementation(libs.ktor.server.call.logging)
     implementation(libs.ktor.server.call.id)
     implementation(libs.ktor.server.metrics.micrometer)
+
+    // Модули проекта
+    implementation(projects.coreDomain)
+    implementation(projects.coreData)
+    implementation(projects.coreTelemetry)
+    implementation(projects.coreSecurity)
+
+    // DB (если действительно нужны в app-боте; чаще это в core-data)
+    implementation(libs.exposed.jdbc)
+
+    // Observability / logging
+    implementation(libs.micrometer.core)
+    implementation(libs.micrometer.prometheus)
+    implementation(libs.micrometer.tracing.bridge.otel)
+    implementation(libs.opentelemetry.sdk)
+    implementation(libs.opentelemetry.exporter.otlp)
     implementation(libs.logback)
     implementation(libs.logstash.encoder)
+
+    // Telegram
     implementation(libs.pengrad.telegram)
+
+    // DI
     implementation(libs.koin.core)
     implementation(libs.koin.ktor)
     implementation(libs.koin.logger.slf4j)
+
+    // Tests
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.kotest.runner)
@@ -64,10 +76,22 @@ dependencies {
 }
 
 application {
-    mainClass.set("com.example.bot.ApplicationKt")
+    // EngineMain + application.conf (modules = [ com.example.bot.ApplicationKt.module ])
+    mainClass.set("io.ktor.server.netty.EngineMain")
+
+    // listOf — каждый аргумент на своей строке + запятая в конце (требование ktlint)
+    applicationDefaultJvmArgs =
+        listOf(
+            "-Dfile.encoding=UTF-8",
+            "-XX:+ExitOnOutOfMemoryError",
+        )
 }
 
-tasks.register<JavaExec>("runMigrations") {
+/**
+ * Утилита для запуска миграций из рантайма приложения.
+ * Стиль registering(JavaExec::class) не триггерит ktlint rule 'multiline-expression-wrapping'.
+ */
+val runMigrations by tasks.registering(JavaExec::class) {
     group = "application"
     description = "Run Flyway migrations using app runtime"
     classpath = sourceSets["main"].runtimeClasspath

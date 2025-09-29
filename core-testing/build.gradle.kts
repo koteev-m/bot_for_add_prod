@@ -46,7 +46,6 @@ dependencies {
     testImplementation(libs.ktor.server.call.logging)
     testImplementation(libs.ktor.server.call.id)
     testImplementation(libs.ktor.server.metrics.micrometer)
-    testImplementation(libs.flyway)
     testImplementation(libs.exposed.core)
     testImplementation(libs.exposed.jdbc)
     testImplementation(libs.hikari)

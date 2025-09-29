@@ -9,7 +9,6 @@ import io.ktor.server.application.ApplicationStopped
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.runInterruptible
-import org.flywaydb.core.api.FlywayException
 import org.jetbrains.exposed.sql.Database
 import org.slf4j.LoggerFactory
 import javax.sql.DataSource
@@ -27,6 +26,7 @@ fun Application.installMigrationsAndDatabase() {
     val ds: DataSource = HikariFactory.dataSource(dbCfg)
 
     try {
+        // Выполняем миграции в IO-контексте
         runBlocking {
             runInterruptible(Dispatchers.IO) {
                 val runner = MigrationRunner(ds, flywayCfg)
@@ -35,18 +35,27 @@ fun Application.installMigrationsAndDatabase() {
         }
         MigrationState.migrationsApplied = true
         log.info("Migrations completed successfully")
-    } catch (e: FlywayException) {
-        log.error("Migrations failed (FlywayException), stopping application", e)
-        throw e
-    } catch (e: RuntimeException) {
-        // включая JDBC/DS misconfig и иные runtime-ошибки старта
-        log.error("Migrations failed (RuntimeException), stopping application", e)
+    } catch (e: Exception) {
+        // В app-bot мы не тянем Flyway классы, поэтому определяем тип по имени,
+        // чтобы корректно залогировать «FlywayException», если это он.
+        val flywayEx =
+            e::class.qualifiedName == "org.flywaydb.core.api.FlywayException" ||
+                e.cause?.let { it::class.qualifiedName == "org.flywaydb.core.api.FlywayException" } == true
+
+        if (flywayEx) {
+            log.error("Migrations failed (FlywayException), stopping application", e)
+        } else {
+            // включая JDBC/DS misconfig и иные runtime-ошибки старта
+            log.error("Migrations failed, stopping application", e)
+        }
         throw e
     }
 
+    // Подключаем Exposed к уже инициализированному DataSource
     Database.connect(ds)
     DataSourceHolder.dataSource = ds
 
+    // Корректное закрытие пула при остановке приложения
     environment.monitor.subscribe(ApplicationStopped) {
         try {
             (ds as? AutoCloseable)?.close()
