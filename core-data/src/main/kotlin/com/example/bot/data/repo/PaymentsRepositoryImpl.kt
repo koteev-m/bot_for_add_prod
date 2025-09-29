@@ -8,7 +8,7 @@ import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.javatime.CurrentTimestamp
 import org.jetbrains.exposed.sql.javatime.timestamp
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.update
 import java.util.UUID
@@ -101,7 +101,8 @@ class PaymentsRepositoryImpl(private val db: Database) : PaymentsRepository {
     override suspend fun findByPayload(payload: String): PaymentRecord? {
         return newSuspendedTransaction(db = db) {
             PaymentsTable
-                .select { PaymentsTable.payload eq payload }
+                .selectAll()
+                .where { PaymentsTable.payload eq payload }
                 .firstOrNull()
                 ?.toRecord()
         }

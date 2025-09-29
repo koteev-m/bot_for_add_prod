@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import java.time.ZoneOffset
 
@@ -56,11 +57,12 @@ class MusicItemRepositoryImpl(private val db: Database) : MusicItemRepository {
             if (clubId != null) cond = cond and (MusicItemsTable.clubId eq clubId)
             // tag filtering omitted for simplicity
             if (!q.isNullOrBlank()) {
-                val like = "%$q%"
-                cond = cond and ((MusicItemsTable.title like like) or (MusicItemsTable.dj like like))
+                val likeValue = "%$q%"
+                cond = cond and ((MusicItemsTable.title like likeValue) or (MusicItemsTable.dj like likeValue))
             }
             MusicItemsTable
-                .select { cond }
+                .selectAll()
+                .where { cond }
                 .orderBy(MusicItemsTable.publishedAt, SortOrder.DESC)
                 .limit(limit, offset.toLong())
                 .map { it.toView() }
@@ -124,13 +126,15 @@ class MusicPlaylistRepositoryImpl(private val db: Database) : MusicPlaylistRepos
         return newSuspendedTransaction(Dispatchers.IO, db) {
             val p =
                 MusicPlaylistsTable
-                    .select { MusicPlaylistsTable.id eq id }
+                    .selectAll()
+                    .where { MusicPlaylistsTable.id eq id }
                     .firstOrNull()
                     ?.toView() ?: return@newSuspendedTransaction null
             val items =
                 MusicItemsTable
                     .innerJoin(MusicPlaylistItemsTable)
-                    .select { MusicPlaylistItemsTable.playlistId eq id }
+                    .selectAll()
+                    .where { MusicPlaylistItemsTable.playlistId eq id }
                     .orderBy(MusicPlaylistItemsTable.position)
                     .map { it.toItemView() }
             PlaylistFullView(p.id, p.clubId, p.title, p.description, p.coverUrl, items)

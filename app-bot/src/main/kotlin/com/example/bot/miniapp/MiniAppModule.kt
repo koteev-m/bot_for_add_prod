@@ -2,13 +2,12 @@ package com.example.bot.miniapp
 
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
-import io.ktor.server.http.content.default
-import io.ktor.server.http.content.files
-import io.ktor.server.http.content.static
+import io.ktor.server.http.content.staticFiles
 import io.ktor.server.plugins.compression.Compression
 import io.ktor.server.plugins.compression.gzip
 import io.ktor.server.plugins.defaultheaders.DefaultHeaders
 import io.ktor.server.routing.routing
+import java.io.File
 
 /** Ktor module serving Mini App static files. */
 fun Application.miniAppModule() {
@@ -25,9 +24,7 @@ fun Application.miniAppModule() {
         )
     }
     routing {
-        static("/app") {
-            files("miniapp/dist")
-            default("index.html")
-        }
+        // Ktor 3.x: static/static { files/default } → staticFiles(dir, indexFile)
+        staticFiles("/app", File("miniapp/dist"), "index.html")
     }
 }

@@ -4,7 +4,7 @@ import com.example.bot.config.BotLimits
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -34,7 +34,8 @@ class OutboxRepositoryIT : PostgresIntegrationTest() {
             val sentRow =
                 transaction(database) {
                     BookingOutboxTable
-                        .select { BookingOutboxTable.id eq id1 }
+                        .selectAll()
+                        .where { BookingOutboxTable.id eq id1 }
                         .first()
                 }
             assertEquals("SENT", sentRow[BookingOutboxTable.status])
@@ -47,7 +48,8 @@ class OutboxRepositoryIT : PostgresIntegrationTest() {
             val stored =
                 transaction(database) {
                     BookingOutboxTable
-                        .select { BookingOutboxTable.id eq id2 }
+                        .selectAll()
+                        .where { BookingOutboxTable.id eq id2 }
                         .first()
                 }
             assertEquals("NEW", stored[BookingOutboxTable.status])

@@ -9,7 +9,6 @@ import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.update
@@ -125,7 +124,8 @@ class WebhookUpdateDedupRepository(
                 }
                 val row =
                     WebhookUpdateDedupTable
-                        .select { WebhookUpdateDedupTable.updateId eq updateId }
+                        .selectAll()
+                        .where { WebhookUpdateDedupTable.updateId eq updateId }
                         .first()
                 val duplicates = row[WebhookUpdateDedupTable.duplicateCount] + 1
                 WebhookUpdateDedupTable.update({ WebhookUpdateDedupTable.updateId eq updateId }) {
@@ -147,7 +147,8 @@ class WebhookUpdateDedupRepository(
         return newSuspendedTransaction(context = Dispatchers.IO, db = db) {
             cleanupExpired(expireBefore)
             WebhookUpdateDedupTable
-                .select { WebhookUpdateDedupTable.updateId eq updateId }
+                .selectAll()
+                .where { WebhookUpdateDedupTable.updateId eq updateId }
                 .firstOrNull()
                 ?.toRecord()
         }

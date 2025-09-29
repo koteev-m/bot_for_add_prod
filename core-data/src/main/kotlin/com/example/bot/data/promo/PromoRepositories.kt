@@ -25,7 +25,7 @@ import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.javatime.CurrentTimestamp
 import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import java.nio.charset.StandardCharsets
@@ -114,7 +114,8 @@ class PromoLinkRepositoryImpl(
         return withTxRetry {
             transaction(db) {
                 PromoLinksTable
-                    .select { PromoLinksTable.id eq id }
+                    .selectAll()
+                    .where { PromoLinksTable.id eq id }
                     .limit(1)
                     .firstOrNull()
                     ?.toPromoLink()
@@ -130,7 +131,8 @@ class PromoLinkRepositoryImpl(
             transaction(db) {
                 val query =
                     PromoLinksTable
-                        .select { PromoLinksTable.promoterUserId eq promoterUserId }
+                        .selectAll()
+                        .where { PromoLinksTable.promoterUserId eq promoterUserId }
                 clubId?.let { desiredClub -> query.andWhere { PromoLinksTable.clubId eq desiredClub } }
                 query
                     .orderBy(PromoLinksTable.createdAt, SortOrder.DESC)
@@ -202,7 +204,8 @@ class PromoAttributionRepositoryImpl(
         return withTxRetry {
             transaction(db) {
                 PromoAttributionTable
-                    .select { PromoAttributionTable.bookingId eq bookingId }
+                    .selectAll()
+                    .where { PromoAttributionTable.bookingId eq bookingId }
                     .limit(1)
                     .firstOrNull()
                     ?.toPromoAttribution()
@@ -260,7 +263,8 @@ class BookingTemplateRepositoryImpl(
                 } else {
                     val row =
                         BookingTemplatesTable
-                            .select { BookingTemplatesTable.id eq id }
+                            .selectAll()
+                            .where { BookingTemplatesTable.id eq id }
                             .limit(1)
                             .first()
                     BookingTemplateResult.Success(row.toBookingTemplate())
@@ -289,7 +293,8 @@ class BookingTemplateRepositoryImpl(
         return withTxRetry {
             transaction(db) {
                 BookingTemplatesTable
-                    .select { BookingTemplatesTable.id eq id }
+                    .selectAll()
+                    .where { BookingTemplatesTable.id eq id }
                     .limit(1)
                     .firstOrNull()
                     ?.toBookingTemplate()
@@ -301,7 +306,8 @@ class BookingTemplateRepositoryImpl(
         return withTxRetry {
             transaction(db) {
                 BookingTemplatesTable
-                    .select { BookingTemplatesTable.promoterUserId eq promoterUserId }
+                    .selectAll()
+                    .where { BookingTemplatesTable.promoterUserId eq promoterUserId }
                     .orderBy(BookingTemplatesTable.createdAt, SortOrder.DESC)
                     .map { it.toBookingTemplate() }
             }
@@ -316,7 +322,8 @@ class BookingTemplateRepositoryImpl(
             transaction(db) {
                 val query =
                     BookingTemplatesTable
-                        .select { BookingTemplatesTable.clubId eq clubId }
+                        .selectAll()
+                        .where { BookingTemplatesTable.clubId eq clubId }
                 if (onlyActive) {
                     query.andWhere { BookingTemplatesTable.isActive eq true }
                 }
@@ -332,7 +339,8 @@ class BookingTemplateRepositoryImpl(
             transaction(db) {
                 val row =
                     BookingTemplatesTable
-                        .select { BookingTemplatesTable.id eq id }
+                        .selectAll()
+                        .where { BookingTemplatesTable.id eq id }
                         .limit(1)
                         .firstOrNull()
                         ?: return@transaction BookingTemplateResult.Failure(BookingTemplateError.NotFound)

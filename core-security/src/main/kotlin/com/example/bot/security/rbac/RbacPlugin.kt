@@ -53,14 +53,10 @@ private val rbacStateKey = AttributeKey<RbacState>("rbac.state")
 private val rbacResolutionKey = AttributeKey<RbacResolution>("rbac.resolution")
 private val accessLogStateKey = AttributeKey<AccessLogState>("rbac.access.state")
 
-/**
- * Scope for club related routes.
- */
+/** Scope for club related routes. */
 enum class ClubScope { Own, Any }
 
-/**
- * Configuration for [RbacPlugin].
- */
+/** Configuration for [RbacPlugin]. */
 class RbacConfig {
     lateinit var userRepository: UserRepository
     lateinit var userRoleRepository: UserRoleRepository
@@ -104,12 +100,8 @@ val RbacPlugin =
 
         application.intercept(ApplicationCallPipeline.Call) {
             proceed()
-            if (!call.attributes.contains(accessLogStateKey)) {
-                return@intercept
-            }
-            if (!call.attributes.contains(rbacResolutionKey)) {
-                return@intercept
-            }
+            if (!call.attributes.contains(accessLogStateKey)) return@intercept
+            if (!call.attributes.contains(rbacResolutionKey)) return@intercept
             val access = call.attributes[accessLogStateKey]
             val resolution = call.attributes[rbacResolutionKey]
             state.logFinalDecision(call, access, resolution)
@@ -117,9 +109,7 @@ val RbacPlugin =
     }
 
 private fun installDoubleReceiveIfNeeded(application: Application) {
-    if (application.pluginOrNull(DoubleReceive) != null) {
-        return
-    }
+    if (application.pluginOrNull(DoubleReceive) != null) return
     synchronized(doubleReceiveLock) {
         if (application.pluginOrNull(DoubleReceive) == null) {
             application.install(DoubleReceive)
@@ -127,9 +117,8 @@ private fun installDoubleReceiveIfNeeded(application: Application) {
     }
 }
 
-/**
- * DSL entry point for enforcing role based access.
- */
+/** DSL entry point for enforcing role based access. */
+@Suppress("DEPRECATION") // Route.intercept: миграция на route-scoped plugin в отдельной задаче
 fun Route.authorize(
     vararg roles: Role,
     block: Route.() -> Unit,
@@ -158,9 +147,8 @@ fun Route.authorize(
     authorizedRoute.block()
 }
 
-/**
- * Applies club scope rules to nested routes.
- */
+/** Applies club scope rules to nested routes. */
+@Suppress("DEPRECATION") // Route.intercept: миграция на route-scoped plugin в отдельной задаче
 fun Route.clubScoped(
     scope: ClubScope,
     block: Route.() -> Unit,
@@ -184,12 +172,10 @@ fun Route.clubScoped(
         val hasGlobalRole = context.roles.any { it in successRoles }
         val allowed =
             when (scope) {
-                ClubScope.Own -> {
-                    when {
-                        clubId == null -> false
-                        hasGlobalRole -> true
-                        else -> clubId in context.clubIds
-                    }
+                ClubScope.Own -> when {
+                    clubId == null -> false
+                    hasGlobalRole -> true
+                    else -> clubId in context.clubIds
                 }
                 ClubScope.Any -> hasGlobalRole
             }
@@ -215,9 +201,7 @@ private class PluginRouteSelector(private val label: String) : RouteSelector() {
     override suspend fun evaluate(
         context: RoutingResolveContext,
         segmentIndex: Int,
-    ): RouteSelectorEvaluation {
-        return RouteSelectorEvaluation.Constant
-    }
+    ): RouteSelectorEvaluation = RouteSelectorEvaluation.Constant
 
     override fun toString(): String = label
 }
@@ -315,9 +299,7 @@ internal data class RbacState(
                 success != null &&
                 access.roleCheckPassed &&
                 (!access.scopeRequired || access.scopePassed)
-        if (!shouldLog) {
-            return
-        }
+        if (!shouldLog) return
         logDecision(call, success, "access_granted", "authorized", access.clubId)
         access.logged = true
     }
@@ -331,11 +313,10 @@ internal data class RbacState(
     ) {
         val userId = success?.user?.id
         val ip = call.request.local.remoteAddress
-        val meta =
-            buildJsonObject {
-                put("reason", reason)
-                put("method", call.request.httpMethod.value)
-            }
+        val meta = buildJsonObject {
+            put("reason", reason)
+            put("method", call.request.httpMethod.value)
+        }
         withIdempotencyMdc(call) {
             auditLogRepository.log(
                 userId = userId,
@@ -371,23 +352,11 @@ private val clubResolutionKey = AttributeKey<ClubResolution>("rbac.club.resoluti
 
 private data class ClubResolution(val clubId: Long?)
 
-/**
- * Resolves club identifier from request parameters.
- */
+/** Resolves club identifier from request parameters. */
 class ClubScopeResolver(private val bodyKeys: Set<String> = setOf("clubId", "club_id")) {
     suspend fun resolve(call: ApplicationCall): Long? {
-        val explicit =
-            if (call.attributes.contains(CLUB_ID_ATTRIBUTE)) {
-                call.attributes[CLUB_ID_ATTRIBUTE]
-            } else {
-                null
-            }
-        val cachedHolder =
-            if (call.attributes.contains(clubResolutionKey)) {
-                call.attributes[clubResolutionKey]
-            } else {
-                null
-            }
+        val explicit = if (call.attributes.contains(CLUB_ID_ATTRIBUTE)) call.attributes[CLUB_ID_ATTRIBUTE] else null
+        val cachedHolder = if (call.attributes.contains(clubResolutionKey)) call.attributes[clubResolutionKey] else null
         val cached = cachedHolder?.clubId
         val resolved =
             explicit
@@ -402,22 +371,17 @@ class ClubScopeResolver(private val bodyKeys: Set<String> = setOf("clubId", "clu
         return resolved
     }
 
-    private fun findInParameters(call: ApplicationCall): Long? {
-        return parse(call.parameters["clubId"]) ?: parse(call.parameters["club_id"])
-    }
+    private fun findInParameters(call: ApplicationCall): Long? =
+        parse(call.parameters["clubId"]) ?: parse(call.parameters["club_id"])
 
-    private fun findInQuery(call: ApplicationCall): Long? {
-        return parse(call.request.queryParameters["clubId"]) ?: parse(call.request.queryParameters["club_id"])
-    }
+    private fun findInQuery(call: ApplicationCall): Long? =
+        parse(call.request.queryParameters["clubId"]) ?: parse(call.request.queryParameters["club_id"])
 
-    private fun findInHeaders(call: ApplicationCall): Long? {
-        return parse(call.request.header("X-Club-Id")) ?: parse(call.request.header("club_id"))
-    }
+    private fun findInHeaders(call: ApplicationCall): Long? =
+        parse(call.request.header("X-Club-Id")) ?: parse(call.request.header("club_id"))
 
     private suspend fun findInBody(call: ApplicationCall): Long? {
-        if (call.request.httpMethod !in bodyMethods) {
-            return null
-        }
+        if (call.request.httpMethod !in bodyMethods) return null
         val contentType = call.request.contentType()
         return when {
             contentType.match(ContentType.Application.Json) -> parseJsonBody(call)
@@ -431,12 +395,7 @@ class ClubScopeResolver(private val bodyKeys: Set<String> = setOf("clubId", "clu
 
     private suspend fun parseJsonBody(call: ApplicationCall): Long? {
         val text = runCatching { call.receiveText() }.getOrNull()
-        val root =
-            if (text.isNullOrBlank()) {
-                null
-            } else {
-                runCatching { jsonParser.parseToJsonElement(text) }.getOrNull()
-            }
+        val root = if (text.isNullOrBlank()) null else runCatching { jsonParser.parseToJsonElement(text) }.getOrNull()
         return root?.let { findInJson(it) }
     }
 
@@ -454,17 +413,10 @@ class ClubScopeResolver(private val bodyKeys: Set<String> = setOf("clubId", "clu
     private fun toLong(element: JsonElement): Long? {
         if (element is JsonNull) return null
         val primitive = element.jsonPrimitive
-        return if (primitive.isString) {
-            parse(primitive.content)
-        } else {
-            primitive.safeLongOrNull()
-        }
+        return if (primitive.isString) parse(primitive.content) else primitive.safeLongOrNull()
     }
 
-    private fun parse(value: String?): Long? {
-        if (value.isNullOrBlank()) return null
-        return value.toLongOrNull()
-    }
+    private fun parse(value: String?): Long? = value?.toLongOrNull()
 
     companion object {
         val CLUB_ID_ATTRIBUTE: AttributeKey<Long> = AttributeKey("rbac.club.id")
@@ -472,13 +424,12 @@ class ClubScopeResolver(private val bodyKeys: Set<String> = setOf("clubId", "clu
     }
 }
 
-private fun JsonPrimitive.safeLongOrNull(): Long? {
-    return try {
+private fun JsonPrimitive.safeLongOrNull(): Long? =
+    try {
         this.long
     } catch (_: Throwable) {
         this.content.toLongOrNull()
     }
-}
 
 fun ApplicationCall.rbacContext(): RbacContext {
     val resolution = attributes[rbacResolutionKey]

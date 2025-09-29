@@ -4,7 +4,7 @@ import com.example.bot.data.audit.AuditLogTable
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.fail
@@ -28,7 +28,8 @@ class AuditLogRepositoryIT : PostgresIntegrationTest() {
             val stored =
                 transaction(database) {
                     AuditLogTable
-                        .select { AuditLogTable.id eq id }
+                        .selectAll()
+                        .where { AuditLogTable.id eq id }
                         .firstOrNull()
                 } ?: fail("audit record not found")
             assertEquals("BOOKING_CREATED", stored[AuditLogTable.action])

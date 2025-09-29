@@ -36,16 +36,12 @@ fun Application.installMigrationsAndDatabase() {
         MigrationState.migrationsApplied = true
         log.info("Migrations completed successfully")
     } catch (e: Exception) {
-        // В app-bot мы не тянем Flyway классы, поэтому определяем тип по имени,
-        // чтобы корректно залогировать «FlywayException», если это он.
         val flywayEx =
             e::class.qualifiedName == "org.flywaydb.core.api.FlywayException" ||
                 e.cause?.let { it::class.qualifiedName == "org.flywaydb.core.api.FlywayException" } == true
-
         if (flywayEx) {
             log.error("Migrations failed (FlywayException), stopping application", e)
         } else {
-            // включая JDBC/DS misconfig и иные runtime-ошибки старта
             log.error("Migrations failed, stopping application", e)
         }
         throw e
@@ -55,8 +51,8 @@ fun Application.installMigrationsAndDatabase() {
     Database.connect(ds)
     DataSourceHolder.dataSource = ds
 
-    // Корректное закрытие пула при остановке приложения
-    environment.monitor.subscribe(ApplicationStopped) {
+    // Корректное закрытие пула при остановке приложения (Ktor 3: monitor → events)
+    monitor.subscribe(ApplicationStopped) {
         try {
             (ds as? AutoCloseable)?.close()
         } catch (_: Throwable) {

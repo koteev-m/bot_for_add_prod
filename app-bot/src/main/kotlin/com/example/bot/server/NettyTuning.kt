@@ -9,11 +9,11 @@ import io.ktor.server.request.receiveChannel
 import io.ktor.server.response.respondText
 import io.ktor.util.pipeline.PipelineContext
 import io.ktor.utils.io.ByteReadChannel
-import io.ktor.utils.io.core.readBytes
 import io.ktor.utils.io.readRemaining
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
+import kotlinx.io.readByteArray
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
 import kotlin.io.DEFAULT_BUFFER_SIZE
@@ -76,12 +76,12 @@ suspend fun PipelineContext<Unit, io.ktor.server.application.ApplicationCall>.sa
         )
         return null
     }
-    // В примере используем Content-Length; подсчёт фактического размера можно добавить при необходимости.
     return withContext(PerfDispatchers.cpu) {
         call.receiveChannel().toByteArray()
     }
 }
 
 private suspend fun ByteReadChannel.toByteArray(): ByteArray {
-    return readRemaining(DEFAULT_BUFFER_SIZE.toLong()).readBytes()
+    // Ktor 3.x: readBytes() → readByteArray()
+    return readRemaining(DEFAULT_BUFFER_SIZE.toLong()).readByteArray()
 }

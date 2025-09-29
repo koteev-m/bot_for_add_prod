@@ -20,7 +20,7 @@ import org.jetbrains.exposed.sql.exists
 import org.jetbrains.exposed.sql.javatime.date
 import org.jetbrains.exposed.sql.not
 import org.jetbrains.exposed.sql.or
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
 
@@ -63,7 +63,8 @@ class SegmentationRepository(private val db: Database) {
             val node =
                 transaction(db) {
                     Segments
-                        .select { Segments.id eq segmentId.value }
+                        .selectAll()
+                        .where { Segments.id eq segmentId.value }
                         .single()[Segments.dsl]
                         .let { json.decodeFromString(SegmentNode.serializer(), it) }
                 }
@@ -72,8 +73,8 @@ class SegmentationRepository(private val db: Database) {
                 val batch =
                     transaction(db) {
                         Users
-                            .slice(Users.id)
-                            .select { buildCondition(node) }
+                            .selectAll()
+                            .where { buildCondition(node) }
                             .limit(batchSize, offset)
                             .map { it[Users.id] }
                     }
@@ -147,9 +148,11 @@ class SegmentationRepository(private val db: Database) {
                 val start = LocalDate.parse(node.args[0].jsonPrimitive.content)
                 val end = LocalDate.parse(node.args[1].jsonPrimitive.content)
                 exists(
-                    Bookings.select {
-                        Bookings.userId eq Users.id and Bookings.date.between(start, end)
-                    },
+                    Bookings
+                        .selectAll()
+                        .where {
+                            (Bookings.userId eq Users.id) and Bookings.date.between(start, end)
+                        },
                 )
             }
             "no_shows_ge" ->

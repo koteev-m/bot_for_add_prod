@@ -9,7 +9,7 @@ import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.between
 import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.Instant
 import java.time.ZoneOffset
@@ -25,7 +25,8 @@ class EventRepositoryImpl(private val database: Database) : EventRepository {
         return withTxRetry {
             transaction(database) {
                 EventsTable
-                    .select { (EventsTable.clubId eq clubId) and EventsTable.startAt.between(start, end) }
+                    .selectAll()
+                    .where { (EventsTable.clubId eq clubId) and EventsTable.startAt.between(start, end) }
                     .orderBy(EventsTable.startAt, SortOrder.ASC)
                     .map { it.toEvent() }
             }
@@ -36,7 +37,8 @@ class EventRepositoryImpl(private val database: Database) : EventRepository {
         return withTxRetry {
             transaction(database) {
                 EventsTable
-                    .select { EventsTable.id eq id }
+                    .selectAll()
+                    .where { EventsTable.id eq id }
                     .firstOrNull()
                     ?.toEvent()
             }

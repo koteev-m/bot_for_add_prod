@@ -10,7 +10,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insertIgnore
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.update
 import java.time.OffsetDateTime
@@ -51,7 +51,8 @@ class OutboxRepository(private val db: Database) {
     ): List<Record> {
         return newSuspendedTransaction(db = db) {
             NotificationsOutboxTable
-                .select {
+                .selectAll()
+                .where {
                     (NotificationsOutboxTable.status eq OutboxStatus.NEW.name) and
                         (NotificationsOutboxTable.nextAttemptAt lessEq now)
                 }.orderBy(
@@ -139,7 +140,8 @@ class OutboxRepository(private val db: Database) {
     suspend fun isSent(dedupKey: String): Boolean {
         return newSuspendedTransaction(db = db) {
             NotificationsOutboxTable
-                .select {
+                .selectAll()
+                .where {
                     (NotificationsOutboxTable.dedupKey eq dedupKey) and
                         (NotificationsOutboxTable.status eq OutboxStatus.SENT.name)
                 }.empty()

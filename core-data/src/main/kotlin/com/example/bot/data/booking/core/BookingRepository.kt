@@ -19,7 +19,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.update
 import java.math.BigDecimal
@@ -39,7 +39,8 @@ class BookingRepository(
         return withTxRetry {
             newSuspendedTransaction(context = Dispatchers.IO, db = db) {
                 BookingsTable
-                    .select { BookingsTable.id eq id }
+                    .selectAll()
+                    .where { BookingsTable.id eq id }
                     .limit(1)
                     .firstOrNull()
                     ?.toBookingRecord()
@@ -51,7 +52,8 @@ class BookingRepository(
         return withTxRetry {
             newSuspendedTransaction(context = Dispatchers.IO, db = db) {
                 BookingsTable
-                    .select { BookingsTable.idempotencyKey eq key }
+                    .selectAll()
+                    .where { BookingsTable.idempotencyKey eq key }
                     .limit(1)
                     .firstOrNull()
                     ?.toBookingRecord()
@@ -69,12 +71,14 @@ class BookingRepository(
         return withTxRetry {
             newSuspendedTransaction(context = Dispatchers.IO, db = db) {
                 BookingsTable
-                    .select {
+                    .selectAll()
+                    .where {
                         (BookingsTable.tableId eq tableId) and
                             (BookingsTable.slotStart eq start) and
                             (BookingsTable.slotEnd eq end) and
                             (BookingsTable.status inList ACTIVE_STATUSES)
-                    }.empty()
+                    }
+                    .empty()
                     .not()
             }
         }
@@ -96,7 +100,8 @@ class BookingRepository(
                 newSuspendedTransaction(context = Dispatchers.IO, db = db) {
                     val existingByKey =
                         BookingsTable
-                            .select { BookingsTable.idempotencyKey eq idempotencyKey }
+                            .selectAll()
+                            .where { BookingsTable.idempotencyKey eq idempotencyKey }
                             .limit(1)
                             .firstOrNull()
                     if (existingByKey != null) {
@@ -106,12 +111,14 @@ class BookingRepository(
                     }
                     val activeExists =
                         BookingsTable
-                            .select {
+                            .selectAll()
+                            .where {
                                 (BookingsTable.tableId eq tableId) and
                                     (BookingsTable.slotStart eq start) and
                                     (BookingsTable.slotEnd eq end) and
                                     (BookingsTable.status inList ACTIVE_STATUSES)
-                            }.empty()
+                            }
+                            .empty()
                             .not()
                     if (activeExists) {
                         BookingCoreResult.Failure(BookingCoreError.DuplicateActiveBooking)
@@ -170,13 +177,15 @@ class BookingRepository(
         val now = Instant.now(clock)
         val tableRow =
             TablesTable
-                .select { TablesTable.id eq tableId }
+                .selectAll()
+                .where { TablesTable.id eq tableId }
                 .limit(1)
                 .firstOrNull()
                 ?: throw IllegalStateException("table $tableId not found")
         val eventRow =
             EventsTable
-                .select {
+                .selectAll()
+                .where {
                     (EventsTable.clubId eq tableRow[TablesTable.clubId]) and
                         (EventsTable.startAt eq slotStart) and
                         (EventsTable.endAt eq slotEnd)
@@ -210,7 +219,8 @@ class BookingRepository(
             it[BookingsTable.updatedAt] = timestamp
         }
         return BookingsTable
-            .select { BookingsTable.id eq id }
+            .selectAll()
+            .where { BookingsTable.id eq id }
             .limit(1)
             .first()
             .toBookingRecord()
@@ -224,18 +234,22 @@ class BookingRepository(
     ): BookingCoreError {
         return newSuspendedTransaction(context = Dispatchers.IO, db = db) {
             BookingsTable
-                .select { BookingsTable.idempotencyKey eq idempotencyKey }
+                .selectAll()
+                .where { BookingsTable.idempotencyKey eq idempotencyKey }
                 .limit(1)
                 .firstOrNull()
                 ?.let { return@newSuspendedTransaction BookingCoreError.IdempotencyConflict }
+
             val activeExists =
                 BookingsTable
-                    .select {
+                    .selectAll()
+                    .where {
                         (BookingsTable.tableId eq tableId) and
                             (BookingsTable.slotStart eq slotStart) and
                             (BookingsTable.slotEnd eq slotEnd) and
                             (BookingsTable.status inList ACTIVE_STATUSES)
-                    }.empty()
+                    }
+                    .empty()
                     .not()
             if (activeExists) {
                 BookingCoreError.DuplicateActiveBooking
@@ -258,7 +272,8 @@ class BookingRepository(
             return null
         }
         return BookingsTable
-            .select { BookingsTable.id eq id }
+            .selectAll()
+            .where { BookingsTable.id eq id }
             .limit(1)
             .firstOrNull()
             ?.toBookingRecord()
@@ -305,7 +320,8 @@ class BookingHoldRepository(
                     val now = Instant.now(clock)
                     val existingByKey =
                         BookingHoldsTable
-                            .select { BookingHoldsTable.idempotencyKey eq idempotencyKey }
+                            .selectAll()
+                            .where { BookingHoldsTable.idempotencyKey eq idempotencyKey }
                             .limit(1)
                             .firstOrNull()
                     if (existingByKey != null) {
@@ -315,24 +331,28 @@ class BookingHoldRepository(
                     }
                     val existingBooking =
                         BookingsTable
-                            .select {
+                            .selectAll()
+                            .where {
                                 (BookingsTable.tableId eq tableId) and
                                     (BookingsTable.slotStart eq start) and
                                     (BookingsTable.slotEnd eq end) and
                                     (BookingsTable.status inList ACTIVE_STATUSES)
-                            }.empty()
+                            }
+                            .empty()
                             .not()
                     if (existingBooking) {
                         BookingCoreResult.Failure(BookingCoreError.DuplicateActiveBooking)
                     } else {
                         val activeExists =
                             BookingHoldsTable
-                                .select {
+                                .selectAll()
+                                .where {
                                     (BookingHoldsTable.tableId eq tableId) and
                                         (BookingHoldsTable.slotStart eq start) and
                                         (BookingHoldsTable.slotEnd eq end) and
                                         (BookingHoldsTable.expiresAt greater now.toOffsetDateTime())
-                                }.empty()
+                                }
+                                .empty()
                                 .not()
                         if (activeExists) {
                             BookingCoreResult.Failure(BookingCoreError.ActiveHoldExists)
@@ -398,7 +418,8 @@ class BookingHoldRepository(
         return withTxRetry {
             newSuspendedTransaction(context = Dispatchers.IO, db = db) {
                 BookingHoldsTable
-                    .select { BookingHoldsTable.idempotencyKey eq idempotencyKey }
+                    .selectAll()
+                    .where { BookingHoldsTable.idempotencyKey eq idempotencyKey }
                     .limit(1)
                     .firstOrNull()
                     ?.toBookingHold()
@@ -426,13 +447,15 @@ class BookingHoldRepository(
     ): BookingHold {
         val tableRow =
             TablesTable
-                .select { TablesTable.id eq tableId }
+                .selectAll()
+                .where { TablesTable.id eq tableId }
                 .limit(1)
                 .firstOrNull()
                 ?: throw IllegalStateException("table $tableId not found")
         val eventRow =
             EventsTable
-                .select {
+                .selectAll()
+                .where {
                     (EventsTable.clubId eq tableRow[TablesTable.clubId]) and
                         (EventsTable.startAt eq slotStart) and
                         (EventsTable.endAt eq slotEnd)
@@ -472,7 +495,8 @@ class BookingHoldRepository(
         val tableId = this[BookingHoldsTable.tableId]
         val tableRow =
             TablesTable
-                .select { TablesTable.id eq tableId }
+                .selectAll()
+                .where { TablesTable.id eq tableId }
                 .limit(1)
                 .firstOrNull()
                 ?: throw IllegalStateException("table $tableId not found")
@@ -496,7 +520,8 @@ class BookingHoldRepository(
     ): BookingCoreResult<BookingHold> {
         val row =
             BookingHoldsTable
-                .select { BookingHoldsTable.id eq id }
+                .selectAll()
+                .where { BookingHoldsTable.id eq id }
                 .limit(1)
                 .firstOrNull()
                 ?: return BookingCoreResult.Failure(BookingCoreError.HoldNotFound)
@@ -520,7 +545,8 @@ class BookingHoldRepository(
     private fun consumeHoldInternal(id: UUID): BookingCoreResult<BookingHold> {
         val row =
             BookingHoldsTable
-                .select { BookingHoldsTable.id eq id }
+                .selectAll()
+                .where { BookingHoldsTable.id eq id }
                 .limit(1)
                 .firstOrNull()
                 ?: return BookingCoreResult.Failure(BookingCoreError.HoldNotFound)
@@ -565,7 +591,8 @@ class OutboxRepository(
         return withTxRetry {
             newSuspendedTransaction(context = Dispatchers.IO, db = db) {
                 BookingOutboxTable
-                    .select {
+                    .selectAll()
+                    .where {
                         (BookingOutboxTable.status eq OutboxMessageStatus.NEW.name) and
                             (BookingOutboxTable.nextAttemptAt lessEq now)
                     }
@@ -585,7 +612,8 @@ class OutboxRepository(
                 newSuspendedTransaction(context = Dispatchers.IO, db = db) {
                     val row =
                         BookingOutboxTable
-                            .select { BookingOutboxTable.id eq id }
+                            .selectAll()
+                            .where { BookingOutboxTable.id eq id }
                             .limit(1)
                             .firstOrNull()
                             ?: return@newSuspendedTransaction BookingCoreResult.Failure(
@@ -622,7 +650,8 @@ class OutboxRepository(
                     newSuspendedTransaction(context = Dispatchers.IO, db = db) {
                         val row =
                             BookingOutboxTable
-                                .select { BookingOutboxTable.id eq id }
+                                .selectAll()
+                                .where { BookingOutboxTable.id eq id }
                                 .limit(1)
                                 .firstOrNull()
                                 ?: return@newSuspendedTransaction null

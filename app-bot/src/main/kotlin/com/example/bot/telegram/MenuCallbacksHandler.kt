@@ -55,9 +55,9 @@ class MenuCallbacksHandler(
     fun handle(update: Update) {
         val callbackQuery: CallbackQuery = update.callbackQuery() ?: return
         val data = callbackQuery.data() ?: return
-        val message = callbackQuery.message()
-        val chatId = message?.chat()?.id()
-        val threadId = message?.messageThreadId()
+
+        // безопасное извлечение chatId/threadId без повсеместного использования deprecated-метода
+        val (chatId, threadId) = extractChatAndThread(callbackQuery)
         val lang = callbackQuery.from()?.languageCode()
 
         // Stop Telegram's spinner immediately to avoid blocking UI.
@@ -812,4 +812,21 @@ class MenuCallbacksHandler(
         private const val CLUB_LOOKUP_LIMIT = 32
         private const val NIGHT_LIST_LIMIT = 8
     }
+}
+
+/**
+ * Единая точка использования устаревшего Java-метода pengrad.
+ * Подавляем депрекацию локально, чтобы не размазывать по коду.
+ */
+@Suppress("DEPRECATION") // pengrad: CallbackQuery.message() помечен deprecated в Java-API
+private fun extractChatAndThread(cq: CallbackQuery): Pair<Long?, Int?> {
+    val msg = cq.message() ?: return null to null
+    val chatId = msg.chat()?.id()
+    val threadId =
+        try {
+            msg.messageThreadId()
+        } catch (_: Throwable) {
+            null
+        }
+    return chatId to threadId
 }

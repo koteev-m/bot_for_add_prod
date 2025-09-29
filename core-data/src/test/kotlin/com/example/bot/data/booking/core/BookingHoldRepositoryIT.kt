@@ -5,7 +5,7 @@ import com.example.bot.data.booking.TablesTable
 import com.example.bot.data.db.Clubs
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -87,7 +87,8 @@ class BookingHoldRepositoryIT : PostgresIntegrationTest() {
             val stillThere =
                 transaction(database) {
                     com.example.bot.data.booking.BookingHoldsTable
-                        .select { com.example.bot.data.booking.BookingHoldsTable.id eq created.value.id }
+                        .selectAll()
+                        .where { com.example.bot.data.booking.BookingHoldsTable.id eq created.value.id }
                         .empty()
                 }
             assertTrue(stillThere)
@@ -119,7 +120,8 @@ class BookingHoldRepositoryIT : PostgresIntegrationTest() {
             assertEquals(1, removed)
             val remaining =
                 com.example.bot.data.booking.BookingHoldsTable
-                    .select { com.example.bot.data.booking.BookingHoldsTable.id eq active.value.id }
+                    .selectAll()
+                    .where { com.example.bot.data.booking.BookingHoldsTable.id eq active.value.id }
                     .empty()
             assertFalse(remaining)
         }

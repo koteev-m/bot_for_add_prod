@@ -48,6 +48,7 @@ class CallbackQueryHandler(
                 when (payload) {
                     is BookTableAction -> handleBookTable(callbackQuery, payload)
                     is TemplateOttPayload -> {
+                        // подтверждаем, чтобы убрать "часики"
                         bot.execute(AnswerCallbackQuery(callbackQuery.id()))
                     }
                 }
@@ -64,11 +65,14 @@ class CallbackQueryHandler(
         p: BookTableAction,
     ) {
         // Пример: отправим подтверждение в чат (минимальный сценарий)
-        val chatId = cq.message()?.chat()?.id() ?: return
+        val (chatId, threadId) = extractChatAndThread(cq)
+        if (chatId == null) return
+
         val text = "Выбран стол #${p.tableId} • клуб ${p.clubId} • ночь ${p.startUtc}"
         val req = SendMessage(chatId, text)
-        // Если callback был в теме — можно добавить message_thread_id (не всегда доступно из callback)
+        threadId?.let { req.messageThreadId(it) }
         bot.execute(req)
+
         // Закрыть "часики" на кнопке
         bot.execute(AnswerCallbackQuery(cq.id()))
     }
@@ -85,3 +89,20 @@ private val MENU_PREFIXES =
         "g:",
         NOOP_CALLBACK,
     )
+
+/**
+ * Единая точка использования устаревшего Java-метода pengrad.
+ * Подавляем депрекацию локально, чтобы не размазывать по коду.
+ */
+@Suppress("DEPRECATION") // pengrad: CallbackQuery.message() помечен deprecated в Java-API
+private fun extractChatAndThread(cq: CallbackQuery): Pair<Long?, Int?> {
+    val msg = cq.message() ?: return null to null
+    val chatId = msg.chat()?.id()
+    val threadId =
+        try {
+            msg.messageThreadId()
+        } catch (_: Throwable) {
+            null
+        }
+    return chatId to threadId
+}

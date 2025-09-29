@@ -8,7 +8,7 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 
 class TableRepositoryImpl(private val database: Database) : TableRepository {
@@ -16,7 +16,8 @@ class TableRepositoryImpl(private val database: Database) : TableRepository {
         return withTxRetry {
             transaction(database) {
                 TablesTable
-                    .select { TablesTable.clubId eq clubId }
+                    .selectAll()
+                    .where { TablesTable.clubId eq clubId }
                     .orderBy(TablesTable.tableNumber, SortOrder.ASC)
                     .map { it.toTable() }
             }
@@ -27,7 +28,8 @@ class TableRepositoryImpl(private val database: Database) : TableRepository {
         return withTxRetry {
             transaction(database) {
                 TablesTable
-                    .select { TablesTable.id eq id }
+                    .selectAll()
+                    .where { TablesTable.id eq id }
                     .firstOrNull()
                     ?.toTable()
             }

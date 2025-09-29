@@ -25,11 +25,10 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.andWhere
 import org.jetbrains.exposed.sql.batchInsert
-import org.jetbrains.exposed.sql.count
 import org.jetbrains.exposed.sql.innerJoin
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.lowerCase
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import java.time.Clock
@@ -78,7 +77,8 @@ class GuestListRepositoryImpl(
         return withTxRetry {
             transaction(database) {
                 GuestListsTable
-                    .select { GuestListsTable.id eq id }
+                    .selectAll()
+                    .where { GuestListsTable.id eq id }
                     .firstOrNull()
                     ?.toGuestList()
             }
@@ -89,7 +89,8 @@ class GuestListRepositoryImpl(
         return withTxRetry {
             transaction(database) {
                 GuestListEntriesTable
-                    .select { GuestListEntriesTable.id eq id }
+                    .selectAll()
+                    .where { GuestListEntriesTable.id eq id }
                     .firstOrNull()
                     ?.toGuestListEntry()
             }
@@ -108,7 +109,8 @@ class GuestListRepositoryImpl(
         return withTxRetry {
             transaction(database) {
                 GuestListsTable
-                    .select { GuestListsTable.clubId eq clubId }
+                    .selectAll()
+                    .where { GuestListsTable.clubId eq clubId }
                     .orderBy(GuestListsTable.createdAt, SortOrder.DESC)
                     .limit(size, offset)
                     .map { it.toGuestList() }
@@ -183,7 +185,8 @@ class GuestListRepositoryImpl(
                     null
                 } else {
                     GuestListEntriesTable
-                        .select { GuestListEntriesTable.id eq entryId }
+                        .selectAll()
+                        .where { GuestListEntriesTable.id eq entryId }
                         .single()
                         .toGuestListEntry()
                 }
@@ -203,13 +206,18 @@ class GuestListRepositoryImpl(
         require(offset <= Int.MAX_VALUE) { "page too large" }
         return withTxRetry {
             transaction(database) {
-                val baseQuery = GuestListEntriesTable.select { GuestListEntriesTable.guestListId eq listId }
+                val baseQuery =
+                    GuestListEntriesTable
+                        .selectAll()
+                        .where { GuestListEntriesTable.guestListId eq listId }
+
                 val filteredQuery =
                     if (statusFilter != null) {
                         baseQuery.andWhere { GuestListEntriesTable.status eq statusFilter.name }
                     } else {
                         baseQuery
                     }
+
                 filteredQuery
                     .orderBy(GuestListEntriesTable.id, SortOrder.ASC)
                     .limit(size, offset)
@@ -226,12 +234,15 @@ class GuestListRepositoryImpl(
             transaction(database) {
                 val existing =
                     GuestListEntriesTable
-                        .select { GuestListEntriesTable.id eq entryId }
+                        .selectAll()
+                        .where { GuestListEntriesTable.id eq entryId }
                         .firstOrNull()
                         ?: return@transaction false
+
                 val alreadyCheckedIn =
                     existing[GuestListEntriesTable.status] == GuestListEntryStatus.CHECKED_IN.name &&
                         existing[GuestListEntriesTable.checkedInAt] != null
+
                 if (!alreadyCheckedIn) {
                     GuestListEntriesTable.update({ GuestListEntriesTable.id eq entryId }) {
                         it[status] = GuestListEntryStatus.CHECKED_IN.name
@@ -338,13 +349,20 @@ class GuestListRepositoryImpl(
                         onColumn = { GuestListEntriesTable.guestListId },
                         otherColumn = { GuestListsTable.id },
                     )
-                val total = joined.select { condition }.count()
+                val total =
+                    joined
+                        .selectAll()
+                        .where { condition }
+                        .count()
+
                 val rows =
                     joined
-                        .select { condition }
+                        .selectAll()
+                        .where { condition }
                         .orderBy(GuestListEntriesTable.id, SortOrder.ASC)
                         .limit(size, offset)
                         .map { it.toEntryView() }
+
                 GuestListEntryPage(rows, total)
             }
         }

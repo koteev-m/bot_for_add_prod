@@ -3,11 +3,9 @@ package com.example.bot.data.notifications
 import kotlinx.serialization.json.JsonElement
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import java.time.OffsetDateTime
 
@@ -37,7 +35,8 @@ class NotifySegmentsRepository(private val db: Database) {
     suspend fun find(id: Long): NotifySegment? {
         return newSuspendedTransaction(db = db) {
             NotifySegments
-                .select { NotifySegments.id eq id }
+                .selectAll()
+                .where { NotifySegments.id eq id }
                 .map { toSegment(it) }
                 .singleOrNull()
         }
@@ -89,7 +88,8 @@ class NotifyCampaignsRepository(private val db: Database) {
     suspend fun find(id: Long): NotifyCampaign? {
         return newSuspendedTransaction(db = db) {
             NotifyCampaigns
-                .select { NotifyCampaigns.id eq id }
+                .selectAll()
+                .where { NotifyCampaigns.id eq id }
                 .map { toCampaign(it) }
                 .singleOrNull()
         }
@@ -141,11 +141,13 @@ class UserSubscriptionsRepository(private val db: Database) {
     ): UserSubscription? {
         return newSuspendedTransaction(db = db) {
             UserSubscriptions
-                .select {
+                .selectAll()
+                .where {
                     (UserSubscriptions.userId eq userId) and
                         (UserSubscriptions.topic eq topic) and
                         (clubId?.let { UserSubscriptions.clubId eq it } ?: UserSubscriptions.clubId.isNull())
-                }.map { toSubscription(it) }
+                }
+                .map { toSubscription(it) }
                 .singleOrNull()
         }
     }
@@ -224,7 +226,8 @@ class NotificationsOutboxRepository(private val db: Database) {
     suspend fun find(id: Long): OutboxRecord? {
         return newSuspendedTransaction(db = db) {
             NotificationsOutboxTable
-                .select { NotificationsOutboxTable.id eq id }
+                .selectAll()
+                .where { NotificationsOutboxTable.id eq id }
                 .map { toOutbox(it) }
                 .singleOrNull()
         }

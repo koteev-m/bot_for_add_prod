@@ -7,7 +7,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNotNull
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 
 private object UsersTable : Table("users") {
@@ -35,7 +35,8 @@ class ExposedUserRepository(private val db: Database) : UserRepository {
     override suspend fun getByTelegramId(id: Long): User? {
         return newSuspendedTransaction(context = Dispatchers.IO, db = db) {
             UsersTable
-                .select { UsersTable.telegramUserId eq id }
+                .selectAll()
+                .where { UsersTable.telegramUserId eq id }
                 .limit(1)
                 .firstOrNull()
                 ?.toUser()
@@ -50,21 +51,26 @@ class ExposedUserRoleRepository(private val db: Database) : UserRoleRepository {
     override suspend fun listRoles(userId: Long): Set<Role> {
         return newSuspendedTransaction(context = Dispatchers.IO, db = db) {
             UserRolesTable
-                .slice(UserRolesTable.roleCode)
-                .select { UserRolesTable.userId eq userId }
-                .mapTo(mutableSetOf()) { Role.valueOf(it[UserRolesTable.roleCode]) }
+                .selectAll()
+                .where { UserRolesTable.userId eq userId }
+                .mapTo(mutableSetOf()) { row ->
+                    Role.valueOf(row[UserRolesTable.roleCode])
+                }
         }
     }
 
     override suspend fun listClubIdsFor(userId: Long): Set<Long> {
         return newSuspendedTransaction(context = Dispatchers.IO, db = db) {
             UserRolesTable
-                .slice(UserRolesTable.scopeClubId)
-                .select {
-                    (UserRolesTable.userId eq userId) and (UserRolesTable.scopeType eq "CLUB") and
+                .selectAll()
+                .where {
+                    (UserRolesTable.userId eq userId) and
+                        (UserRolesTable.scopeType eq "CLUB") and
                         UserRolesTable.scopeClubId.isNotNull()
                 }
-                .mapNotNullTo(mutableSetOf()) { it[UserRolesTable.scopeClubId] }
+                .mapNotNullTo(mutableSetOf()) { row ->
+                    row[UserRolesTable.scopeClubId]
+                }
         }
     }
 }

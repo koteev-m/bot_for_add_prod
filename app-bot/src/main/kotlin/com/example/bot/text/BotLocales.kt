@@ -8,15 +8,11 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 object BotLocales {
-    val RU: Locale = Locale("ru", "RU")
+    // JDK 21: конструктор Locale(lang, country) deprecated — используем forLanguageTag
+    val RU: Locale = Locale.forLanguageTag("ru-RU")
     val EN: Locale = Locale.ENGLISH
 
-    fun resolve(lang: String?): Locale =
-        if (lang?.startsWith("en", ignoreCase = true) == true) {
-            EN
-        } else {
-            RU
-        }
+    fun resolve(lang: String?): Locale = if (lang?.startsWith("en", ignoreCase = true) == true) EN else RU
 
     fun dayNameShort(
         instant: Instant,
@@ -24,11 +20,7 @@ object BotLocales {
         locale: Locale,
     ): String =
         instant.atZone(zone).dayOfWeek.getDisplayName(TextStyle.SHORT, locale).let { s ->
-            if (s.isNotEmpty() && s[0].isLowerCase()) {
-                s.replaceFirstChar { it.titlecase(locale) }
-            } else {
-                s
-            }
+            if (s.isNotEmpty() && s[0].isLowerCase()) s.replaceFirstChar { it.titlecase(locale) } else s
         }
 
     fun dateDMmm(

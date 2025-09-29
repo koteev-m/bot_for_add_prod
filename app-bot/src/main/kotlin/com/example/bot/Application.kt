@@ -1,7 +1,9 @@
 package com.example.bot
 
+import com.example.bot.availability.AvailabilityService
 import com.example.bot.booking.BookingService
 import com.example.bot.config.BotLimits
+import com.example.bot.data.club.GuestListCsvParser
 import com.example.bot.data.repo.ClubRepository
 import com.example.bot.data.repo.ExposedClubRepository
 import com.example.bot.di.bookingModule
@@ -17,7 +19,10 @@ import com.example.bot.plugins.installRateLimitPluginDefaults
 import com.example.bot.plugins.installRequestLogging
 import com.example.bot.plugins.meterRegistry
 import com.example.bot.render.DefaultHallRenderer
+import com.example.bot.routes.availabilityRoutes
 import com.example.bot.routes.checkinRoutes
+import com.example.bot.routes.guestFlowRoutes
+import com.example.bot.routes.guestListRoutes
 import com.example.bot.routes.hallImageRoute
 import com.example.bot.routes.healthRoute
 import com.example.bot.routes.readinessRoute
@@ -79,21 +84,17 @@ fun main() {
 
 @Suppress("unused")
 fun Application.module() {
-    // demo constants (чтобы не было «магических» чисел)
+    // demo constants
     val demoStateKey = BotLimits.Demo.STATE_KEY
     val demoClubId = BotLimits.Demo.CLUB_ID
     val demoStartUtc = BotLimits.Demo.START_UTC
     val demoTableIds = BotLimits.Demo.TABLE_IDS
 
-    // 0) Тюнинг сервера (лимиты размера запроса и пр.)
+    // 0) Тюнинг сервера и наблюдаемость
     installServerTuning()
-    // 1) Rate limiting: IP + per-subject (429 при переполнении)
     installRateLimitPluginDefaults()
-    // 2) Migrations + DB (18.3)
     installMigrationsAndDatabase()
-    // 3) AppConfig (этот шаг должен идти раньше бизнес-логики)
     installAppConfig()
-    // 4) Observability (18.4)
     installRequestLogging()
     installMetrics()
     install(ContentNegotiation) { json() }
@@ -128,27 +129,45 @@ fun Application.module() {
     val callbackHandler by inject<CallbackQueryHandler>()
     val bookingService by inject<BookingService>()
     val guestListRepository: GuestListRepository = get()
+    val availability: AvailabilityService = get()
 
     var workerJob: Job? = null
-    environment.monitor.subscribe(ApplicationStarted) {
+    // Подписка на события жизненного цикла
+    monitor.subscribe(ApplicationStarted) {
         workerJob = launch { outboxWorker.run() }
     }
-    environment.monitor.subscribe(ApplicationStopped) {
+    monitor.subscribe(ApplicationStopped) {
         workerJob?.cancel()
     }
 
     // 5) Routes
     val renderer = DefaultHallRenderer()
     routing {
+        // /health, /ready
         healthRoute()
         readinessRoute()
+
+        // Рендер схемы зала с кеш/ETag
         hallImageRoute(renderer) { _, _ -> demoStateKey }
-        // … остальные маршруты приложения
+
+        // Публичный guest-flow (клуб → список ночей)
+        guestFlowRoutes(availability)
+
+        // Публичный API доступности: ночи и свободные столы
+        availabilityRoutes(availability)
     }
 
+    // Mini App статика, CSP, gzip
     webAppRoutes()
+
+    // Чек-ин верификатор (WebApp → POST /api/clubs/{clubId}/checkin/scan)
     checkinRoutes(repository = guestListRepository)
+
+    // RBAC-защищённые брони: /api/clubs/{clubId}/bookings/hold|confirm
     securedRoutes(bookingService)
+
+    // Гостевые списки: поиск/экспорт/импорт (RBAC/club scope внутри)
+    guestListRoutes(repository = guestListRepository, parser = GuestListCsvParser())
 
     // Telegram bot (polling demo)
     bot.setUpdatesListener(
@@ -164,11 +183,7 @@ fun Application.module() {
                             demoTableIds.map { tableId ->
                                 "Стол $tableId" to BookTableAction(demoClubId, demoStartUtc, tableId)
                             }
-                        val kb =
-                            KeyboardFactory.tableKeyboard(
-                                service = ottService,
-                                items = items,
-                            )
+                        val kb = KeyboardFactory.tableKeyboard(service = ottService, items = items)
                         bot.execute(SendMessage(chatId, "Выберите стол:").replyMarkup(kb))
                     }
                 }
