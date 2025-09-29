@@ -8,7 +8,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
-import java.time.ZonedDateTime
 
 /**
  * Source of the slot generation.
@@ -32,6 +31,20 @@ data class NightSlot(
     val openLocal: LocalDateTime,
     val closeLocal: LocalDateTime,
     val zone: ZoneId,
+)
+
+private data class DayHours(val open: LocalTime, val close: LocalTime)
+
+private data class DayException(
+    val isOpen: Boolean,
+    val overrideOpen: LocalTime?,
+    val overrideClose: LocalTime?,
+)
+
+private data class DayHoliday(
+    val isOpen: Boolean,
+    val overrideOpen: LocalTime?,
+    val overrideClose: LocalTime?,
 )
 
 /**
@@ -109,51 +122,48 @@ class OperatingRulesResolver(
             val holiday = holidays[date]
             val baseHour = hours.find { it.dayOfWeek == date.dayOfWeek }
 
-            var open: LocalTime? = null
-            var close: LocalTime? = null
-            var source: NightSource? = null
-            var special = false
+            val dayHours =
+                mergeDayHours(
+                    base = baseHour?.let { DayHours(it.open, it.close) },
+                    exception =
+                        exception?.let {
+                            DayException(
+                                isOpen = it.isOpen,
+                                overrideOpen = it.overrideOpen,
+                                overrideClose = it.overrideClose,
+                            )
+                        },
+                    holiday =
+                        holiday?.let {
+                            DayHoliday(
+                                isOpen = it.isOpen,
+                                overrideOpen = it.overrideOpen,
+                                overrideClose = it.overrideClose,
+                            )
+                        },
+                )
 
-            if (exception != null) {
-                if (!exception.isOpen) {
-                    date = date.plusDays(1)
-                    continue
+            val source =
+                when {
+                    dayHours == null -> null
+                    holiday?.isOpen == true -> NightSource.HOLIDAY
+                    exception?.isOpen == true -> NightSource.EXCEPTION
+                    baseHour != null -> NightSource.WEEKEND_RULE
+                    else -> null
                 }
-                open = exception.overrideOpen ?: baseHour?.open
-                close = exception.overrideClose ?: baseHour?.close
-                source = NightSource.EXCEPTION
-                special = true
-            } else if (holiday != null) {
-                if (!holiday.isOpen) {
-                    date = date.plusDays(1)
-                    continue
-                }
-                open = holiday.overrideOpen ?: baseHour?.open
-                close = holiday.overrideClose ?: baseHour?.close
-                source = NightSource.HOLIDAY
-                special = true
-            } else if (baseHour != null) {
-                open = baseHour.open
-                close = baseHour.close
-                source = NightSource.WEEKEND_RULE
-            }
 
-            if (open != null && close != null && source != null) {
-                val openZdt = zoned(date, open, zone)
-                val closeDate = if (close <= open) date.plusDays(1) else date
-                val closeZdt = zoned(closeDate, close, zone)
-                val startUtc = openZdt.toInstant()
-                val endUtc = closeZdt.toInstant()
+            if (dayHours != null && source != null) {
+                val (startUtc, endUtc) = toUtcWindow(date, dayHours, zone)
                 if (endUtc > startUtc) {
                     result +=
                         NightSlot(
                             clubId = clubId,
                             eventStartUtc = startUtc,
                             eventEndUtc = endUtc,
-                            isSpecial = special,
+                            isSpecial = source != NightSource.WEEKEND_RULE,
                             source = source,
-                            openLocal = openZdt.toLocalDateTime(),
-                            closeLocal = closeZdt.toLocalDateTime(),
+                            openLocal = startUtc.atZone(zone).toLocalDateTime(),
+                            closeLocal = endUtc.atZone(zone).toLocalDateTime(),
                             zone = zone,
                         )
                 }
@@ -205,12 +215,47 @@ class OperatingRulesResolver(
             last.isSpecial == slot.isSpecial &&
             last.eventEndUtc == slot.eventStartUtc
 
-    private fun zoned(
-        date: LocalDate,
-        time: LocalTime,
+    private fun toUtcWindow(
+        localDate: LocalDate,
+        hours: DayHours,
         zone: ZoneId,
-    ): ZonedDateTime {
-        val ldt = LocalDateTime.of(date, time)
-        return ZonedDateTime.ofLocal(ldt, zone, null)
+    ): Pair<Instant, Instant> {
+        val openZdt = localDate.atTime(hours.open).atZone(zone)
+        val closeBase = localDate.atTime(hours.close).atZone(zone)
+        val closeZdt = if (!closeBase.isAfter(openZdt)) closeBase.plusDays(1) else closeBase
+        return openZdt.toInstant() to closeZdt.toInstant()
+    }
+}
+
+private fun mergeDayHours(
+    base: DayHours?,
+    exception: DayException?,
+    holiday: DayHoliday?,
+): DayHours? {
+    val hasException = exception != null
+    val afterException =
+        when {
+            exception == null -> base
+            !exception.isOpen -> return null
+            else -> {
+                val open = exception.overrideOpen ?: base?.open
+                val close = exception.overrideClose ?: base?.close
+                if (open != null && close != null) DayHours(open, close) else null
+            }
+        }
+
+    return when {
+        holiday == null -> afterException
+        !holiday.isOpen -> null
+        else -> {
+            val src = afterException ?: if (!hasException) base else null
+            val open = holiday.overrideOpen ?: src?.open
+            val close = holiday.overrideClose ?: src?.close
+            if (open != null && close != null) {
+                DayHours(open, close)
+            } else {
+                null
+            }
+        }
     }
 }

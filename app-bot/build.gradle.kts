@@ -70,6 +70,8 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.h2)
     testImplementation(libs.postgres)
+    testImplementation(libs.flyway.core)
+    testImplementation(libs.flyway.pg)
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.testcontainers.junit)
     testImplementation(projects.coreTesting)

@@ -28,18 +28,20 @@ class PaymentsHandlers(
         chatId: Long,
         invoice: InvoiceInfo,
     ): SendResponse {
+        // Формируем цену (minor units → Int).
         val price = LabeledPrice("deposit", invoice.totalMinor.toInt())
 
+        // Конструктор в pengrad 9.2.0 помечен deprecated — подавляем только для этого вызова.
         @Suppress("DEPRECATION")
         val req =
             SendInvoice(
-                chatId,                        // Object chatId в текущей версии — Long подходит
-                config.invoiceTitlePrefix,     // title
-                "",                            // description (можно расширить по необходимости)
-                invoice.payload,               // payload (идемпотентность/сопоставление)
-                invoice.currency,              // ISO-валюта
-                price,                         // vararg LabeledPrice
-            ).providerToken(config.providerToken) // провайдер-токен — через сеттер в 9.2.0
+                chatId,
+                config.invoiceTitlePrefix,
+                "",
+                invoice.payload,
+                invoice.currency,
+                price,
+            ).providerToken(config.providerToken)
 
         return bot.execute(req)
     }
