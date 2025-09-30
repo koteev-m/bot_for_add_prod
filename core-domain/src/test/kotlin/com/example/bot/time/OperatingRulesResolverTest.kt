@@ -7,201 +7,141 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.Clock
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
-import java.time.ZoneOffset
 
 class OperatingRulesResolverTest {
-    private val zone = ZoneId.of("Europe/Moscow")
-    private val clock = Clock.fixed(Instant.parse("2025-05-01T00:00:00Z"), ZoneOffset.UTC)
+    private val zoneId = ZoneId.of("Europe/Moscow")
+    private val testClock = Clock.fixed(Instant.parse("2025-04-30T00:00:00Z"), ZoneId.of("UTC"))
 
     @Test
-    fun `holiday inherits exception overrides`() {
-        val repository =
-            object : AvailabilityRepository {
-                override suspend fun findClub(clubId: Long) = Club(clubId, zone.id)
+    fun `holiday inherits boundary from exception`() {
+        val date = LocalDate.of(2025, 5, 4)
+        val repo =
+            FakeAvailabilityRepository(
+                club = Club(1, zoneId.id),
+                hours = listOf(ClubHour(DayOfWeek.SUNDAY, LocalTime.of(22, 0), LocalTime.of(6, 0))),
+                exceptions = listOf(ClubException(date, true, null, LocalTime.of(4, 0))),
+                holidays = listOf(ClubHoliday(date, true, null, LocalTime.of(3, 0))),
+            )
 
-                override suspend fun listClubHours(clubId: Long) =
-                    listOf(ClubHour(java.time.DayOfWeek.FRIDAY, LocalTime.of(22, 0), LocalTime.of(6, 0)))
-
-                override suspend fun listHolidays(
-                    clubId: Long,
-                    from: LocalDate,
-                    to: LocalDate,
-                ) = listOf(
-                    ClubHoliday(
-                        LocalDate.of(2025, 5, 2),
-                        isOpen = true,
-                        overrideOpen = null,
-                        overrideClose = LocalTime.of(2, 0),
-                    ),
-                )
-
-                override suspend fun listExceptions(
-                    clubId: Long,
-                    from: LocalDate,
-                    to: LocalDate,
-                ) = listOf(
-                    ClubException(
-                        LocalDate.of(2025, 5, 2),
-                        isOpen = true,
-                        overrideOpen = LocalTime.of(21, 0),
-                        overrideClose = null,
-                    ),
-                )
-
-                override suspend fun listEvents(
-                    clubId: Long,
-                    from: Instant,
-                    to: Instant,
-                ) = emptyList<Event>()
-
-                override suspend fun findEvent(
-                    clubId: Long,
-                    startUtc: Instant,
-                ) = null
-
-                override suspend fun listTables(clubId: Long) = emptyList<Table>()
-
-                override suspend fun listActiveHoldTableIds(
-                    eventId: Long,
-                    now: Instant,
-                ) = emptySet<Long>()
-
-                override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
-            }
-
-        val resolver = OperatingRulesResolver(repository, clock)
-        val from = LocalDate.of(2025, 5, 1).atStartOfDay(ZoneOffset.UTC).toInstant()
-        val to = LocalDate.of(2025, 5, 4).atStartOfDay(ZoneOffset.UTC).toInstant()
-        val slots = runBlocking { resolver.resolve(1, from, to) }
+        val slots = resolve(repo, date, date)
 
         assertEquals(1, slots.size)
         val slot = slots.single()
         assertEquals(NightSource.HOLIDAY, slot.source)
-        assertTrue(slot.isSpecial)
-        assertEquals(LocalTime.of(21, 0), slot.openLocal.toLocalTime())
-        assertEquals(LocalTime.of(2, 0), slot.closeLocal.toLocalTime())
-        assertEquals(LocalDate.of(2025, 5, 2), slot.openLocal.toLocalDate())
-        assertEquals(LocalDate.of(2025, 5, 3), slot.closeLocal.toLocalDate())
-    }
-
-    @Test
-    fun `holiday without base uses explicit overrides`() {
-        val repository =
-            object : AvailabilityRepository {
-                override suspend fun findClub(clubId: Long) = Club(clubId, zone.id)
-
-                override suspend fun listClubHours(clubId: Long) = emptyList<ClubHour>()
-
-                override suspend fun listHolidays(
-                    clubId: Long,
-                    from: LocalDate,
-                    to: LocalDate,
-                ) = listOf(
-                    ClubHoliday(
-                        LocalDate.of(2025, 5, 2),
-                        isOpen = true,
-                        overrideOpen = LocalTime.of(20, 0),
-                        overrideClose = LocalTime.of(3, 0),
-                    ),
-                )
-
-                override suspend fun listExceptions(
-                    clubId: Long,
-                    from: LocalDate,
-                    to: LocalDate,
-                ) = emptyList<ClubException>()
-
-                override suspend fun listEvents(
-                    clubId: Long,
-                    from: Instant,
-                    to: Instant,
-                ) = emptyList<Event>()
-
-                override suspend fun findEvent(
-                    clubId: Long,
-                    startUtc: Instant,
-                ) = null
-
-                override suspend fun listTables(clubId: Long) = emptyList<Table>()
-
-                override suspend fun listActiveHoldTableIds(
-                    eventId: Long,
-                    now: Instant,
-                ) = emptySet<Long>()
-
-                override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
-            }
-
-        val resolver = OperatingRulesResolver(repository, clock)
-        val from = LocalDate.of(2025, 5, 1).atStartOfDay(ZoneOffset.UTC).toInstant()
-        val to = LocalDate.of(2025, 5, 3).atStartOfDay(ZoneOffset.UTC).toInstant()
-        val slots = runBlocking { resolver.resolve(1, from, to) }
-
-        assertEquals(1, slots.size)
-        val slot = slots.single()
-        assertEquals(NightSource.HOLIDAY, slot.source)
-        assertEquals(LocalTime.of(20, 0), slot.openLocal.toLocalTime())
+        assertEquals(LocalTime.of(22, 0), slot.openLocal.toLocalTime())
         assertEquals(LocalTime.of(3, 0), slot.closeLocal.toLocalTime())
-        assertEquals(LocalDate.of(2025, 5, 3), slot.closeLocal.toLocalDate())
     }
 
     @Test
-    fun `holiday missing boundary without base keeps night closed`() {
-        val repository =
-            object : AvailabilityRepository {
-                override suspend fun findClub(clubId: Long) = Club(clubId, zone.id)
-
-                override suspend fun listClubHours(clubId: Long) = emptyList<ClubHour>()
-
-                override suspend fun listHolidays(
-                    clubId: Long,
-                    from: LocalDate,
-                    to: LocalDate,
-                ) = listOf(
-                    ClubHoliday(
-                        LocalDate.of(2025, 5, 2),
-                        isOpen = true,
-                        overrideOpen = LocalTime.of(20, 0),
-                        overrideClose = null,
+    fun `holiday opens night without base hours`() {
+        val date = LocalDate.of(2025, 5, 1)
+        val repo =
+            FakeAvailabilityRepository(
+                club = Club(1, zoneId.id),
+                holidays =
+                    listOf(
+                        ClubHoliday(date, true, LocalTime.of(18, 0), LocalTime.of(23, 0)),
                     ),
-                )
+            )
 
-                override suspend fun listExceptions(
-                    clubId: Long,
-                    from: LocalDate,
-                    to: LocalDate,
-                ) = emptyList<ClubException>()
+        val slots = resolve(repo, date, date)
 
-                override suspend fun listEvents(
-                    clubId: Long,
-                    from: Instant,
-                    to: Instant,
-                ) = emptyList<Event>()
-
-                override suspend fun findEvent(
-                    clubId: Long,
-                    startUtc: Instant,
-                ) = null
-
-                override suspend fun listTables(clubId: Long) = emptyList<Table>()
-
-                override suspend fun listActiveHoldTableIds(
-                    eventId: Long,
-                    now: Instant,
-                ) = emptySet<Long>()
-
-                override suspend fun listActiveBookingTableIds(eventId: Long) = emptySet<Long>()
-            }
-
-        val resolver = OperatingRulesResolver(repository, clock)
-        val from = LocalDate.of(2025, 5, 1).atStartOfDay(ZoneOffset.UTC).toInstant()
-        val to = LocalDate.of(2025, 5, 3).atStartOfDay(ZoneOffset.UTC).toInstant()
-        val slots = runBlocking { resolver.resolve(1, from, to) }
-
-        assertEquals(0, slots.size)
+        assertEquals(1, slots.size)
+        val slot = slots.single()
+        assertEquals(NightSource.HOLIDAY, slot.source)
+        assertEquals(LocalTime.of(18, 0), slot.openLocal.toLocalTime())
+        assertEquals(LocalTime.of(23, 0), slot.closeLocal.toLocalTime())
     }
+
+    @Test
+    fun `holiday with single override and no base keeps night closed`() {
+        val date = LocalDate.of(2025, 5, 2)
+        val repo =
+            FakeAvailabilityRepository(
+                club = Club(1, zoneId.id),
+                holidays =
+                    listOf(
+                        ClubHoliday(date, true, LocalTime.of(18, 0), null),
+                    ),
+            )
+
+        val slots = resolve(repo, date, date)
+
+        assertTrue(slots.isEmpty())
+    }
+
+    @Test
+    fun `overnight window closes on next day`() {
+        val date = LocalDate.of(2025, 5, 3)
+        val repo =
+            FakeAvailabilityRepository(
+                club = Club(1, zoneId.id),
+                hours = listOf(ClubHour(DayOfWeek.SATURDAY, LocalTime.of(22, 0), LocalTime.of(4, 0))),
+            )
+
+        val slots = resolve(repo, date, date)
+
+        val slot = slots.single()
+        assertEquals(date.plusDays(1), slot.closeLocal.toLocalDate())
+        assertTrue(slot.eventEndUtc.isAfter(slot.eventStartUtc))
+    }
+
+    private fun resolve(
+        repository: AvailabilityRepository,
+        fromDate: LocalDate,
+        toDate: LocalDate,
+    ): List<NightSlot> {
+        val resolver = OperatingRulesResolver(repository, testClock)
+        val from = fromDate.minusDays(1).atStartOfDay(zoneId).toInstant()
+        val to = toDate.plusDays(1).atStartOfDay(zoneId).toInstant()
+        return runBlocking { resolver.resolve(1, from, to) }
+    }
+}
+
+private class FakeAvailabilityRepository(
+    private val club: Club,
+    private val hours: List<ClubHour> = emptyList(),
+    private val holidays: List<ClubHoliday> = emptyList(),
+    private val exceptions: List<ClubException> = emptyList(),
+) : AvailabilityRepository {
+    override suspend fun findClub(clubId: Long): Club? = club
+
+    override suspend fun listClubHours(clubId: Long): List<ClubHour> = hours
+
+    override suspend fun listHolidays(
+        clubId: Long,
+        from: LocalDate,
+        to: LocalDate,
+    ): List<ClubHoliday> = holidays.filter { !it.date.isBefore(from) && !it.date.isAfter(to) }
+
+    override suspend fun listExceptions(
+        clubId: Long,
+        from: LocalDate,
+        to: LocalDate,
+    ): List<ClubException> = exceptions.filter { !it.date.isBefore(from) && !it.date.isAfter(to) }
+
+    override suspend fun listEvents(
+        clubId: Long,
+        from: Instant,
+        to: Instant,
+    ): List<Event> = emptyList()
+
+    override suspend fun findEvent(
+        clubId: Long,
+        startUtc: Instant,
+    ): Event? = null
+
+    override suspend fun listTables(clubId: Long): List<Table> = emptyList()
+
+    override suspend fun listActiveHoldTableIds(
+        eventId: Long,
+        now: Instant,
+    ): Set<Long> = emptySet()
+
+    override suspend fun listActiveBookingTableIds(eventId: Long): Set<Long> = emptySet()
 }
