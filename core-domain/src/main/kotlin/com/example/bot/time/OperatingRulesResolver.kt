@@ -214,17 +214,6 @@ class OperatingRulesResolver(
             last.source == slot.source &&
             last.isSpecial == slot.isSpecial &&
             last.eventEndUtc == slot.eventStartUtc
-
-    private fun toUtcWindow(
-        localDate: LocalDate,
-        hours: DayHours,
-        zone: ZoneId,
-    ): Pair<Instant, Instant> {
-        val openZdt = localDate.atTime(hours.open).atZone(zone)
-        val closeBase = localDate.atTime(hours.close).atZone(zone)
-        val closeZdt = if (!closeBase.isAfter(openZdt)) closeBase.plusDays(1) else closeBase
-        return openZdt.toInstant() to closeZdt.toInstant()
-    }
 }
 
 private fun mergeDayHours(
@@ -232,15 +221,16 @@ private fun mergeDayHours(
     exception: DayException?,
     holiday: DayHoliday?,
 ): DayHours? {
-    val hasException = exception != null
     val afterException =
         when {
             exception == null -> base
-            !exception.isOpen -> return null
+            !exception.isOpen -> null
             else -> {
-                val open = exception.overrideOpen ?: base?.open
-                val close = exception.overrideClose ?: base?.close
-                if (open != null && close != null) DayHours(open, close) else null
+                val src = base ?: return null
+                DayHours(
+                    open = exception.overrideOpen ?: src.open,
+                    close = exception.overrideClose ?: src.close,
+                )
             }
         }
 
@@ -248,14 +238,33 @@ private fun mergeDayHours(
         holiday == null -> afterException
         !holiday.isOpen -> null
         else -> {
-            val src = afterException ?: if (!hasException) base else null
-            val open = holiday.overrideOpen ?: src?.open
-            val close = holiday.overrideClose ?: src?.close
-            if (open != null && close != null) {
-                DayHours(open, close)
-            } else {
-                null
+            val openOverride = holiday.overrideOpen
+            val closeOverride = holiday.overrideClose
+            when {
+                openOverride != null && closeOverride != null -> DayHours(openOverride, closeOverride)
+                afterException != null ->
+                    DayHours(
+                        open = openOverride ?: afterException.open,
+                        close = closeOverride ?: afterException.close,
+                    )
+                base != null ->
+                    DayHours(
+                        open = openOverride ?: base.open,
+                        close = closeOverride ?: base.close,
+                    )
+                else -> null
             }
         }
     }
+}
+
+private fun toUtcWindow(
+    localDate: LocalDate,
+    hours: DayHours,
+    zone: ZoneId,
+): Pair<Instant, Instant> {
+    val openZdt = localDate.atTime(hours.open).atZone(zone)
+    val closeZdt0 = localDate.atTime(hours.close).atZone(zone)
+    val closeZdt = if (!closeZdt0.isAfter(openZdt)) closeZdt0.plusDays(1) else closeZdt0
+    return openZdt.toInstant() to closeZdt.toInstant()
 }
