@@ -98,11 +98,6 @@ private val MENU_PREFIXES =
 private fun extractChatAndThread(cq: CallbackQuery): Pair<Long?, Int?> {
     val msg = cq.message() ?: return null to null
     val chatId = msg.chat()?.id()
-    val threadId =
-        try {
-            msg.messageThreadId()
-        } catch (_: Throwable) {
-            null
-        }
+    val threadId = runCatching { msg.messageThreadId() }.getOrNull()
     return chatId to threadId
 }

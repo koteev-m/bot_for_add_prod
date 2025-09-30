@@ -104,6 +104,12 @@ Run the full test suite:
 ./gradlew test
 ```
 
+Run only the domain unit tests:
+
+```bash
+./gradlew :core-domain:test
+```
+
 Run only integration smoke tests:
 
 ```bash
@@ -115,6 +121,14 @@ Enable verbose logging:
 ```bash
 ./gradlew test -i
 ```
+
+To include integration tests tagged with `@Tag("it")` in any module, pass the Gradle property `-PrunIT=true`:
+
+```bash
+./gradlew clean build -PrunIT=true
+```
+
+Without the flag (and outside CI) the build automatically skips these tests.
 
 Test reports are generated under `build/reports/tests/test/index.html`.
 

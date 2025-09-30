@@ -31,8 +31,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.andWhere
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -93,7 +95,8 @@ class BookingServiceIT : PostgresAppTest() {
             val bookedCount =
                 transaction(database) {
                     BookingsTable
-                        .select { BookingsTable.status eq BookingStatus.BOOKED.name }
+                        .selectAll()
+                        .andWhere { BookingsTable.status eq BookingStatus.BOOKED.name }
                         .count()
                 }
             assertEquals(1, bookedCount)
@@ -125,7 +128,8 @@ class BookingServiceIT : PostgresAppTest() {
             val bookings =
                 transaction(database) {
                     BookingsTable
-                        .select { BookingsTable.status eq BookingStatus.BOOKED.name }
+                        .selectAll()
+                        .andWhere { BookingsTable.status eq BookingStatus.BOOKED.name }
                         .count()
                 }
             assertEquals(1, bookings)
@@ -165,14 +169,16 @@ class BookingServiceIT : PostgresAppTest() {
             val status =
                 transaction(database) {
                     BookingsTable
-                        .select { BookingsTable.id eq bookingId }
+                        .selectAll()
+                        .andWhere { BookingsTable.id eq bookingId }
                         .first()[BookingsTable.status]
                 }
             assertEquals(BookingStatus.BOOKED.name, status)
             val outboxStatus =
                 transaction(database) {
                     BookingOutboxTable
-                        .select { BookingOutboxTable.topic eq "booking.confirmed" }
+                        .selectAll()
+                        .andWhere { BookingOutboxTable.topic eq "booking.confirmed" }
                         .first()[BookingOutboxTable.status]
                 }
             assertEquals("SENT", outboxStatus)
@@ -264,7 +270,10 @@ class BookingServiceIT : PostgresAppTest() {
 
             val stored =
                 transaction(database) {
-                    BookingOutboxTable.select { BookingOutboxTable.status eq "NEW" }.first()
+                    BookingOutboxTable
+                        .selectAll()
+                        .andWhere { BookingOutboxTable.status eq "NEW" }
+                        .first()
                 }
             assertEquals(1, stored[BookingOutboxTable.attempts])
             val nextAttempt = stored[BookingOutboxTable.nextAttemptAt].toInstant()

@@ -24,8 +24,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.andWhere
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -211,7 +213,11 @@ class BookingTemplateFlowIT : PostgresAppTest() {
             assertTrue(result is BookingCmdResult.Booked)
 
             transaction(database) {
-                val bookings = BookingsTable.select { BookingsTable.tableId eq tableId }.toList()
+                val bookings =
+                    BookingsTable
+                        .selectAll()
+                        .andWhere { BookingsTable.tableId eq tableId }
+                        .toList()
                 assertEquals(1, bookings.size)
                 val record = bookings.first()
                 assertEquals(start, record[BookingsTable.slotStart].toInstant())
@@ -219,14 +225,19 @@ class BookingTemplateFlowIT : PostgresAppTest() {
             }
 
             transaction(database) {
-                val outboxCount = BookingOutboxTable.select { BookingOutboxTable.topic eq "booking.confirmed" }.count()
+                val outboxCount =
+                    BookingOutboxTable
+                        .selectAll()
+                        .andWhere { BookingOutboxTable.topic eq "booking.confirmed" }
+                        .count()
                 assertEquals(1, outboxCount)
             }
 
             transaction(database) {
                 val rows =
                     NotificationsOutboxTable
-                        .select { NotificationsOutboxTable.kind eq "promo.template.booked" }
+                        .selectAll()
+                        .andWhere { NotificationsOutboxTable.kind eq "promo.template.booked" }
                         .toList()
                 assertEquals(1, rows.size)
                 val payload = rows.first()[NotificationsOutboxTable.payload]
@@ -252,7 +263,8 @@ class BookingTemplateFlowIT : PostgresAppTest() {
             transaction(database) {
                 val outboxRows =
                     NotificationsOutboxTable
-                        .select { NotificationsOutboxTable.kind eq "promo.template.booked" }
+                        .selectAll()
+                        .andWhere { NotificationsOutboxTable.kind eq "promo.template.booked" }
                         .toList()
                 assertEquals(1, outboxRows.size)
             }

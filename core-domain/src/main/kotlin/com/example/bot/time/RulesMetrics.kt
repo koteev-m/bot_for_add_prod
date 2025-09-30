@@ -1,16 +1,74 @@
 package com.example.bot.time
 
 import com.example.bot.telemetry.Telemetry
-import io.micrometer.core.instrument.Counter
 
 object RulesMetrics {
-    private val inheritedOpen: Counter by lazy { Telemetry.registry.counter("rules.holiday.inherited_open") }
-    private val inheritedClose: Counter by lazy { Telemetry.registry.counter("rules.holiday.inherited_close") }
-    private val exceptionApplied: Counter by lazy { Telemetry.registry.counter("rules.exception.applied") }
+    private val registry get() = Telemetry.registry
 
-    fun incHolidayInheritedOpen() = inheritedOpen.increment()
+    private fun boolTag(value: Boolean): String = value.toString()
 
-    fun incHolidayInheritedClose() = inheritedClose.increment()
+    fun incHolidayInheritedOpen(
+        dow: Int,
+        overnight: Boolean,
+    ) {
+        registry
+            .counter(
+                "rules.holiday.inherited_open",
+                "dow",
+                dow.toString(),
+                "overnight",
+                boolTag(overnight),
+            ).increment()
+    }
 
-    fun incExceptionApplied() = exceptionApplied.increment()
+    fun incHolidayInheritedClose(
+        dow: Int,
+        overnight: Boolean,
+    ) {
+        registry
+            .counter(
+                "rules.holiday.inherited_close",
+                "dow",
+                dow.toString(),
+                "overnight",
+                boolTag(overnight),
+            ).increment()
+    }
+
+    fun incExceptionApplied(
+        dow: Int,
+        holidayApplied: Boolean,
+        overnight: Boolean,
+    ) {
+        registry
+            .counter(
+                "rules.exception.applied",
+                "dow",
+                dow.toString(),
+                "holiday",
+                boolTag(holidayApplied),
+                "overnight",
+                boolTag(overnight),
+            ).increment()
+    }
+
+    fun incDayOpen(
+        dow: Int,
+        exceptionApplied: Boolean,
+        holidayApplied: Boolean,
+        overnight: Boolean,
+    ) {
+        registry
+            .counter(
+                "rules.day.open",
+                "dow",
+                dow.toString(),
+                "exception",
+                boolTag(exceptionApplied),
+                "holiday",
+                boolTag(holidayApplied),
+                "overnight",
+                boolTag(overnight),
+            ).increment()
+    }
 }

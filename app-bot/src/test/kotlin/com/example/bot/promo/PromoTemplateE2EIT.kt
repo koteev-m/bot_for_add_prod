@@ -41,9 +41,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.andWhere
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -278,7 +279,8 @@ class PromoTemplateE2EIT : PostgresAppTest() {
             transaction(database) {
                 val bookedRows =
                     BookingsTable
-                        .select { BookingsTable.status eq BookingStatus.BOOKED.name }
+                        .selectAll()
+                        .andWhere { BookingsTable.status eq BookingStatus.BOOKED.name }
                         .toList()
                 assertEquals(1, bookedRows.size)
                 assertEquals(bookingId, bookedRows.single()[BookingsTable.id])
@@ -299,7 +301,8 @@ class PromoTemplateE2EIT : PostgresAppTest() {
             transaction(database) {
                 val promoRows =
                     PromoAttributionAssertionTable
-                        .select { PromoAttributionAssertionTable.bookingId eq bookingId }
+                        .selectAll()
+                        .andWhere { PromoAttributionAssertionTable.bookingId eq bookingId }
                         .toList()
                 assertEquals(1, promoRows.size)
                 val total = PromoAttributionAssertionTable.selectAll().count()
@@ -312,7 +315,8 @@ class PromoTemplateE2EIT : PostgresAppTest() {
             transaction(database) {
                 val bookingCount =
                     BookingsTable
-                        .select { BookingsTable.status eq BookingStatus.BOOKED.name }
+                        .selectAll()
+                        .andWhere { BookingsTable.status eq BookingStatus.BOOKED.name }
                         .count()
                 assertEquals(1L, bookingCount)
                 val promoCount = PromoAttributionAssertionTable.selectAll().count()
