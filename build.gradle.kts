@@ -1,8 +1,20 @@
 import io.gitlab.arturbosch.detekt.Detekt
 import io.gitlab.arturbosch.detekt.extensions.DetektExtension
+import org.gradle.api.DefaultTask
+import org.gradle.api.artifacts.ConfigurationContainer
 import org.gradle.api.artifacts.VersionCatalogsExtension
+import org.gradle.api.model.ObjectFactory
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.provider.ProviderFactory
+import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
+import org.gradle.api.tasks.Input
+import org.gradle.kotlin.dsl.register
+import org.gradle.kotlin.dsl.listProperty
+import org.gradle.kotlin.dsl.property
 import org.jlleitschuh.gradle.ktlint.KtlintExtension
+import javax.inject.Inject
 
 plugins {
     kotlin("jvm") version "2.2.10" apply false
@@ -12,7 +24,10 @@ plugins {
 }
 
 val libs = extensions.getByType<VersionCatalogsExtension>().named("libs")
-val kotlinVersion = libs.findVersion("kotlin").get().requiredVersion
+val kotlinVersionProperty = providers.gradleProperty("kotlinVersion")
+    .orElse(providers.environmentVariable("KOTLIN_VERSION"))
+    .orElse("2.2.10")
+val kotlinVersion = kotlinVersionProperty.get()
 
 allprojects {
     configurations.configureEach {
@@ -28,6 +43,84 @@ allprojects {
             }
         }
     }
+}
+
+abstract class DependencyGuard : DefaultTask() {
+    @get:Inject
+    protected abstract val configurationContainer: ConfigurationContainer
+
+    @get:Inject
+    protected abstract val providerFactory: ProviderFactory
+
+    @get:Inject
+    protected abstract val objects: ObjectFactory
+
+    @get:Input
+    val configurationNames: ListProperty<String> = objects.listProperty<String>().convention(
+        listOf(
+            "compileClasspath",
+            "runtimeClasspath",
+            "testCompileClasspath",
+            "testRuntimeClasspath",
+        )
+    )
+
+    @get:Input
+    val bannedArtifacts: ListProperty<String> = objects.listProperty<String>().convention(
+        listOf(
+            "org.jetbrains.kotlin:kotlin-stdlib-jdk7",
+            "org.jetbrains.kotlin:kotlin-stdlib-jdk8",
+        )
+    )
+
+    @get:Input
+    val enforcedKtorVersion: Property<String> = objects.property<String>().convention(
+        providerFactory.gradleProperty("ktorEnforcedVersion")
+            .orElse(providerFactory.environmentVariable("KTOR_VERSION"))
+            .orElse("3.3.0")
+    )
+
+    @TaskAction
+    fun run() {
+        val banned = bannedArtifacts.get()
+        val enforcedKtor = enforcedKtorVersion.get()
+
+        val configs = configurationNames.get().mapNotNull { configurationContainer.findByName(it) }
+
+        val all = configs.flatMap { cfg ->
+            cfg.resolvedConfiguration.lenientConfiguration.allModuleDependencies.flatMap { dep ->
+                sequenceOf("${dep.moduleGroup}:${dep.moduleName}:${dep.moduleVersion}") +
+                    dep.children.map { "${it.moduleGroup}:${it.moduleName}:${it.moduleVersion}" }
+            }
+        }.toSet()
+
+        val legacy = all.filter { line -> banned.any { line.startsWith(it) } }
+        if (legacy.isNotEmpty()) {
+            error("DependencyGuard: legacy kotlin stdlib artifacts detected:\n${legacy.joinToString("\n")}")
+        }
+
+        val ktor = all.filter { it.startsWith("io.ktor:") }
+        val wrongKtor = ktor.filterNot { it.endsWith(":$enforcedKtor") }
+        if (wrongKtor.isNotEmpty()) {
+            error("DependencyGuard: mismatched Ktor versions (expected $enforcedKtor):\n${wrongKtor.joinToString("\n")}")
+        }
+
+        val dynamic = all.filter {
+            it.endsWith(":latest.release") ||
+                it.endsWith(":latest.integration") ||
+                it.contains("SNAPSHOT")
+        }
+        if (dynamic.isNotEmpty()) {
+            error("DependencyGuard: dynamic/SNAPSHOT dependencies detected:\n${dynamic.joinToString("\n")}")
+        }
+
+        println("DependencyGuard: OK (${all.size} artifacts checked)")
+    }
+}
+
+tasks.register<DependencyGuard>("dependencyGuard") {
+    group = "verification"
+    description = "Fail build if dependency rules are violated"
 }
 
 subprojects {
