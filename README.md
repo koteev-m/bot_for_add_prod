@@ -26,6 +26,7 @@ Related documentation:
 ## Quality gates
 
 ```bash
+./gradlew dependencyGuard --console=plain
 ./gradlew ktlintFormat ktlintCheck detekt --console=plain
 ./gradlew :core-domain:test --console=plain
 ./gradlew clean build --console=plain
@@ -37,6 +38,16 @@ run them locally or in CI, add `-PrunIT=true`:
 ```bash
 ./gradlew test -PrunIT=true --console=plain
 ```
+
+To enable the same integration tests in CI, export `runIT=true` or append
+`-PrunIT=true` to the Gradle invocation inside your workflow step. The default
+GitHub Actions workflow (`.github/workflows/build.yml`) keeps IT disabled to
+avoid provisioning optional services unless explicitly requested.
+
+The dependency guard task validates the resolved dependency graph and fails the
+build if it detects legacy Kotlin stdlib artifacts, mismatched Ktor versions or
+dynamic/SNAPSHOT coordinates. Run it locally via `./gradlew dependencyGuard
+--console=plain` or let CI handle it as part of the standard pipeline.
 
 ## Configuration
 
