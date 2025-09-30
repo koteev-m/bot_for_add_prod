@@ -31,26 +31,64 @@ object UiBookingMetrics {
     private const val PERCENTILE_99 = 0.99
 
     fun bind(registry: MeterRegistry) {
-        cMenuClicks = Counter.builder("ui.menu.clicks").register(registry)
-        cNightsRendered = Counter.builder("ui.nights.rendered").register(registry)
-        cTablesRendered = Counter.builder("ui.tables.rendered").register(registry)
-        cPagesRendered = Counter.builder("ui.tables.pages").register(registry)
-        cTableChosen = Counter.builder("ui.table.chosen").register(registry)
-        cGuestsChosen = Counter.builder("ui.guests.chosen").register(registry)
-        cBookingSuccess = Counter.builder("ui.booking.success").register(registry)
-        cBookingError = Counter.builder("ui.booking.error").register(registry)
+        cMenuClicks =
+            registry
+                .find("ui.menu.clicks")
+                .counter()
+                ?: Counter.builder("ui.menu.clicks").register(registry)
+        cNightsRendered =
+            registry
+                .find("ui.nights.rendered")
+                .counter()
+                ?: Counter.builder("ui.nights.rendered").register(registry)
+        cTablesRendered =
+            registry
+                .find("ui.tables.rendered")
+                .counter()
+                ?: Counter.builder("ui.tables.rendered").register(registry)
+        cPagesRendered =
+            registry
+                .find("ui.tables.pages")
+                .counter()
+                ?: Counter.builder("ui.tables.pages").register(registry)
+        cTableChosen =
+            registry
+                .find("ui.table.chosen")
+                .counter()
+                ?: Counter.builder("ui.table.chosen").register(registry)
+        cGuestsChosen =
+            registry
+                .find("ui.guests.chosen")
+                .counter()
+                ?: Counter.builder("ui.guests.chosen").register(registry)
+        cBookingSuccess =
+            registry
+                .find("ui.booking.success")
+                .counter()
+                ?: Counter.builder("ui.booking.success").register(registry)
+        cBookingError =
+            registry
+                .find("ui.booking.error")
+                .counter()
+                ?: Counter.builder("ui.booking.error").register(registry)
 
         listTablesTimer =
-            Timer.builder("ui.tables.fetch.duration.ms")
-                .publishPercentiles(PERCENTILE_MEDIAN, PERCENTILE_95, PERCENTILE_99)
-                .description("AvailabilityService.listFreeTables duration")
-                .register(registry)
+            registry
+                .find("ui.tables.fetch.duration.ms")
+                .timer()
+                ?: Timer.builder("ui.tables.fetch.duration.ms")
+                    .publishPercentiles(PERCENTILE_MEDIAN, PERCENTILE_95, PERCENTILE_99)
+                    .description("AvailabilityService.listFreeTables duration")
+                    .register(registry)
 
         bookingTotalTimer =
-            Timer.builder("ui.booking.total.duration.ms")
-                .publishPercentiles(PERCENTILE_MEDIAN, PERCENTILE_95, PERCENTILE_99)
-                .description("End-to-end booking flow from guests selection")
-                .register(registry)
+            registry
+                .find("ui.booking.total.duration.ms")
+                .timer()
+                ?: Timer.builder("ui.booking.total.duration.ms")
+                    .publishPercentiles(PERCENTILE_MEDIAN, PERCENTILE_95, PERCENTILE_99)
+                    .description("End-to-end booking flow from guests selection")
+                    .register(registry)
 
         countersBound = true
     }

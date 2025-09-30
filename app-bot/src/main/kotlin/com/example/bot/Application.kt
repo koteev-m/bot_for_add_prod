@@ -97,8 +97,8 @@ fun Application.module() {
     installAppConfig()
     installRequestLogging()
     installMetrics()
-    install(ContentNegotiation) { json() }
     AppMetricsBinder.bindAll(meterRegistry())
+    install(ContentNegotiation) { json() }
 
     val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN") ?: BotLimits.Demo.FALLBACK_TOKEN
 

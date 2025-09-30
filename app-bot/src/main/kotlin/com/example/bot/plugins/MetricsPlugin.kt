@@ -11,29 +11,35 @@ import io.ktor.server.routing.routing
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.prometheus.PrometheusConfig
 import io.micrometer.prometheus.PrometheusMeterRegistry
+import java.util.concurrent.atomic.AtomicReference
 
-private val prometheusRegistry: PrometheusMeterRegistry by lazy {
-    PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
+private val prometheusRegistryRef =
+    AtomicReference(createPrometheusRegistry())
+
+private fun createPrometheusRegistry(): PrometheusMeterRegistry {
+    return PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
 }
 
-fun meterRegistry(): MeterRegistry = prometheusRegistry
+fun meterRegistry(): MeterRegistry = prometheusRegistryRef.get()
 
 fun Application.installMetrics() {
+    val newRegistry = createPrometheusRegistry()
+    prometheusRegistryRef.set(newRegistry)
     install(MicrometerMetrics) {
-        registry = prometheusRegistry
+        registry = newRegistry
         timers { _, _ ->
             io.micrometer.core.instrument.Timer
                 .builder("http.server.requests")
         }
     }
     routing {
-        metricsRoute()
+        metricsRoute(newRegistry)
     }
 }
 
-fun Route.metricsRoute() {
+fun Route.metricsRoute(registry: PrometheusMeterRegistry = prometheusRegistryRef.get()) {
     get("/metrics") {
-        val scrape = prometheusRegistry.scrape()
+        val scrape = registry.scrape()
         call.respondText(
             text = scrape,
             contentType =
