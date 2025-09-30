@@ -26,6 +26,7 @@ dependencies {
     implementation(libs.micrometer.tracing.bridge.otel)
     implementation(libs.opentelemetry.sdk)
     implementation(libs.opentelemetry.exporter.otlp)
+    implementation(projects.coreTelemetry)
 
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.kotest.runner)
