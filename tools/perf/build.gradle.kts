@@ -5,10 +5,6 @@ plugins {
     application
 }
 
-repositories {
-    mavenCentral()
-}
-
 kotlin {
     jvmToolchain(21)
 }

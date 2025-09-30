@@ -1,6 +1,7 @@
 package com.example.bot.telegram.ott
 
 import com.example.bot.telegram.MenuCallbacksHandler
+import com.example.bot.telegram.extractChatAndThread
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.CallbackQuery
 import com.pengrad.telegrambot.model.Update
@@ -89,15 +90,3 @@ private val MENU_PREFIXES =
         "g:",
         NOOP_CALLBACK,
     )
-
-/**
- * Единая точка использования устаревшего Java-метода pengrad.
- * Подавляем депрекацию локально, чтобы не размазывать по коду.
- */
-@Suppress("DEPRECATION") // pengrad: CallbackQuery.message() помечен deprecated в Java-API
-private fun extractChatAndThread(cq: CallbackQuery): Pair<Long?, Int?> {
-    val msg = cq.message() ?: return null to null
-    val chatId = msg.chat()?.id()
-    val threadId = runCatching { msg.messageThreadId() }.getOrNull()
-    return chatId to threadId
-}
