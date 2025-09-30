@@ -15,6 +15,7 @@ import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.application
 import io.ktor.server.application.call
 import io.ktor.server.application.createApplicationPlugin
+import io.ktor.server.application.createRouteScopedPlugin
 import io.ktor.server.application.install
 import io.ktor.server.application.pluginOrNull
 import io.ktor.server.auth.principal
@@ -31,7 +32,6 @@ import io.ktor.server.routing.RouteSelector
 import io.ktor.server.routing.RouteSelectorEvaluation
 import io.ktor.server.routing.RoutingResolveContext
 import io.ktor.server.routing.application
-import io.ktor.server.routing.intercept
 import io.ktor.util.AttributeKey
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -82,6 +82,82 @@ class RbacConfig {
 
 private val doubleReceiveLock = Any()
 
+private class AuthorizeRouteConfig {
+    var requiredRoles: Set<Role> = emptySet()
+}
+
+private val AuthorizeRoutePlugin =
+    createRouteScopedPlugin(name = "AuthorizeRoutePlugin", createConfiguration = ::AuthorizeRouteConfig) {
+        val state = application.attributes[rbacStateKey]
+        onCall { call ->
+            val required = pluginConfig.requiredRoles
+            val access = call.attributes[accessLogStateKey]
+            val resolution = call.attributes[rbacResolutionKey]
+            when (resolution) {
+                is RbacResolution.Failure -> {
+                    state.handleFailure(call, access, resolution)
+                    return@onCall
+                }
+                is RbacResolution.Success -> {
+                    if (required.isNotEmpty() && resolution.roles.intersect(required).isEmpty()) {
+                        state.handleForbidden(call, access, resolution, "missing_role", null)
+                        return@onCall
+                    } else {
+                        access.roleCheckPassed = true
+                    }
+                }
+            }
+        }
+    }
+
+private class ClubScopeRouteConfig {
+    var scope: ClubScope = ClubScope.Own
+}
+
+private val ClubScopeRoutePlugin =
+    createRouteScopedPlugin(name = "ClubScopeRoutePlugin", createConfiguration = ::ClubScopeRouteConfig) {
+        val state = application.attributes[rbacStateKey]
+        onCall { call ->
+            val access = call.attributes[accessLogStateKey]
+            access.scopeRequired = true
+            val resolution = call.attributes[rbacResolutionKey]
+            val context =
+                when (resolution) {
+                    is RbacResolution.Failure -> {
+                        state.handleFailure(call, access, resolution)
+                        return@onCall
+                    }
+                    is RbacResolution.Success -> resolution
+                }
+            val clubId = state.clubScopeResolver.resolve(call)
+            val hasGlobalRole = context.roles.any { it in successRoles }
+            val allowed =
+                when (pluginConfig.scope) {
+                    ClubScope.Own ->
+                        when {
+                            clubId == null -> false
+                            hasGlobalRole -> true
+                            else -> clubId in context.clubIds
+                        }
+                    ClubScope.Any -> hasGlobalRole
+                }
+            if (!allowed) {
+                val reason =
+                    when (pluginConfig.scope) {
+                        ClubScope.Own -> if (clubId == null) "club_missing" else "club_scope_violation"
+                        ClubScope.Any -> "global_role_required"
+                    }
+                state.handleForbidden(call, access, context, reason, clubId)
+                return@onCall
+            } else {
+                access.scopePassed = true
+                if (clubId != null) {
+                    access.clubId = clubId
+                }
+            }
+        }
+    }
+
 /**
  * RBAC plugin responsible for injecting request context and audit logging.
  */
@@ -118,83 +194,22 @@ private fun installDoubleReceiveIfNeeded(application: Application) {
 }
 
 /** DSL entry point for enforcing role based access. */
-@Suppress("DEPRECATION") // Route.intercept: миграция на route-scoped plugin в отдельной задаче
 fun Route.authorize(
     vararg roles: Role,
     block: Route.() -> Unit,
 ) {
-    val required = roles.toSet()
-    val state = application.attributes[rbacStateKey]
     val authorizedRoute = createChild(PluginRouteSelector("authorize"))
-    authorizedRoute.intercept(ApplicationCallPipeline.Plugins) {
-        val access = call.attributes[accessLogStateKey]
-        val resolution = call.attributes[rbacResolutionKey]
-        when (resolution) {
-            is RbacResolution.Failure -> {
-                state.handleFailure(call, access, resolution)
-                finish()
-            }
-            is RbacResolution.Success -> {
-                if (required.isNotEmpty() && resolution.roles.intersect(required).isEmpty()) {
-                    state.handleForbidden(call, access, resolution, "missing_role", null)
-                    finish()
-                } else {
-                    access.roleCheckPassed = true
-                }
-            }
-        }
-    }
+    authorizedRoute.install(AuthorizeRoutePlugin) { requiredRoles = roles.toSet() }
     authorizedRoute.block()
 }
 
 /** Applies club scope rules to nested routes. */
-@Suppress("DEPRECATION") // Route.intercept: миграция на route-scoped plugin в отдельной задаче
 fun Route.clubScoped(
     scope: ClubScope,
     block: Route.() -> Unit,
 ) {
-    val state = application.attributes[rbacStateKey]
     val scopedRoute = createChild(PluginRouteSelector("clubScoped"))
-    scopedRoute.intercept(ApplicationCallPipeline.Plugins) {
-        val access = call.attributes[accessLogStateKey]
-        access.scopeRequired = true
-        val resolution = call.attributes[rbacResolutionKey]
-        val context =
-            when (resolution) {
-                is RbacResolution.Failure -> {
-                    state.handleFailure(call, access, resolution)
-                    finish()
-                    return@intercept
-                }
-                is RbacResolution.Success -> resolution
-            }
-        val clubId = state.clubScopeResolver.resolve(call)
-        val hasGlobalRole = context.roles.any { it in successRoles }
-        val allowed =
-            when (scope) {
-                ClubScope.Own ->
-                    when {
-                        clubId == null -> false
-                        hasGlobalRole -> true
-                        else -> clubId in context.clubIds
-                    }
-                ClubScope.Any -> hasGlobalRole
-            }
-        if (!allowed) {
-            val reason =
-                when (scope) {
-                    ClubScope.Own -> if (clubId == null) "club_missing" else "club_scope_violation"
-                    ClubScope.Any -> "global_role_required"
-                }
-            state.handleForbidden(call, access, context, reason, clubId)
-            finish()
-        } else {
-            access.scopePassed = true
-            if (clubId != null) {
-                access.clubId = clubId
-            }
-        }
-    }
+    scopedRoute.install(ClubScopeRoutePlugin) { this.scope = scope }
     scopedRoute.block()
 }
 

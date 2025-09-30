@@ -104,6 +104,55 @@ class OperatingRulesResolver(
 ) {
     private val logger = LoggerFactory.getLogger(OperatingRulesResolver::class.java)
 
+    private enum class RulesLogLevel {
+        DEBUG,
+        INFO,
+        WARN,
+        ERROR,
+    }
+
+    private val rulesLogLevel: RulesLogLevel =
+        System.getenv("RULES_LOG_LEVEL")
+            ?.uppercase()
+            ?.let { level -> runCatching { RulesLogLevel.valueOf(level) }.getOrNull() }
+            ?: if (System.getenv("RULES_DEBUG")?.equals("true", ignoreCase = true) == true) {
+                RulesLogLevel.DEBUG
+            } else {
+                RulesLogLevel.INFO
+            }
+
+    private fun shouldLog(level: RulesLogLevel): Boolean = level.ordinal >= rulesLogLevel.ordinal
+
+    private fun logDebug(
+        message: String,
+        vararg args: Any?,
+    ) {
+        if (!shouldLog(RulesLogLevel.DEBUG)) return
+        if (logger.isDebugEnabled) {
+            logger.debug(message, *args)
+        } else {
+            logger.info("[rules-debug] $message", *args)
+        }
+    }
+
+    private fun logInfo(
+        message: String,
+        vararg args: Any?,
+    ) {
+        if (shouldLog(RulesLogLevel.INFO)) {
+            logger.info(message, *args)
+        }
+    }
+
+    private fun logWarn(
+        message: String,
+        vararg args: Any?,
+    ) {
+        if (shouldLog(RulesLogLevel.WARN)) {
+            logger.warn(message, *args)
+        }
+    }
+
     /**
      * Resolve slots for given club and period.
      */
@@ -137,21 +186,19 @@ class OperatingRulesResolver(
             val holiday = holidays[date]
             val baseHour = hours.find { it.dayOfWeek == date.dayOfWeek }
 
-            if (logger.isDebugEnabled) {
-                logger.debug(
-                    "rules.merge_input date={} base_open={} base_close={} exception_is_open={} exception_open={} " +
-                        "exception_close={} holiday_is_open={} holiday_open={} holiday_close={}",
-                    date,
-                    baseHour?.open,
-                    baseHour?.close,
-                    exception?.isOpen,
-                    exception?.overrideOpen,
-                    exception?.overrideClose,
-                    holiday?.isOpen,
-                    holiday?.overrideOpen,
-                    holiday?.overrideClose,
-                )
-            }
+            logDebug(
+                "rules.merge_input date={} base_open={} base_close={} exception_is_open={} exception_open={} " +
+                    "exception_close={} holiday_is_open={} holiday_open={} holiday_close={}",
+                date,
+                baseHour?.open,
+                baseHour?.close,
+                exception?.isOpen,
+                exception?.overrideOpen,
+                exception?.overrideClose,
+                holiday?.isOpen,
+                holiday?.overrideOpen,
+                holiday?.overrideClose,
+            )
 
             val resolution =
                 mergeDayHours(
@@ -177,39 +224,39 @@ class OperatingRulesResolver(
             when (resolution) {
                 is DayResolution.Open -> {
                     val dayHours = resolution.hours
-                    if (logger.isDebugEnabled) {
-                        logger.debug(
-                            "rules.merge_output date={} open={} open_source={} close={} close_source={}",
-                            date,
-                            dayHours.open,
-                            dayHours.openSource,
-                            dayHours.close,
-                            dayHours.closeSource,
-                        )
-                    }
+                    val dow = date.dayOfWeek.value
+                    val overnight = dayHours.close <= dayHours.open
+                    logDebug(
+                        "rules.merge_output date={} open={} open_source={} close={} close_source={}",
+                        date,
+                        dayHours.open,
+                        dayHours.openSource,
+                        dayHours.close,
+                        dayHours.closeSource,
+                    )
 
                     if (dayHours.exceptionApplied) {
-                        RulesMetrics.incExceptionApplied()
+                        RulesMetrics.incExceptionApplied(dow, dayHours.holidayApplied, overnight)
                     }
                     if (dayHours.holidayApplied) {
                         if (dayHours.holidayInheritedOpen) {
-                            RulesMetrics.incHolidayInheritedOpen()
+                            RulesMetrics.incHolidayInheritedOpen(dow, overnight)
                         }
                         if (dayHours.holidayInheritedClose) {
-                            RulesMetrics.incHolidayInheritedClose()
+                            RulesMetrics.incHolidayInheritedClose(dow, overnight)
                         }
                     }
 
                     if (dayHours.open == dayHours.close) {
-                        logger.warn(
+                        logWarn(
                             "rules.invalid_window open==close date={} open={} close={}",
                             date,
                             dayHours.open,
                             dayHours.close,
                         )
                     } else {
-                        val overnight = dayHours.close <= dayHours.open
-                        logger.info(
+                        RulesMetrics.incDayOpen(dow, dayHours.exceptionApplied, dayHours.holidayApplied, overnight)
+                        logInfo(
                             "rules.day_open date={} open={} close={} overnight={}",
                             date,
                             dayHours.open,
@@ -241,7 +288,7 @@ class OperatingRulesResolver(
                     }
                 }
                 is DayResolution.Closed -> {
-                    logger.info("rules.day_closed date={} reason={}", date, resolution.reason.logKey)
+                    logInfo("rules.day_closed date={} reason={}", date, resolution.reason.logKey)
                 }
             }
 
