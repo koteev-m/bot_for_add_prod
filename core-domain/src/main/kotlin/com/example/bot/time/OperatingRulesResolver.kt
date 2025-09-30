@@ -104,30 +104,14 @@ class OperatingRulesResolver(
 ) {
     private val logger = LoggerFactory.getLogger(OperatingRulesResolver::class.java)
 
-    private enum class RulesLogLevel {
-        DEBUG,
-        INFO,
-        WARN,
-        ERROR,
-    }
-
-    private val rulesLogLevel: RulesLogLevel =
-        System.getenv("RULES_LOG_LEVEL")
-            ?.uppercase()
-            ?.let { level -> runCatching { RulesLogLevel.valueOf(level) }.getOrNull() }
-            ?: if (System.getenv("RULES_DEBUG")?.equals("true", ignoreCase = true) == true) {
-                RulesLogLevel.DEBUG
-            } else {
-                RulesLogLevel.INFO
-            }
-
-    private fun shouldLog(level: RulesLogLevel): Boolean = level.ordinal >= rulesLogLevel.ordinal
+    private val debugEnabled: Boolean =
+        System.getenv("RULES_DEBUG")?.equals("true", ignoreCase = true) == true || logger.isDebugEnabled
 
     private fun logDebug(
         message: String,
         vararg args: Any?,
     ) {
-        if (!shouldLog(RulesLogLevel.DEBUG)) return
+        if (!debugEnabled) return
         if (logger.isDebugEnabled) {
             logger.debug(message, *args)
         } else {
@@ -139,18 +123,14 @@ class OperatingRulesResolver(
         message: String,
         vararg args: Any?,
     ) {
-        if (shouldLog(RulesLogLevel.INFO)) {
-            logger.info(message, *args)
-        }
+        logger.info(message, *args)
     }
 
     private fun logWarn(
         message: String,
         vararg args: Any?,
     ) {
-        if (shouldLog(RulesLogLevel.WARN)) {
-            logger.warn(message, *args)
-        }
+        logger.warn(message, *args)
     }
 
     /**
@@ -227,16 +207,17 @@ class OperatingRulesResolver(
                     val dow = date.dayOfWeek.value
                     val overnight = dayHours.close <= dayHours.open
                     logDebug(
-                        "rules.merge_output date={} open={} open_source={} close={} close_source={}",
+                        "rules.merge_output date={} open={} open_source={} close={} close_source={} overnight={}",
                         date,
                         dayHours.open,
-                        dayHours.openSource,
+                        dayHours.openSource.logKey,
                         dayHours.close,
-                        dayHours.closeSource,
+                        dayHours.closeSource.logKey,
+                        overnight,
                     )
 
                     if (dayHours.exceptionApplied) {
-                        RulesMetrics.incExceptionApplied(dow, dayHours.holidayApplied, overnight)
+                        RulesMetrics.incExceptionApplied(dow, overnight)
                     }
                     if (dayHours.holidayApplied) {
                         if (dayHours.holidayInheritedOpen) {
@@ -339,17 +320,17 @@ class OperatingRulesResolver(
             last.eventEndUtc == slot.eventStartUtc
 }
 
-private enum class BoundarySource {
-    BASE,
-    EXCEPTION,
-    HOLIDAY,
-    INHERITED,
+private enum class BoundarySource(val logKey: String) {
+    BASE("base"),
+    EXCEPTION("exception"),
+    HOLIDAY("holiday"),
+    INHERITED("inherited"),
 }
 
 private enum class ClosedReason(val logKey: String) {
     EXCEPTION_CLOSED("exception_closed"),
     HOLIDAY_CLOSED("holiday_closed"),
-    NO_BASE_INCOMPLETE_HOLIDAY("no_base_and_incomplete_holiday"),
+    NO_BASE_INCOMPLETE_HOLIDAY("no_base_incomplete_holiday"),
 }
 
 private data class HoursWithSource(

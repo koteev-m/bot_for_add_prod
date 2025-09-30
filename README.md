@@ -1,65 +1,111 @@
 # Bot Monorepo
 
-This repository contains a Kotlin multi-module project built with Gradle Kotlin DSL.
+Kotlin multi-module project that powers the Telegram guest flow, admin APIs and
+observability surfaces for the club booking bot. The service runs on Ktor 3,
+Exposed 0.49 and Micrometer, targets JDK 21 and is packaged as a self-contained
+`installDist` distribution for Docker deployments.
 
-## Modules
+## Stack and modules
 
-- `app-bot` – Ktor HTTP service handling Telegram webhook.
-- `core-domain` – Domain models and result types.
-- `core-data` – Database access using Exposed, HikariCP and Flyway.
-- `core-telemetry` – Micrometer metrics and health endpoints.
-- `core-security` – RBAC and request signature utilities.
-- `core-testing` – Shared test fixtures.
+| Module | Description |
+| --- | --- |
+| `app-bot` | Ktor HTTP application with Telegram integrations, routes and health probes. |
+| `core-domain` | Domain logic, availability rules, metrics helpers. |
+| `core-data` | Database layer (HikariCP, Flyway migrations, Exposed DAO/DSL). |
+| `core-security` | RBAC, webhook signature checks and security plugins. |
+| `core-telemetry` | Micrometer registry bootstrap and shared telemetry helpers. |
+| `core-testing` | Integration test harness and common fixtures. |
+| `miniapp` | Static Mini App assets served via `webAppRoutes()`. |
+| `tools` | Auxiliary utilities (perf harness, smoke checks). |
 
-## Пилот QR / Check-in
+Related documentation:
 
-- [Полная документация пилота](docs/README_pilot_QR.md)
-- [Чек-лист запуска](docs/CHECKLIST_pilot_QR.md)
+- [Полная документация пилота QR](docs/README_pilot_QR.md)
+- [Чек-лист запуска пилота](docs/CHECKLIST_pilot_QR.md)
 
-## Booking API
-
-- Protected booking endpoints require RBAC access: `POST /api/clubs/{clubId}/bookings/hold` and `POST /api/clubs/{clubId}/bookings/confirm` (both expect an `Idempotency-Key` header).
-
-## Building
+## Quality gates
 
 ```bash
-./gradlew build
-./gradlew staticCheck
+./gradlew ktlintFormat ktlintCheck detekt --console=plain
+./gradlew :core-domain:test --console=plain
+./gradlew clean build --console=plain
+```
+
+Integration tests are tagged with `@Tag("it")` and are excluded by default. To
+run them locally or in CI, add `-PrunIT=true`:
+
+```bash
+./gradlew test -PrunIT=true --console=plain
 ```
 
 ## Configuration
 
-Copy `.env.example` to `.env` and provide values for all variables:
+Copy `.env.example` to `.env` (used by Docker Compose) and provide the required
+secrets. The application reads configuration from environment variables:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `APP_ENV` | `dev` | Runtime profile: `dev` enables relaxed limits, `prod` enables hardened settings. |
+| `PORT` | `8080` | HTTP port for the Ktor server (also exposed in Docker). |
+| `JAVA_OPTS` | `-XX:MaxRAMPercentage=75 ...` | Extra JVM options consumed by the `installDist` launcher. |
+| `DATABASE_URL` | – | JDBC URL for PostgreSQL (required in production). |
+| `DATABASE_USER` | – | Database user for Flyway and Exposed. |
+| `DATABASE_PASSWORD` | – | Database password. |
+| `HEALTH_DB_TIMEOUT_MS` | `150` | Timeout for the `/health` DB probe in milliseconds. |
+| `TELEGRAM_BOT_TOKEN` | – | Telegram bot token (required to send messages). |
+| `WEBHOOK_SECRET_TOKEN` | – | Shared secret that signs incoming Telegram webhooks. |
+| `OWNER_TELEGRAM_ID` | – | Telegram user ID that receives critical alerts. |
+| `TELEGRAM_USE_POLLING` | `false` | Switch between webhook mode (`false`) and long polling demo (`true`). |
+| `LOCAL_BOT_API_URL` | – | Optional base URL for a self-hosted Telegram Bot API. |
+| `RULES_DEBUG` | `false` | Enables detailed DEBUG logs for `OperatingRulesResolver` (fallbacks to INFO otherwise). |
+| `TELEGRAM_API_ID`/`TELEGRAM_API_HASH` | – | Required when running the optional `telegram-bot-api` container. |
+
+## Running locally
+
+### Gradle
 
 ```bash
-cp .env.example .env
+export $(grep -v '^#' .env | xargs)  # optional helper when using an .env file
+./gradlew :app-bot:run --console=plain
 ```
 
-Required variables:
+The application starts all routes via `Application.module()` and performs
+Flyway migrations on startup. After successful migrations, `/ready` returns
+`READY` while `/health` returns `OK` once the DB probe succeeds.
 
-- `TELEGRAM_BOT_TOKEN`
-- `WEBHOOK_SECRET_TOKEN`
-- `DATABASE_URL`
-- `DATABASE_USER`
-- `DATABASE_PASSWORD`
-- `OWNER_TELEGRAM_ID`
+### Docker Compose
 
-Optional but recommended:
+```bash
+cp .env.example .env   # fill in the required secrets
+docker compose up --build
+```
 
-- `TELEGRAM_USE_POLLING=false` to keep webhook mode (set to `true` for long polling).
+The compose stack provisions PostgreSQL, builds the runtime image from the
+multi-stage `Dockerfile` and runs `app-bot` as a non-root user. Health checks:
 
-The application reads secrets only from the environment. To switch between
-configurations set `APP_ENV` (`dev` is default, set `prod` for production).
+- `http://localhost:8080/health` – readiness of the DB connection
+- `http://localhost:8080/ready` – application readiness (migrations applied)
+
+The container exposes `PORT` and honours `JAVA_OPTS`. Logs are available via
+`docker compose logs -f app`.
+
+## Observability
+
+- `GET /health` — checks database connectivity with a configurable timeout.
+- `GET /ready` — returns `READY` only after Flyway migrations succeed.
+- `GET /metrics` — Micrometer Prometheus endpoint with counters for availability
+  rules (`rules.exception.applied`, `rules.holiday.inherited_open`,
+  `rules.holiday.inherited_close`, `rules.day.open`) tagged by day-of-week and
+  overnight flags.
+
+Setting `RULES_DEBUG=true` enables verbose DEBUG traces for the
+`OperatingRulesResolver`: input base/holiday/exception hours, resolved boundary
+sources (`base|exception|holiday|inherited`), final open/close windows and the
+`overnight` flag.
 
 ## Database migrations
 
-Flyway migrations run via the root `flywayMigrate` task, which delegates to `:core-data`.
-Provide the database connection through environment variables (or Gradle properties
-with the same names) before invoking the task. The migration plugin auto-detects the
-database vendor from `DATABASE_URL`; override the detection explicitly with
-`-PdbVendor=postgresql` or `-PdbVendor=h2` when needed.
-
-Example for a local PostgreSQL instance:
+Flyway migrations reside in `core-data`. Run them via Gradle:
 
 ```bash
 DATABASE_URL=jdbc:postgresql://localhost:5432/postgres \
@@ -67,173 +113,23 @@ DATABASE_USER=postgres DATABASE_PASSWORD=postgres \
 ./gradlew flywayMigrate --console=plain
 ```
 
-Example for the in-memory H2 development database:
+`MigrationState.migrationsApplied` guards the readiness probe and the Docker
+entrypoint fails fast when migrations cannot be applied.
 
-```bash
-DATABASE_URL=jdbc:h2:mem:bot;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false \
-DATABASE_USER=sa DATABASE_PASSWORD= \
-./gradlew flywayMigrate --console=plain
-```
+## Telegram bot
 
-## Telegram bot modes
+The Telegram adapter uses the pengrad client. By default the demo long-polling
+listener is wired in `Application.module()` for `/demo`. Production deployments
+should configure a webhook endpoint and secret.
 
-Set `TELEGRAM_USE_POLLING=false` (or leave it unset) to start the Ktor server and expose
-`/webhook` for Telegram updates. Use `/telegram/setup-webhook` to call Bot API
-`setWebhook` with the URL `WEBHOOK_BASE_URL/webhook`.
+Invoices (`SendInvoice`) remain compatible with the current pengrad release and
+use `.providerToken(...)` for configuration while keeping the deprecation
+suppression local to the instantiation site.
 
-Set `TELEGRAM_USE_POLLING=true` to start long polling via `PollingMain`. `getUpdates` and
-`setWebhook` are mutually exclusive.
+## Additional tooling
 
-When using a local Bot API server (`LOCAL_BOT_API_URL`), the bot will send requests
-to that base URL instead of `https://api.telegram.org`.
-
-For webhook hardening details see [docs/WEBHOOK_SECURITY.md](docs/WEBHOOK_SECURITY.md).
-
-## Running the bot
-
-```bash
-export $(grep -v '^#' .env | xargs)
-./gradlew :app-bot:run
-```
-
-## Testing
-
-Run the full test suite:
-
-```bash
-./gradlew test
-```
-
-Run only the domain unit tests:
-
-```bash
-./gradlew :core-domain:test
-```
-
-Run only integration smoke tests:
-
-```bash
-./gradlew :core-testing:test --tests "*SmokeTest*"
-```
-
-Enable verbose logging:
-
-```bash
-./gradlew test -i
-```
-
-To include integration tests tagged with `@Tag("it")` in any module, pass the Gradle property `-PrunIT=true`:
-
-```bash
-./gradlew clean build -PrunIT=true
-```
-
-Without the flag (and outside CI) the build automatically skips these tests.
-
-Test reports are generated under `build/reports/tests/test/index.html`.
-
-## Запуск интеграционных тестов
-
-- Локально без Docker: `./gradlew clean build detekt` — интеграционные тесты автоматически пропустятся.
-- Локально с Docker: `./gradlew clean build test detekt -PrunIT=true`.
-- В CI интеграционные тесты запускаются автоматически (`CI=true`).
-
-## Perf smoke
-
-Сборка и запуск:
-```bash
-./gradlew :tools:perf:installDist
-
-# p95 <= 300ms, error-rate <= 1%, 8 воркеров, 30 секунд
-./tools/perf/build/install/perf/bin/perf \
-  --url=http://localhost:8080 \
-  --endpoints=/health,/ready \
-  --workers=8 \
-  --duration-sec=30 \
-  --assert-p95-ms=300 \
-  --max-error-rate=0.01
-
-Таргет RPS (например, 200 RPS суммарно):
-
-./tools/perf/build/install/perf/bin/perf \
-  --url=http://localhost:8080 \
-  --endpoints=/health,/ready \
-  --workers=16 \
-  --duration-sec=30 \
-  --target-rps=200 \
-  --assert-p95-ms=300 \
-  --max-error-rate=0.01
-```
-
-
-## Local run (Docker)
-
-1. Скопируй `.env.example` → `.env` и заполни **секреты** (минимум `TELEGRAM_BOT_TOKEN`).
-2. Подними всё:
-   ```bash
-   make up
-   ```
-3. Проверка:
-   ```bash
-   make health          # OK
-   curl -f http://localhost:8080/ready
-   ```
-4. Логи:
-   ```bash
-   make logs
-   ```
-5. Масштабирование (dev):
-   ```bash
-   docker compose up -d --scale app=2
-   docker compose ps
-   ```
-6. Подключиться к Postgres:
-   ```bash
-   make psql
-   ```
-
-Local Bot API Server (optional):  
-Разкомментируй сервис `telegram-bot-api` в `docker-compose.yml`, добавь в `.env` `TELEGRAM_API_ID`/`TELEGRAM_API_HASH`, и запусти `make up`.
-
----
-
-## Container Smoke Test
-
-### Local
-```bash
-make smoke
-# под капотом: docker build, запуск postgres и app, ретраи /health и /ready до 60 сек
-```
-
-CI (GitHub Actions)
-- Workflow Container Smoke автоматически собирает образ, поднимает Postgres как сервис, стартует контейнер приложения и проверяет /health и /ready с ретраями.
-- Логи приложения выгружаются в шаге Dump app logs on failure при неуспехе.
-
----
-
-## Deploy (SSH → Docker host)
-
-### Секреты (Repo/Org → Settings → Secrets and variables → Actions → New repository secret)
-- SSH_HOST, SSH_USER, SSH_PRIVATE_KEY (PEM), SSH_PORT (опц., 22)
-- COMPOSE_PATH (например `/opt/night-concierge`)
-- GHCR_USERNAME (ваш GitHub username/robot), GHCR_TOKEN (PAT с read:packages)
-
-### На сервере
-- Установить Docker и docker compose (plugin)
-- Положить `docker-compose.yml` и `.env` в `${COMPOSE_PATH}`
-- Рекомендация: в compose использовать переменную `IMAGE_TAG`:
-  ```yaml
-  services:
-    app:
-      image: ghcr.io/<owner>/<repo>/app-bot:${IMAGE_TAG:-latest}
-      env_file: .env
-      ports: [ "8080:8080" ]
-      restart: unless-stopped
-  ```
-
-Запуск из Actions (ручной)
-- Actions → Deploy (SSH → Docker host) → Run workflow
-- Ввести: environment (stage|prod), image_tag (например v1.2.3), service_url (например http://localhost:8080)
-
-Авто-деплой по релизному тегу
-- При git tag vX.Y.Z && git push --tags выполнится деплой в prod с image_tag = vX.Y.Z.
+- `make up` / `make down` — wrappers for Docker Compose.
+- `make health` — calls `/health` on the local deployment.
+- `./gradlew staticCheck` — aggregate detekt and ktlint CLI checks.
+- `./tools/perf/build/install/perf/bin/perf` — performance harness (see
+  `README_pilot_QR.md`).

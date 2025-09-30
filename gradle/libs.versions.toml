@@ -1,7 +1,7 @@
 [versions]
 # Kotlin and related toolchain
 kotlin = "2.2.10"
-ktor = "3.2.3"
+ktor = "3.3.0"
 serialization = "1.7.1"
 exposed = "0.49.0"
 hikari = "5.1.0"

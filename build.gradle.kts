@@ -1,5 +1,6 @@
 import io.gitlab.arturbosch.detekt.Detekt
 import io.gitlab.arturbosch.detekt.extensions.DetektExtension
+import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.tasks.testing.Test
 import org.jlleitschuh.gradle.ktlint.KtlintExtension
 
@@ -10,9 +11,22 @@ plugins {
     id("org.jlleitschuh.gradle.ktlint") version "12.1.0" apply false
 }
 
+val libs = extensions.getByType<VersionCatalogsExtension>().named("libs")
+val kotlinVersion = libs.findVersion("kotlin").get().requiredVersion
+
 allprojects {
-    repositories {
-        mavenCentral()
+    configurations.configureEach {
+        resolutionStrategy.eachDependency {
+            val requestedGroup = requested.group
+            val requestedName = requested.name
+            if (
+                requestedGroup == "org.jetbrains.kotlin" &&
+                (requestedName == "kotlin-stdlib-jdk7" || requestedName == "kotlin-stdlib-jdk8")
+            ) {
+                useTarget("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")
+                because("Collapse legacy kotlin-stdlib-jdk7/jdk8 to kotlin-stdlib for Kotlin $kotlinVersion")
+            }
+        }
     }
 }
 
@@ -55,13 +69,10 @@ subprojects {
     }
 
     tasks.withType<Test>().configureEach {
-        useJUnitPlatform()
-        val isCi = project.providers.environmentVariable("CI").orElse("false").map { it.equals("true", true) }
-        val runIt = project.providers.gradleProperty("runIT").orElse("false").map { it.equals("true", true) }
-        doFirst {
-            if (!isCi.get() && !runIt.get()) {
-                logger.lifecycle("Excluding @Tag(\"it\") tests (no CI and -PrunIT not set)")
-                systemProperty("junit.jupiter.tags.exclude", "it")
+        val runIt = project.findProperty("runIT")?.toString()?.equals("true", ignoreCase = true) == true
+        useJUnitPlatform {
+            if (!runIt) {
+                excludeTags("it")
             }
         }
     }
