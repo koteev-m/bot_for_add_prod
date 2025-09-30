@@ -22,27 +22,36 @@ object UiCheckinMetrics {
 
     fun bind(registry: MeterRegistry) {
         cScanTotal =
-            Counter
-                .builder("ui.checkin.scan.total")
-                .description("Total check-in scan attempts")
-                .register(registry)
+            registry
+                .find("ui.checkin.scan.total")
+                .counter()
+                ?: Counter
+                    .builder("ui.checkin.scan.total")
+                    .description("Total check-in scan attempts")
+                    .register(registry)
 
         cScanError =
-            Counter
-                .builder("ui.checkin.scan.error")
-                .description("Failed check-in scans (any error)")
-                .register(registry)
+            registry
+                .find("ui.checkin.scan.error")
+                .counter()
+                ?: Counter
+                    .builder("ui.checkin.scan.error")
+                    .description("Failed check-in scans (any error)")
+                    .register(registry)
 
         checkinScanTimer =
-            Timer
-                .builder("ui.checkin.scan.duration.ms")
-                .publishPercentiles(
-                    CHECKIN_PERCENTILE_P50,
-                    CHECKIN_PERCENTILE_P95,
-                    CHECKIN_PERCENTILE_P99,
-                )
-                .description("Check-in scan processing duration")
-                .register(registry)
+            registry
+                .find("ui.checkin.scan.duration.ms")
+                .timer()
+                ?: Timer
+                    .builder("ui.checkin.scan.duration.ms")
+                    .publishPercentiles(
+                        CHECKIN_PERCENTILE_P50,
+                        CHECKIN_PERCENTILE_P95,
+                        CHECKIN_PERCENTILE_P99,
+                    )
+                    .description("Check-in scan processing duration")
+                    .register(registry)
     }
 
     fun incTotal() {
