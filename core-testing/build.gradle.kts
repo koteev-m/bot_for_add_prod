@@ -55,3 +55,13 @@ dependencies {
     testImplementation(libs.ktor.serialization.kotlinx.json)
     testImplementation(libs.ktor.server.content.negotiation)
 }
+
+tasks.test {
+    useJUnitPlatform()
+    if (project.hasProperty("runIT")) {
+        systemProperty("junit.jupiter.tags.include", "it")
+    } else {
+        systemProperty("junit.jupiter.tags.exclude", "it")
+    }
+    systemProperty("FLYWAY_LOCATIONS", "classpath:db/migration,classpath:db/migration/postgresql")
+}

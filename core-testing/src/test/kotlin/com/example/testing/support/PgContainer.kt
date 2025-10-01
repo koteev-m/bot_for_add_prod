@@ -22,7 +22,14 @@ abstract class PgContainer {
         @JvmStatic
         @BeforeAll
         fun startContainer() {
-            assumeTrue(DockerClientFactory.instance().isDockerAvailable)
+            val dockerAvailable =
+                try {
+                    DockerClientFactory.instance().client()
+                    true
+                } catch (_: Throwable) {
+                    false
+                }
+            assumeTrue(dockerAvailable, "Docker is not available on this host; skipping IT.")
             container.start()
             val config =
                 HikariConfig().apply {

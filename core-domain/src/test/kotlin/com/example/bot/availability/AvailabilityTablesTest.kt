@@ -8,8 +8,11 @@ import com.example.bot.time.ClubHour
 import com.example.bot.time.OperatingRulesResolver
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.testcontainers.DockerClientFactory
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Testcontainers
 import testing.RequiresDocker
@@ -22,13 +25,23 @@ import java.time.LocalTime
 @Tag("it")
 @Testcontainers
 class AvailabilityTablesTest {
+    companion object {
+        @JvmStatic
+        @BeforeAll
+        fun assumeDocker() {
+            val dockerAvailable =
+                try {
+                    DockerClientFactory.instance().client()
+                    true
+                } catch (_: Throwable) {
+                    false
+                }
+            assumeTrue(dockerAvailable, "Docker is not available on this host; skipping IT.")
+        }
+    }
+
     @Test
     fun `holds and bookings excluded`() {
-        org.junit.jupiter.api.Assumptions.assumeTrue(
-            org.testcontainers.DockerClientFactory
-                .instance()
-                .isDockerAvailable,
-        )
         PostgreSQLContainer<Nothing>("postgres:15-alpine")
             .use { it.start() }
         val eventStart = Instant.parse("2025-05-02T19:00:00Z")

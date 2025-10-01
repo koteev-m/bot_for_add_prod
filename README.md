@@ -32,17 +32,26 @@ Related documentation:
 ./gradlew clean build --console=plain
 ```
 
-Integration tests are tagged with `@Tag("it")` and are excluded by default. To
-run them locally or in CI, add `-PrunIT=true`:
+Integration tests are tagged with `@Tag("it")` and excluded unless explicitly
+requested.
 
-```bash
-./gradlew test -PrunIT=true --console=plain
-```
+## Tests
 
-To enable the same integration tests in CI, export `runIT=true` or append
-`-PrunIT=true` to the Gradle invocation inside your workflow step. The default
-GitHub Actions workflow (`.github/workflows/build.yml`) keeps IT disabled to
-avoid provisioning optional services unless explicitly requested.
+- Unit tests (no Docker required):
+
+  ```bash
+  ./gradlew test --console=plain
+  ```
+
+- Integration tests (require Docker/Testcontainers):
+
+  ```bash
+  ./gradlew test -PrunIT=true --console=plain
+  ```
+
+  If Testcontainers cannot access `/var/run/docker.sock`, start Docker Desktop
+  (macOS/Windows) or enable the Docker service (Linux) before re-running the
+  build.
 
 The dependency guard task validates the resolved dependency graph and fails the
 build if it detects legacy Kotlin stdlib artifacts, mismatched Ktor versions or
