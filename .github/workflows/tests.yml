@@ -50,10 +50,15 @@ jobs:
           done
           echo "postgres not ready" && exit 1
 
-      - name: Run unit & integration tests
+      - name: Run unit tests (no Docker required)
         env:
           CI: "true"
         run: ./gradlew clean test --console=plain
+
+      - name: Run integration tests (Docker)
+        env:
+          CI: "true"
+        run: ./gradlew test -PrunIT=true --console=plain
 
       - name: Upload test reports
         if: always()

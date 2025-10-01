@@ -93,11 +93,11 @@ fun Application.module() {
     // 0) Тюнинг сервера и наблюдаемость
     installServerTuning()
     installRateLimitPluginDefaults()
+    installMetrics()
+    AppMetricsBinder.bindAll(meterRegistry())
     installMigrationsAndDatabase()
     installAppConfig()
     installRequestLogging()
-    installMetrics()
-    AppMetricsBinder.bindAll(meterRegistry())
     install(ContentNegotiation) { json() }
 
     val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN") ?: BotLimits.Demo.FALLBACK_TOKEN

@@ -23,29 +23,62 @@ data class FlywayConfig(
 ) {
     companion object {
         fun fromEnv(): FlywayConfig {
+            val baseLocations = mutableListOf(DEFAULT_LOCATION)
+            val url = prop("DATABASE_URL") ?: env("DATABASE_URL")
+            val vendor =
+                when {
+                    url?.startsWith("jdbc:postgresql", ignoreCase = true) == true -> "postgresql"
+                    url?.startsWith("jdbc:h2", ignoreCase = true) == true -> "h2"
+                    else -> null
+                }
+            if (vendor != null) {
+                baseLocations += "$DEFAULT_LOCATION/$vendor"
+            }
+
+            val locationsOverride = prop("FLYWAY_LOCATIONS") ?: env("FLYWAY_LOCATIONS")
+            val resolvedLocations =
+                locationsOverride
+                    ?.split(",")
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotEmpty() }
+                    ?: baseLocations.toList()
+
+            val enabled =
+                prop("FLYWAY_ENABLED")?.toBooleanStrictOrNull()
+                    ?: env("FLYWAY_ENABLED")?.toBooleanStrictOrNull()
+                    ?: true
+            val schemas =
+                (prop("FLYWAY_SCHEMAS") ?: env("FLYWAY_SCHEMAS"))
+                    ?.split(",")
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotEmpty() }
+                    ?: emptyList()
+            val baselineOnMigrate =
+                prop("FLYWAY_BASELINE_ON_MIGRATE")?.toBooleanStrictOrNull()
+                    ?: env("FLYWAY_BASELINE_ON_MIGRATE")?.toBooleanStrictOrNull()
+                    ?: true
+            val validateOnly =
+                prop("FLYWAY_VALIDATE_ONLY")?.toBooleanStrictOrNull()
+                    ?: env("FLYWAY_VALIDATE_ONLY")?.toBooleanStrictOrNull()
+                    ?: false
+
             return FlywayConfig(
-                enabled = env("FLYWAY_ENABLED")?.toBooleanStrictOrNull() ?: true,
-                locations =
-                    env("FLYWAY_LOCATIONS")
-                        ?.split(",")
-                        ?.map { it.trim() }
-                        ?.filter { it.isNotEmpty() }
-                        ?: listOf("classpath:db/migration"),
-                schemas =
-                    env("FLYWAY_SCHEMAS")
-                        ?.split(",")
-                        ?.map { it.trim() }
-                        ?.filter { it.isNotEmpty() }
-                        ?: emptyList(),
-                baselineOnMigrate = env("FLYWAY_BASELINE_ON_MIGRATE")?.toBooleanStrictOrNull() ?: true,
-                validateOnly = env("FLYWAY_VALIDATE_ONLY")?.toBooleanStrictOrNull() ?: false,
+                enabled = enabled,
+                locations = resolvedLocations,
+                schemas = schemas,
+                baselineOnMigrate = baselineOnMigrate,
+                validateOnly = validateOnly,
             )
         }
+
+        private const val DEFAULT_LOCATION = "classpath:db/migration"
     }
 }
 
 /** utils */
 private fun env(name: String): String? = System.getenv(name)
+
+private fun prop(name: String): String? = System.getProperty(name)
 
 private fun envRequired(name: String): String = env(name) ?: error("ENV $name is required")
 

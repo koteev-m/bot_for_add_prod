@@ -29,9 +29,11 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.postgresql.ds.PGSimpleDataSource
+import org.testcontainers.DockerClientFactory
 import org.testcontainers.containers.PostgreSQLContainer
 
 private object UsersTable : Table("users") {
@@ -53,23 +55,30 @@ private object UserRolesTable : Table("user_roles") {
 }
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@Tag("it")
 class RbacIntegrationTest {
+    companion object {
+        @JvmStatic
+        @BeforeAll
+        fun assumeDocker() {
+            val dockerAvailable =
+                try {
+                    DockerClientFactory.instance().client()
+                    true
+                } catch (_: Throwable) {
+                    false
+                }
+            assumeTrue(dockerAvailable, "Docker is not available on this host; skipping IT.")
+        }
+    }
+
     private val postgres = PostgreSQLContainer("postgres:16-alpine")
 
     private lateinit var database: Database
-    private var containerStarted: Boolean = false
 
     @BeforeAll
     fun setUp() {
-        try {
-            postgres.start()
-            containerStarted = true
-        } catch (ex: Throwable) {
-            assumeTrue(false) { "Docker is required for RbacIntegrationTest: ${ex.message}" }
-        }
-        if (!containerStarted) {
-            return
-        }
+        postgres.start()
         Flyway
             .configure()
             .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
@@ -87,14 +96,11 @@ class RbacIntegrationTest {
 
     @AfterAll
     fun tearDown() {
-        if (containerStarted) {
-            postgres.stop()
-        }
+        postgres.stop()
     }
 
     @BeforeEach
     fun cleanTables() {
-        assumeTrue(containerStarted)
         transaction(database) {
             AuditLogTable.deleteAll()
             UserRolesTable.deleteAll()

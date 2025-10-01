@@ -13,7 +13,8 @@ class DockerRequiredCondition : ExecutionCondition {
     override fun evaluateExecutionCondition(ctx: ExtensionContext): ConditionEvaluationResult {
         val available =
             try {
-                org.testcontainers.DockerClientFactory.instance().isDockerAvailable()
+                org.testcontainers.DockerClientFactory.instance().client()
+                true
             } catch (_: Throwable) {
                 false
             }

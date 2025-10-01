@@ -128,3 +128,13 @@ dependencies {
     flyway(libs.postgres)
     flyway(libs.h2)
 }
+
+tasks.test {
+    useJUnitPlatform()
+    if (project.hasProperty("runIT")) {
+        systemProperty("junit.jupiter.tags.include", "it")
+    } else {
+        systemProperty("junit.jupiter.tags.exclude", "it")
+    }
+    systemProperty("FLYWAY_LOCATIONS", "classpath:db/migration,classpath:db/migration/postgresql")
+}

@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource
 import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.DockerClientFactory
@@ -18,6 +19,21 @@ import java.util.UUID
 @Tag("it")
 class FlywayVendorSmokeTest {
     private val resourcesToClose = mutableListOf<AutoCloseable>()
+
+    companion object {
+        @JvmStatic
+        @BeforeAll
+        fun assumeDocker() {
+            val dockerAvailable =
+                try {
+                    DockerClientFactory.instance().client()
+                    true
+                } catch (_: Throwable) {
+                    false
+                }
+            assumeTrue(dockerAvailable, "Docker is not available on this host; skipping IT.")
+        }
+    }
 
     @AfterEach
     fun tearDown() {
@@ -38,8 +54,6 @@ class FlywayVendorSmokeTest {
 
     @Test
     fun `postgres migrations run with jsonb defaults`() {
-        assumeTrue(DockerClientFactory.instance().isDockerAvailable)
-
         val container = PostgreSQLContainer<Nothing>("postgres:16-alpine")
         container.start()
         resourcesToClose += AutoCloseable { container.stop() }

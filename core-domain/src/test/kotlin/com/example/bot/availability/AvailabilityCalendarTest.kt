@@ -9,8 +9,11 @@ import com.example.bot.time.OperatingRulesResolver
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.testcontainers.DockerClientFactory
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Testcontainers
 import testing.RequiresDocker
@@ -24,13 +27,23 @@ import java.time.ZoneId
 @Tag("it")
 @Testcontainers
 class AvailabilityCalendarTest {
+    companion object {
+        @JvmStatic
+        @BeforeAll
+        fun assumeDocker() {
+            val dockerAvailable =
+                try {
+                    DockerClientFactory.instance().client()
+                    true
+                } catch (_: Throwable) {
+                    false
+                }
+            assumeTrue(dockerAvailable, "Docker is not available on this host; skipping IT.")
+        }
+    }
+
     @Test
     fun `holiday override and base hours`() {
-        org.junit.jupiter.api.Assumptions.assumeTrue(
-            org.testcontainers.DockerClientFactory
-                .instance()
-                .isDockerAvailable,
-        )
         PostgreSQLContainer<Nothing>("postgres:15-alpine")
             .use { it.start() }
         val repo =
@@ -100,11 +113,6 @@ class AvailabilityCalendarTest {
 
     @Test
     fun `exception closes night`() {
-        org.junit.jupiter.api.Assumptions.assumeTrue(
-            org.testcontainers.DockerClientFactory
-                .instance()
-                .isDockerAvailable,
-        )
         PostgreSQLContainer<Nothing>("postgres:15-alpine")
             .use { it.start() }
         val repo =

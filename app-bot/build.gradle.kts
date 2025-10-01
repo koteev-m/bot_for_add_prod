@@ -99,3 +99,13 @@ val runMigrations by tasks.registering(JavaExec::class) {
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.example.bot.tools.MigrateMainKt")
 }
+
+tasks.test {
+    useJUnitPlatform()
+    if (project.hasProperty("runIT")) {
+        systemProperty("junit.jupiter.tags.include", "it")
+    } else {
+        systemProperty("junit.jupiter.tags.exclude", "it")
+    }
+    systemProperty("FLYWAY_LOCATIONS", "classpath:db/migration,classpath:db/migration/postgresql")
+}

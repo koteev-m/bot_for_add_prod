@@ -35,6 +35,42 @@ class MigrationRunner(private val dataSource: DataSource, private val cfg: Flywa
         }
 
         val flyway = builder.load()
+        val metadata =
+            runCatching {
+                dataSource.connection.use { conn ->
+                    val schema = runCatching { conn.schema }.getOrNull()
+                    val catalog = runCatching { conn.catalog }.getOrNull()
+                    Triple(conn.metaData?.url, schema, catalog)
+                }
+            }.getOrElse { Triple(null, null, null) }
+        val (jdbcUrl, currentSchema, currentCatalog) = metadata
+
+        val configuredLocations = flyway.configuration.locations.map { it.descriptor }
+        val configuredSchemas = flyway.configuration.schemas.joinToString(",")
+        val flywayVersion = Flyway::class.java.`package`?.implementationVersion ?: "unknown"
+
+        log.info(
+            "Flyway migrate: version={} url={} locations={} schemas={} schema={} catalog={}",
+            flywayVersion,
+            jdbcUrl ?: "unknown",
+            configuredLocations.joinToString(","),
+            if (configuredSchemas.isEmpty()) "" else configuredSchemas,
+            currentSchema ?: "",
+            currentCatalog ?: "",
+        )
+
+        if (log.isDebugEnabled) {
+            val migrations =
+                flyway
+                    .info()
+                    .all()
+                    .joinToString(", ") { info ->
+                        val version = info.version?.toString() ?: "<repeat>"
+                        "$version:${info.script}:${info.state}"
+                    }
+            log.debug("Flyway available migrations: {}", migrations)
+        }
+
         return if (cfg.validateOnly) {
             log.info("Flyway validate-only mode enabled")
             val res = flyway.validateWithResult()

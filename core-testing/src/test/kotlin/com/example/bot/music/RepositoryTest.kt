@@ -5,8 +5,11 @@ import kotlinx.coroutines.runBlocking
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.sql.Database
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.testcontainers.DockerClientFactory
 import org.testcontainers.containers.PostgreSQLContainer
 import testing.RequiresDocker
 import java.time.Instant
@@ -14,14 +17,24 @@ import java.time.Instant
 @RequiresDocker
 @Tag("it")
 class RepositoryTest {
+    companion object {
+        @JvmStatic
+        @BeforeAll
+        fun assumeDocker() {
+            val dockerAvailable =
+                try {
+                    DockerClientFactory.instance().client()
+                    true
+                } catch (_: Throwable) {
+                    false
+                }
+            assumeTrue(dockerAvailable, "Docker is not available on this host; skipping IT.")
+        }
+    }
+
     @Test
     fun `create and list`() =
         runBlocking {
-            org.junit.jupiter.api.Assumptions.assumeTrue(
-                org.testcontainers.DockerClientFactory
-                    .instance()
-                    .isDockerAvailable,
-            )
             PostgreSQLContainer<Nothing>("postgres:15-alpine").use { pg ->
                 pg.start()
                 Flyway
