@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION") // pengrad: CallbackQuery.message() deprecated в Java API, используем только в тестовых стабах
+
 package com.example.bot.telegram
 
 import com.example.bot.availability.AvailabilityService
