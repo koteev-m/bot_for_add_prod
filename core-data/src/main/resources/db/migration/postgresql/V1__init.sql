@@ -145,7 +145,9 @@ CREATE TABLE booking_holds (
 );
 COMMENT ON TABLE booking_holds IS 'Temporary holds for tables';
 CREATE INDEX idx_booking_holds_event_expires ON booking_holds(event_id, expires_at);
-CREATE UNIQUE INDEX uq_active_hold ON booking_holds(table_id, event_id) WHERE (expires_at > now());
+-- Без «волатильной» уникальности по expires_at > now(); для активных используем запрос + индекс ниже.
+CREATE INDEX idx_booking_holds_active_candidates
+    ON booking_holds(table_id, event_id, expires_at);
 
 CREATE TABLE bookings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -168,7 +170,10 @@ CREATE TABLE bookings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 COMMENT ON TABLE bookings IS 'Confirmed bookings';
-CREATE UNIQUE INDEX uq_active_booking ON bookings(table_id, event_id) WHERE (status IN ('CONFIRMED','SEATED'));
+-- Частичный уникальный индекс по константам — допустимо (без функций).
+CREATE UNIQUE INDEX uq_active_booking
+  ON bookings(table_id, event_id)
+  WHERE (status IN ('CONFIRMED','SEATED'));
 CREATE INDEX idx_bookings_event_status ON bookings(event_id, status);
 CREATE INDEX idx_bookings_club_status ON bookings(club_id, status);
 CREATE INDEX idx_bookings_promoter_status ON bookings(promoter_user_id, status);
@@ -176,7 +181,10 @@ CREATE INDEX idx_bookings_promoter_status ON bookings(promoter_user_id, status);
 CREATE OR REPLACE FUNCTION check_booking_arrival_by() RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.arrival_by IS NOT NULL THEN
-        PERFORM 1 FROM events e WHERE e.id = NEW.event_id AND NEW.arrival_by BETWEEN e.start_at AND e.end_at;
+        PERFORM 1
+        FROM events e
+        WHERE e.id = NEW.event_id
+          AND NEW.arrival_by BETWEEN e.start_at AND e.end_at;
         IF NOT FOUND THEN
             RAISE EXCEPTION 'arrival_by outside event time';
         END IF;
@@ -185,11 +193,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_bookings_arrival_by BEFORE INSERT OR UPDATE ON bookings
+CREATE TRIGGER trg_bookings_arrival_by
+    BEFORE INSERT OR UPDATE ON bookings
     FOR EACH ROW EXECUTE FUNCTION check_booking_arrival_by();
 
 -- =====================
--- Payments
+-- Payments (базовая версия; дальше эволюция в V4)
 -- =====================
 CREATE TABLE payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -1,4 +1,4 @@
-@file:Suppress("DEPRECATION") // pengrad: CallbackQuery.message() deprecated в Java API, используем только в тестовых стабах
+@file:Suppress("DEPRECATION")
 
 package com.example.bot.telegram
 
@@ -92,6 +92,7 @@ class MenuCallbacksHandlerSmokeTest {
                         sendMessages += request
                         mockk<SendResponse>(relaxed = true)
                     }
+
                     else -> mockk<BaseResponse>(relaxed = true)
                 }
             }
@@ -169,6 +170,7 @@ class MenuCallbacksHandlerSmokeTest {
                         sendMessages += request
                         mockk<SendResponse>(relaxed = true)
                     }
+
                     else -> mockk<BaseResponse>(relaxed = true)
                 }
             }
@@ -210,6 +212,7 @@ class MenuCallbacksHandlerSmokeTest {
                         sendMessages += request
                         mockk<SendResponse>(relaxed = true)
                     }
+
                     else -> mockk<BaseResponse>(relaxed = true)
                 }
             }
@@ -266,6 +269,7 @@ class MenuCallbacksHandlerSmokeTest {
                         sendMessages += request
                         mockk<SendResponse>(relaxed = true)
                     }
+
                     else -> mockk<BaseResponse>(relaxed = true)
                 }
             }
@@ -336,6 +340,7 @@ class MenuCallbacksHandlerSmokeTest {
                         sendMessages += request
                         mockk<SendResponse>(relaxed = true)
                     }
+
                     else -> mockk<BaseResponse>(relaxed = true)
                 }
             }
@@ -414,6 +419,7 @@ class MenuCallbacksHandlerSmokeTest {
                         sendMessages += request
                         mockk<SendResponse>(relaxed = true)
                     }
+
                     else -> mockk<BaseResponse>(relaxed = true)
                 }
             }

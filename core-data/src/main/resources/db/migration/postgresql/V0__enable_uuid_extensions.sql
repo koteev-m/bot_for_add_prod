@@ -1,16 +1,21 @@
--- Enable pgcrypto for gen_random_uuid()
+-- Ensure gen_random_uuid() exists in any environment.
+-- Preferred: pgcrypto (provides gen_random_uuid()).
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- Fallback: ensure gen_random_uuid() is available via uuid-ossp if pgcrypto is not present.
-DO $$
+DO $do$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'gen_random_uuid') THEN
-    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-    CREATE OR REPLACE FUNCTION gen_random_uuid()
-    RETURNS uuid
-    LANGUAGE SQL
-    IMMUTABLE
-    AS $$ SELECT uuid_generate_v4(); $$;
-  END IF;
+    -- If gen_random_uuid() still doesn't exist (e.g., pgcrypto unavailable on some hosts),
+    -- fallback to uuid-ossp + a compat wrapper.
+    IF to_regprocedure('gen_random_uuid()') IS NULL THEN
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+        CREATE OR REPLACE FUNCTION gen_random_uuid()
+        RETURNS uuid
+        LANGUAGE SQL
+        VOLATILE
+        AS $f$
+            SELECT uuid_generate_v4();
+        $f$;
+    END IF;
 END
-$$;
+$do$;

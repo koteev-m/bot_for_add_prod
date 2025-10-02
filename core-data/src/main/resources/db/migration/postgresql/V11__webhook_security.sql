@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS suspicious_ips (
 );
 
 CREATE INDEX IF NOT EXISTS idx_suspicious_ips_created_at ON suspicious_ips (created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_suspicious_ips_ip ON suspicious_ips (ip);
+CREATE INDEX IF NOT EXISTS idx_suspicious_ips_ip         ON suspicious_ips (ip);
 
 CREATE TABLE IF NOT EXISTS webhook_update_dedup (
     update_id BIGINT PRIMARY KEY,

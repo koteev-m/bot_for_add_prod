@@ -1,4 +1,4 @@
-@file:Suppress("DEPRECATION") // pengrad: CallbackQuery.message() deprecated в Java API, используем только в тестовых стабах
+@file:Suppress("DEPRECATION")
 
 package com.example.bot.telegram
 
@@ -92,6 +92,7 @@ class MenuCallbacksHandlerGuestsFlowTest {
                         sendMessages += request
                         mockk<SendResponse>(relaxed = true)
                     }
+
                     else -> mockk<BaseResponse>(relaxed = true)
                 }
             }
@@ -186,6 +187,7 @@ class MenuCallbacksHandlerGuestsFlowTest {
                         sendMessages += request
                         mockk<SendResponse>(relaxed = true)
                     }
+
                     else -> mockk<BaseResponse>(relaxed = true)
                 }
             }
@@ -203,14 +205,14 @@ class MenuCallbacksHandlerGuestsFlowTest {
 
             val handler =
                 MenuCallbacksHandler(
-                    bot,
-                    keyboards,
-                    texts,
-                    clubRepository,
-                    availability,
-                    bookingService,
-                    chatUiSession,
-                    this,
+                    bot = bot,
+                    keyboards = keyboards,
+                    texts = texts,
+                    clubRepository = clubRepository,
+                    availability = availability,
+                    bookingService = bookingService,
+                    chatUiSession = chatUiSession,
+                    uiScope = this,
                 )
 
             handler.handle(update)
@@ -263,6 +265,7 @@ class MenuCallbacksHandlerGuestsFlowTest {
                         sendMessages += request
                         mockk<SendResponse>(relaxed = true)
                     }
+
                     else -> mockk<BaseResponse>(relaxed = true)
                 }
             }
@@ -274,13 +277,13 @@ class MenuCallbacksHandlerGuestsFlowTest {
 
             val handler =
                 MenuCallbacksHandler(
-                    bot,
-                    keyboards,
-                    texts,
-                    clubRepository,
-                    availability,
-                    bookingService,
-                    chatUiSession,
+                    bot = bot,
+                    keyboards = keyboards,
+                    texts = texts,
+                    clubRepository = clubRepository,
+                    availability = availability,
+                    bookingService = bookingService,
+                    chatUiSession = chatUiSession,
                     this,
                 )
 

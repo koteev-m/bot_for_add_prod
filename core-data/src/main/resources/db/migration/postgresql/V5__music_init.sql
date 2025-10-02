@@ -1,56 +1,70 @@
-create table if not exists music_items (
-    id bigserial primary key,
-    club_id bigint null references clubs(id) on delete set null,
-    title text not null,
-    dj text null,
-    source_type text not null check (source_type in ('YOUTUBE','SOUNDCLOUD','SPOTIFY','FILE','LINK')),
-    source_url text null,
-    telegram_file_id text null,
-    duration_sec int null check (duration_sec >= 0),
-    cover_url text null,
-    tags text null,
-    published_at timestamptz null,
-    is_active boolean not null default true,
-    created_by bigint null,
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now()
+-- Для GIN-индекса по тексту нужен pg_trgm
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- music_items
+CREATE TABLE IF NOT EXISTS music_items (
+    id bigserial PRIMARY KEY,
+    club_id bigint NULL REFERENCES clubs(id) ON DELETE SET NULL,
+    title text NOT NULL,
+    dj text NULL,
+    source_type text NOT NULL CHECK (source_type IN ('YOUTUBE','SOUNDCLOUD','SPOTIFY','FILE','LINK')),
+    source_url text NULL,
+    telegram_file_id text NULL,
+    duration_sec int NULL CHECK (duration_sec >= 0),
+    cover_url text NULL,
+    tags text NULL,
+    published_at timestamptz NULL,
+    is_active boolean NOT NULL DEFAULT true,
+    created_by bigint NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-comment on table music_items is 'Tracks and DJ sets';
-comment on column music_items.club_id is 'Owning club id';
-comment on column music_items.source_type is 'Origin of media';
-comment on column music_items.telegram_file_id is 'Cached Telegram file id';
+COMMENT ON TABLE music_items IS 'Tracks and DJ sets';
+COMMENT ON COLUMN music_items.club_id IS 'Owning club id';
+COMMENT ON COLUMN music_items.source_type IS 'Origin of media';
+COMMENT ON COLUMN music_items.telegram_file_id IS 'Cached Telegram file id';
 
-create index if not exists music_items_club_active_idx on music_items(club_id, is_active, published_at desc);
-create index if not exists music_items_tags_idx on music_items using gin(tags);
+-- Индексы: сортировка по дате публикации, фильтрация по активным
+CREATE INDEX IF NOT EXISTS music_items_club_active_idx
+    ON music_items(club_id, is_active, published_at DESC);
 
-create table if not exists music_playlists (
-    id bigserial primary key,
-    club_id bigint null references clubs(id) on delete set null,
-    title text not null,
-    description text null,
-    cover_url text null,
-    is_active boolean not null default true,
-    created_by bigint null,
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now()
+-- Поиск по тегам (TEXT) через триграммы
+-- Требует pg_trgm; на TEXT нужен операторный класс gin_trgm_ops
+CREATE INDEX IF NOT EXISTS music_items_tags_trgm_idx
+    ON music_items USING gin (tags gin_trgm_ops);
+
+-- music_playlists
+CREATE TABLE IF NOT EXISTS music_playlists (
+    id bigserial PRIMARY KEY,
+    club_id bigint NULL REFERENCES clubs(id) ON DELETE SET NULL,
+    title text NOT NULL,
+    description text NULL,
+    cover_url text NULL,
+    is_active boolean NOT NULL DEFAULT true,
+    created_by bigint NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-comment on table music_playlists is 'Music playlists';
+COMMENT ON TABLE music_playlists IS 'Music playlists';
 
-create table if not exists music_playlist_items (
-    playlist_id bigint not null references music_playlists(id) on delete cascade,
-    item_id bigint not null references music_items(id) on delete cascade,
-    position int not null default 0,
-    primary key (playlist_id, item_id)
+-- music_playlist_items
+CREATE TABLE IF NOT EXISTS music_playlist_items (
+    playlist_id bigint NOT NULL REFERENCES music_playlists(id) ON DELETE CASCADE,
+    item_id bigint NOT NULL REFERENCES music_items(id) ON DELETE CASCADE,
+    position int NOT NULL DEFAULT 0,
+    PRIMARY KEY (playlist_id, item_id)
 );
-create index if not exists music_playlist_items_pos_idx on music_playlist_items(playlist_id, position);
+CREATE INDEX IF NOT EXISTS music_playlist_items_pos_idx
+    ON music_playlist_items(playlist_id, position);
 
-create table if not exists music_likes (
-    item_id bigint not null references music_items(id) on delete cascade,
-    user_id bigint not null references users(id) on delete cascade,
-    liked_at timestamptz not null default now(),
-    primary key (item_id, user_id)
+-- music_likes
+CREATE TABLE IF NOT EXISTS music_likes (
+    item_id bigint NOT NULL REFERENCES music_items(id) ON DELETE CASCADE,
+    user_id bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    liked_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (item_id, user_id)
 );
 
-comment on table music_likes is 'User likes for music items';
+COMMENT ON TABLE music_likes IS 'User likes for music items';
