@@ -6,6 +6,7 @@ import com.example.bot.config.BotLimits
 import com.example.bot.data.club.GuestListCsvParser
 import com.example.bot.data.repo.ClubRepository
 import com.example.bot.data.repo.ExposedClubRepository
+import com.example.bot.di.availabilityModule
 import com.example.bot.di.bookingModule
 import com.example.bot.di.securityModule
 import com.example.bot.di.webAppModule
@@ -118,7 +119,13 @@ fun Application.module() {
 
     install(Koin) {
         slf4jLogger()
-        modules(bookingModule, securityModule, webAppModule, telegramModule)
+        modules(
+            bookingModule,
+            securityModule,
+            webAppModule,
+            availabilityModule,
+            telegramModule,
+        )
     }
 
     configureSecurity()
