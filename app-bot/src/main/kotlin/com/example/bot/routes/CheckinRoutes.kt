@@ -7,12 +7,9 @@ import com.example.bot.metrics.UiCheckinMetrics
 import com.example.bot.security.rbac.ClubScope
 import com.example.bot.security.rbac.authorize
 import com.example.bot.security.rbac.clubScoped
-import com.example.bot.webapp.InitDataAuthPlugin
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.application.call
-import io.ktor.server.application.install
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.post
@@ -27,16 +24,12 @@ import java.time.Duration
 import java.time.Instant
 
 private val DEFAULT_QR_TTL: Duration = Duration.ofHours(12)
-private val INIT_DATA_MAX_AGE: Duration = Duration.ofHours(24)
 
 @Serializable
 private data class ScanPayload(val qr: String)
 
 fun Application.checkinRoutes(
     repository: GuestListRepository,
-    initDataBotTokenProvider: () -> String = {
-        System.getenv("TELEGRAM_BOT_TOKEN") ?: error("TELEGRAM_BOT_TOKEN missing")
-    },
     qrSecretProvider: () -> String = {
         System.getenv("QR_SECRET") ?: error("QR_SECRET missing")
     },
@@ -47,11 +40,7 @@ fun Application.checkinRoutes(
 
     routing {
         route("/api/clubs/{clubId}/checkin") {
-            install(InitDataAuthPlugin) {
-                botTokenProvider = initDataBotTokenProvider
-                maxAge = INIT_DATA_MAX_AGE
-                this.clock = clock
-            }
+            // InitDataAuthPlugin ставится глобально в Application.module()
             authorize(Role.CLUB_ADMIN, Role.MANAGER, Role.ENTRY_MANAGER) {
                 clubScoped(ClubScope.Own) {
                     post("/scan") {

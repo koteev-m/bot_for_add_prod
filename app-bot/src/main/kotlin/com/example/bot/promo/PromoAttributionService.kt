@@ -79,11 +79,7 @@ data class PendingPromoAttribution(
 
 interface PromoAttributionStore {
     fun put(entry: PendingPromoAttribution)
-
-    fun popFresh(
-        telegramUserId: Long,
-        now: Instant = Instant.now(),
-    ): PendingPromoAttribution?
+    fun popFresh(telegramUserId: Long, now: Instant = Instant.now()): PendingPromoAttribution?
 }
 
 class InMemoryPromoAttributionStore(
@@ -91,7 +87,6 @@ class InMemoryPromoAttributionStore(
     private val clock: Clock = Clock.systemUTC(),
 ) : PromoAttributionStore {
     private data class Entry(val value: PendingPromoAttribution, val storedAt: Instant)
-
     private val entries = ConcurrentHashMap<Long, Entry>()
 
     override fun put(entry: PendingPromoAttribution) {
@@ -99,17 +94,10 @@ class InMemoryPromoAttributionStore(
         entries[entry.telegramUserId] = Entry(entry, clock.instant())
     }
 
-    override fun popFresh(
-        telegramUserId: Long,
-        now: Instant,
-    ): PendingPromoAttribution? {
+    override fun popFresh(telegramUserId: Long, now: Instant): PendingPromoAttribution? {
         cleanup()
         val entry = entries.remove(telegramUserId) ?: return null
-        return if (now.isAfter(entry.storedAt.plus(ttl))) {
-            null
-        } else {
-            entry.value
-        }
+        return if (now.isAfter(entry.storedAt.plus(ttl))) null else entry.value
     }
 
     private fun cleanup() {
@@ -120,38 +108,30 @@ class InMemoryPromoAttributionStore(
 
 sealed interface PromoLinkIssueResult {
     data class Success(val token: String, val promoLink: PromoLink) : PromoLinkIssueResult
-
     data object NotAuthorized : PromoLinkIssueResult
 }
 
 sealed interface PromoStartResult {
     data object Stored : PromoStartResult
-
     data object Invalid : PromoStartResult
 }
 
 interface PromoAttributionCoordinator {
-    suspend fun attachPending(
-        bookingId: UUID,
-        telegramUserId: Long?,
-    )
-
+    suspend fun attachPending(bookingId: UUID, telegramUserId: Long?)
     object Noop : PromoAttributionCoordinator {
-        override suspend fun attachPending(
-            bookingId: UUID,
-            telegramUserId: Long?,
-        ) {}
+        override suspend fun attachPending(bookingId: UUID, telegramUserId: Long?) {}
     }
 }
 
 class PromoAttributionService(
     private val promoLinkRepository: PromoLinkRepository,
     private val promoAttributionRepository: PromoAttributionRepository,
+    private val store: PromoAttributionStore,
     private val userRepository: UserRepository,
     private val userRoleRepository: UserRoleRepository,
-    private val store: PromoAttributionStore,
     private val clock: Clock = Clock.systemUTC(),
 ) : PromoAttributionCoordinator {
+
     suspend fun issuePromoLink(telegramUserId: Long): PromoLinkIssueResult {
         val user = userRepository.getByTelegramId(telegramUserId) ?: return PromoLinkIssueResult.NotAuthorized
         val roles = userRoleRepository.listRoles(user.id)
@@ -170,10 +150,7 @@ class PromoAttributionService(
         return PromoLinkIssueResult.Success(token, promoLink)
     }
 
-    suspend fun registerStart(
-        telegramUserId: Long,
-        token: String,
-    ): PromoStartResult {
+    suspend fun registerStart(telegramUserId: Long, token: String): PromoStartResult {
         val result =
             PromoLinkTokenCodec.decode(token)?.let { decoded ->
                 val promoLink = promoLinkRepository.get(decoded.promoLinkId)
@@ -199,10 +176,7 @@ class PromoAttributionService(
         return result
     }
 
-    override suspend fun attachPending(
-        bookingId: UUID,
-        telegramUserId: Long?,
-    ) {
+    override suspend fun attachPending(bookingId: UUID, telegramUserId: Long?) {
         if (telegramUserId == null) return
         val entry = store.popFresh(telegramUserId, clock.instant()) ?: return
         when (

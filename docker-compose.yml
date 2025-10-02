@@ -1,3 +1,4 @@
+
 services:
   postgres:
     image: public.ecr.aws/docker/library/postgres:16-alpine
@@ -24,16 +25,24 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+
+    # Единственный файл окружения, который действительно нужен в репозитории
     env_file:
-      - .env
+      - env.env
+
+    # Бит критичных переменных оставляем прямо тут, чтобы всё поднималось
+    # даже если env.env пуст или отсутствуют эти ключи.
     environment:
       DATABASE_URL: jdbc:postgresql://postgres:5432/botdb
       DATABASE_USER: botuser
       DATABASE_PASSWORD: botpass
-
       PORT: "8080"
-
+      # строго ограничиваем Flyway только PostgreSQL-миграциями
       FLYWAY_LOCATIONS: classpath:db/migration/postgresql
+
+      # Опционально: если не используешь polling — переопредели в env.env
+      TELEGRAM_USE_POLLING: "true"
+
     ports:
       - "8080:8080"
     healthcheck:

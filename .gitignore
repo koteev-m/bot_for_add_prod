@@ -10,5 +10,9 @@ out/
 .DS_Store
 .env
 
+# local envs
+.env.local
+env.env
+
 miniapp/node_modules/
 miniapp/src/assets/halls/*.png

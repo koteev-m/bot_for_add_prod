@@ -14,13 +14,12 @@ import com.example.bot.time.ClubHour
 import com.example.bot.time.Event
 import com.example.bot.time.OperatingRulesResolver
 import kotlinx.coroutines.Dispatchers
+import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.notInSubQuery
 import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.exists
+import org.jetbrains.exposed.sql.not
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import java.math.BigDecimal
 import java.time.Clock
@@ -29,34 +28,36 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 
 class DefaultAvailabilityService(
-    private val db: org.jetbrains.exposed.sql.Database,
+    private val db: Database,
     private val clock: Clock = Clock.systemUTC(),
-) : AvailabilityService(
-        UnsupportedAvailabilityRepository,
-        OperatingRulesResolver(UnsupportedAvailabilityRepository, clock),
-        CutoffPolicy(),
-        clock,
-    ) {
+) :
+    AvailabilityService(
+            UnsupportedAvailabilityRepository,
+            OperatingRulesResolver(UnsupportedAvailabilityRepository, clock),
+            CutoffPolicy(),
+            clock,
+        ) {
     override suspend fun listOpenNights(
         clubId: Long,
         limit: Int,
     ): List<NightDto> {
         val now = Instant.now(clock).atOffset(ZoneOffset.UTC)
+
         return withTxRetry {
             newSuspendedTransaction(context = Dispatchers.IO, db = db) {
                 EventsTable
-                    .select {
-                        (EventsTable.clubId eq clubId) and
-                            (EventsTable.endAt greater now)
-                    }
+                    .selectAll()
+                    .where { (EventsTable.clubId eq clubId) and (EventsTable.endAt greater now) }
                     .orderBy(EventsTable.startAt, SortOrder.ASC)
                     .limit(limit)
                     .map { row ->
                         val start = row[EventsTable.startAt].toInstant()
                         val end = row[EventsTable.endAt].toInstant()
                         val isSpecial = row[EventsTable.isSpecial]
+
                         val tz = "UTC"
-                        val zone: ZoneId = runCatching { ZoneId.of(tz) }.getOrDefault(ZoneOffset.UTC)
+                        val zone: ZoneId =
+                            runCatching { ZoneId.of(tz) }.getOrDefault(ZoneOffset.UTC)
 
                         NightDto(
                             eventStartUtc = start,
@@ -81,43 +82,55 @@ class DefaultAvailabilityService(
 
         return withTxRetry {
             newSuspendedTransaction(context = Dispatchers.IO, db = db) {
-                val event =
+                val eventRow =
                     EventsTable
-                        .select { (EventsTable.clubId eq clubId) and (EventsTable.startAt eq start) }
+                        .selectAll()
+                        .where {
+                            (EventsTable.clubId eq clubId) and (EventsTable.startAt eq start)
+                        }
                         .limit(1)
                         .firstOrNull()
                         ?: return@newSuspendedTransaction emptyList()
 
-                val eventId = event[EventsTable.id]
+                val eventId = eventRow[EventsTable.id]
 
-                val bookedSub =
-                    BookingsTable
-                        .slice(BookingsTable.tableId)
-                        .select {
-                            (BookingsTable.eventId eq eventId) and
-                                (
-                                    BookingsTable.status inList
-                                        listOf(
-                                            BookingStatus.BOOKED.name,
-                                            BookingStatus.SEATED.name,
-                                        )
-                                )
-                        }
+                // EXISTS-подзапрос: забронированные столы
+                val bookedExists =
+                    exists(
+                        BookingsTable
+                            .selectAll()
+                            .where {
+                                (BookingsTable.eventId eq eventId) and
+                                    (BookingsTable.tableId eq TablesTable.id) and
+                                    (
+                                        BookingsTable.status inList
+                                            listOf(
+                                                BookingStatus.BOOKED.name,
+                                                BookingStatus.SEATED.name,
+                                            )
+                                    )
+                            },
+                    )
 
-                val heldSub =
-                    BookingHoldsTable
-                        .slice(BookingHoldsTable.tableId)
-                        .select {
-                            (BookingHoldsTable.eventId eq eventId) and
-                                (BookingHoldsTable.expiresAt greater now)
-                        }
+                // EXISTS-подзапрос: столы с активными холдами
+                val heldExists =
+                    exists(
+                        BookingHoldsTable
+                            .selectAll()
+                            .where {
+                                (BookingHoldsTable.eventId eq eventId) and
+                                    (BookingHoldsTable.tableId eq TablesTable.id) and
+                                    (BookingHoldsTable.expiresAt greater now)
+                            },
+                    )
 
                 TablesTable
-                    .select {
+                    .selectAll()
+                    .where {
                         (TablesTable.clubId eq clubId) and
                             (TablesTable.active eq true) and
-                            (TablesTable.id notInSubQuery bookedSub) and
-                            (TablesTable.id notInSubQuery heldSub)
+                            not(bookedExists) and
+                            not(heldExists)
                     }
                     .orderBy(TablesTable.tableNumber, SortOrder.ASC)
                     .map { row ->
@@ -142,16 +155,21 @@ class DefaultAvailabilityService(
 }
 
 private fun BigDecimal.toMajorInt(): Int {
-    val normalized = this.stripTrailingZeros()
+    val normalized = stripTrailingZeros()
     if (normalized.scale() > 0) {
-        throw IllegalStateException("Table min_deposit has fractional part: $this")
+        error(
+            "Table min_deposit has fractional part: $this",
+        )
     }
     return normalized.toBigIntegerExact().intValueExact()
 }
 
 private object UnsupportedAvailabilityRepository : AvailabilityRepository {
     private fun unsupported(): Nothing =
-        error("DefaultAvailabilityService overrides AvailabilityService methods; repository access is unsupported")
+        error(
+            "DefaultAvailabilityService overrides AvailabilityService methods; " +
+                "repository access is unsupported",
+        )
 
     override suspend fun findClub(clubId: Long): Club? = unsupported()
 

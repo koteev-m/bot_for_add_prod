@@ -54,7 +54,6 @@ data class TemplateBookingRequest(
 )
 
 class TemplateAccessException(message: String) : RuntimeException(message)
-
 class TemplateNotFoundException(message: String) : RuntimeException(message)
 
 /**
@@ -73,7 +72,12 @@ class BookingTemplateService(
         val user = userRepository.getByTelegramId(telegramUserId) ?: return null
         val roles = userRoleRepository.listRoles(user.id)
         val clubIds = userRoleRepository.listClubIdsFor(user.id)
-        return TemplateActor(userId = user.id, telegramUserId = user.telegramId, roles = roles, clubIds = clubIds)
+        return TemplateActor(
+            userId = user.id,
+            telegramUserId = user.telegramId,
+            roles = roles,
+            clubIds = clubIds,
+        )
     }
 
     suspend fun listMine(
@@ -99,20 +103,17 @@ class BookingTemplateService(
         return repository.create(promoterId, clubId, tableCapacityMin, notes)
     }
 
-    suspend fun toggleActive(
-        id: Long,
-        active: Boolean,
-    ) {
+    suspend fun toggleActive(id: Long, active: Boolean) {
         val template = repository.get(id) ?: throw TemplateNotFoundException("template $id not found")
         val result = repository.update(id, template.tableCapacityMin, template.notes, active)
-        if (result !is BookingTemplateResult.Success) {
+        if (result !is BookingTemplateResult.Success<*>) {
             throw TemplateNotFoundException("template $id not found")
         }
     }
 
     suspend fun delete(id: Long) {
         when (repository.deactivate(id)) {
-            is BookingTemplateResult.Success -> Unit
+            is BookingTemplateResult.Success<*> -> Unit
             is BookingTemplateResult.Failure -> throw TemplateNotFoundException("template $id not found")
         }
     }
@@ -140,6 +141,7 @@ class BookingTemplateService(
                 repository
                     .listByOwner(actor.userId)
                     .filter { clubId == null || it.clubId == clubId }
+
             else -> {
                 val clubs = determineClubScope(actor, clubId)
                 val seen = LinkedHashMap<Long, BookingTemplate>()
@@ -171,19 +173,16 @@ class BookingTemplateService(
                     request.isActive,
                 )
         ) {
-            is BookingTemplateResult.Success -> result.value
+            is BookingTemplateResult.Success<*> -> result.value as BookingTemplate
             is BookingTemplateResult.Failure -> throw TemplateNotFoundException("template ${request.id} not found")
         }
     }
 
-    suspend fun deactivateTemplate(
-        actor: TemplateActor,
-        id: Long,
-    ) {
+    suspend fun deactivateTemplate(actor: TemplateActor, id: Long) {
         val template = repository.get(id) ?: throw TemplateNotFoundException("template $id not found")
         ensureCanAccess(actor, template)
         when (repository.deactivate(id)) {
-            is BookingTemplateResult.Success -> Unit
+            is BookingTemplateResult.Success<*> -> Unit
             is BookingTemplateResult.Failure -> throw TemplateNotFoundException("template $id not found")
         }
     }
@@ -237,6 +236,7 @@ class BookingTemplateService(
                         request,
                         idempotency,
                     )
+
                 else -> confirmed
             }
         } finally {
@@ -278,11 +278,7 @@ class BookingTemplateService(
         return finalized
     }
 
-    private fun ensureCanCreate(
-        actor: TemplateActor,
-        promoterId: Long,
-        clubId: Long,
-    ) {
+    private fun ensureCanCreate(actor: TemplateActor, promoterId: Long, clubId: Long) {
         val allowed =
             when {
                 actor.hasRole(Role.OWNER, Role.HEAD_MANAGER) -> true
@@ -295,10 +291,7 @@ class BookingTemplateService(
         }
     }
 
-    private fun ensureCanAccess(
-        actor: TemplateActor,
-        template: BookingTemplate,
-    ) {
+    private fun ensureCanAccess(actor: TemplateActor, template: BookingTemplate) {
         if (!actor.canAccess(template)) {
             throw TemplateAccessException("actor ${actor.userId} cannot access template ${template.id}")
         }
@@ -313,10 +306,7 @@ class BookingTemplateService(
         }
     }
 
-    private fun determineClubScope(
-        actor: TemplateActor,
-        requestedClub: Long?,
-    ): Set<Long> {
+    private fun determineClubScope(actor: TemplateActor, requestedClub: Long?): Set<Long> {
         val privileged = actor.hasRole(Role.OWNER, Role.HEAD_MANAGER)
         val scopedRoles = actor.hasRole(Role.CLUB_ADMIN, Role.MANAGER)
         return when {
@@ -326,6 +316,7 @@ class BookingTemplateService(
                     actor.clubIds.isNotEmpty() -> actor.clubIds
                     else -> emptySet()
                 }
+
             scopedRoles -> {
                 val clubs = if (requestedClub != null) setOf(requestedClub) else actor.clubIds
                 if (clubs.isEmpty() || (requestedClub != null && requestedClub !in actor.clubIds)) {
@@ -333,6 +324,7 @@ class BookingTemplateService(
                 }
                 clubs
             }
+
             else -> emptySet()
         }
     }
@@ -351,6 +343,4 @@ internal fun templateIdempotencyKey(
     promoterId: Long,
     slotStart: Instant,
     tableId: Long,
-): String {
-    return "tpl:$templateId:$promoterId:$slotStart:$tableId"
-}
+): String = "tpl:$templateId:$promoterId:$slotStart:$tableId"

@@ -39,11 +39,14 @@ import com.example.bot.telegram.ott.KeyboardFactory
 import com.example.bot.telegram.ui.ChatUiSessionStore
 import com.example.bot.telegram.ui.InMemoryChatUiSessionStore
 import com.example.bot.text.BotTexts
+import com.example.bot.webapp.InitDataAuthPlugin
 import com.example.bot.workers.OutboxWorker
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.UpdatesListener
 import com.pengrad.telegrambot.model.Update
 import com.pengrad.telegrambot.request.SendMessage
+import io.ktor.http.ContentType
+import io.ktor.http.HttpMethod
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStarted
@@ -52,7 +55,12 @@ import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.request.httpMethod
+import io.ktor.server.request.path
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
+import jdk.internal.vm.ScopedValueContainer.call
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -103,6 +111,18 @@ fun Application.module() {
 
     val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN") ?: BotLimits.Demo.FALLBACK_TOKEN
 
+    // 0.1) Telegram WebApp auth — пропускаем публичные пути (/ping, /ready и т.п.)
+    install(InitDataAuthPlugin) {
+        botTokenProvider = { System.getenv("TELEGRAM_BOT_TOKEN") ?: error("TELEGRAM_BOT_TOKEN is not set") }
+        exclude = { call ->
+            call.request.httpMethod == HttpMethod.Get &&
+                when (call.request.path()) {
+                    "/ping", "/ready", "/healthz" -> true
+                    else -> false
+                }
+        }
+    }
+
     // DI модуль Telegram/бота (pengrad)
     val telegramModule =
         module {
@@ -150,11 +170,15 @@ fun Application.module() {
     // 5) Routes
     val renderer = DefaultHallRenderer()
     routing {
-        // /health, /ready
+        // /health, /ready — публичные
         healthRoute()
         readinessRoute()
 
-        // Рендер схемы зала с кеш/ETag
+        get("/ping") {
+            call.respondText("OK", ContentType.Text.Plain)
+        }
+
+        // Рендер схемы зала с кеш/ETag (публично)
         hallImageRoute(renderer) { _, _ -> demoStateKey }
 
         // Публичный guest-flow (клуб → список ночей)
@@ -181,19 +205,43 @@ fun Application.module() {
         object : UpdatesListener {
             override fun process(updates: MutableList<Update>?): Int {
                 if (updates == null) return UpdatesListener.CONFIRMED_UPDATES_ALL
+
                 for (u in updates) {
-                    if (u.callbackQuery() != null) {
+                    // 1) Callback-кнопки
+                    u.callbackQuery()?.let {
                         callbackHandler.handle(u)
-                    } else if (u.message() != null && u.message().text() == "/demo") {
-                        val chatId = u.message().chat().id()
-                        val items =
-                            demoTableIds.map { tableId ->
+                        continue
+                    }
+
+                    // 2) Обычные сообщения
+                    val msg = u.message() ?: continue
+                    val text = msg.text()?.trim() ?: ""
+                    val chatId = msg.chat().id()
+
+                    when {
+                        // Обрабатываем /start (и "старт"/"start" на всякий)
+                        text.equals("/start", ignoreCase = true) ||
+                            text.equals("start", ignoreCase = true) ||
+                            text.equals("старт", ignoreCase = true) -> {
+                            bot.execute(
+                                SendMessage(
+                                    chatId,
+                                    "Я на связи 👋\nДоступные команды:\n• /demo — показать пример клавиатуры",
+                                ),
+                            )
+                        }
+
+                        // Твой уже существующий демо-обработчик
+                        text.equals("/demo", ignoreCase = true) -> {
+                            val items = demoTableIds.map { tableId ->
                                 "Стол $tableId" to BookTableAction(demoClubId, demoStartUtc, tableId)
                             }
-                        val kb = KeyboardFactory.tableKeyboard(service = ottService, items = items)
-                        bot.execute(SendMessage(chatId, "Выберите стол:").replyMarkup(kb))
+                            val kb = KeyboardFactory.tableKeyboard(service = ottService, items = items)
+                            bot.execute(SendMessage(chatId, "Выберите стол:").replyMarkup(kb))
+                        }
                     }
                 }
+
                 return UpdatesListener.CONFIRMED_UPDATES_ALL
             }
         },
