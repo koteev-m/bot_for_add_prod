@@ -60,7 +60,7 @@ interface AvailabilityRepository {
  */
 private val OPEN_LOOKAHEAD: Duration = Duration.ofDays(30)
 
-class AvailabilityService(
+open class AvailabilityService(
     private val repository: AvailabilityRepository,
     private val rulesResolver: OperatingRulesResolver,
     private val cutoffPolicy: CutoffPolicy,
@@ -74,7 +74,7 @@ class AvailabilityService(
     /**
      * Returns upcoming nights open for online booking.
      */
-    suspend fun listOpenNights(
+    open suspend fun listOpenNights(
         clubId: Long,
         limit: Int = 8,
     ): List<NightDto> {
@@ -93,7 +93,7 @@ class AvailabilityService(
     /**
      * Lists free tables for event start.
      */
-    suspend fun listFreeTables(
+    open suspend fun listFreeTables(
         clubId: Long,
         eventStartUtc: Instant,
     ): List<TableAvailabilityDto> {
