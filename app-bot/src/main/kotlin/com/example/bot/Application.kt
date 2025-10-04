@@ -9,10 +9,13 @@ import com.example.bot.data.repo.ClubRepository
 import com.example.bot.data.repo.ExposedClubRepository
 import com.example.bot.di.availabilityModule
 import com.example.bot.di.bookingModule
+import com.example.bot.di.musicModule
 import com.example.bot.di.securityModule
 import com.example.bot.di.webAppModule
 import com.example.bot.guestlists.GuestListRepository
 import com.example.bot.metrics.AppMetricsBinder
+import com.example.bot.music.MusicService
+import com.example.bot.plugins.appConfig
 import com.example.bot.plugins.configureSecurity
 import com.example.bot.plugins.installAppConfig
 import com.example.bot.plugins.installMetrics
@@ -31,6 +34,7 @@ import com.example.bot.routes.guestFlowRoutes
 import com.example.bot.routes.guestListRoutes
 import com.example.bot.routes.hallImageRoute
 import com.example.bot.routes.healthRoute
+import com.example.bot.routes.musicRoutes
 import com.example.bot.routes.readinessRoute
 import com.example.bot.routes.securedRoutes
 import com.example.bot.routes.webAppRoutes
@@ -80,7 +84,6 @@ import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
 import org.slf4j.LoggerFactory
-import com.example.bot.plugins.appConfig
 
 /** Значения по умолчанию для запуска сервера (выносим «магические» литералы). */
 private const val DEFAULT_HTTP_PORT: Int = 8080
@@ -101,7 +104,7 @@ fun main() {
     ).start(wait = true)
 }
 
-@Suppress("unused")
+@Suppress("unused", "LoopWithTooManyJumpStatements", "MaxLineLength")
 fun Application.module() {
     // demo constants
     val demoStateKey = BotLimits.Demo.STATE_KEY
@@ -156,6 +159,7 @@ fun Application.module() {
             webAppModule,
             availabilityModule,
             telegramModule,
+            musicModule,
         )
     }
 
@@ -172,6 +176,7 @@ fun Application.module() {
     val clubRepository by inject<ClubRepository>()
     val startMenuLogger = LoggerFactory.getLogger("TelegramStartMenu")
     val webAppBaseUrl = resolveWebAppBaseUrl()
+    val musicService: MusicService = get()
 
     var workerJob: Job? = null
     // Подписка на события жизненного цикла
@@ -201,6 +206,8 @@ fun Application.module() {
 
         // Публичный API доступности: ночи и свободные столы
         availabilityRoutes(availability)
+
+        this@module.musicRoutes(musicService)
     }
 
     clubsPublicRoutes(clubRepository)
@@ -306,6 +313,7 @@ private fun Application.resolveWebAppBaseUrl(): String {
     return base.removeSuffix("/")
 }
 
+@Suppress("SpreadOperator")
 private fun buildStartKeyboard(baseUrl: String, clubs: List<ClubDto>): InlineKeyboardMarkup {
     require(clubs.size >= START_CLUBS_LIMIT) { "Expected at least $START_CLUBS_LIMIT clubs" }
     val normalizedBase = baseUrl.removeSuffix("/")
