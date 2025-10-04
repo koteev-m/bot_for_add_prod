@@ -4,6 +4,7 @@ import com.example.bot.availability.AvailabilityService
 import com.example.bot.booking.BookingService
 import com.example.bot.config.BotLimits
 import com.example.bot.data.club.GuestListCsvParser
+import com.example.bot.data.repo.ClubDto
 import com.example.bot.data.repo.ClubRepository
 import com.example.bot.data.repo.ExposedClubRepository
 import com.example.bot.di.availabilityModule
@@ -30,6 +31,7 @@ import com.example.bot.routes.readinessRoute
 import com.example.bot.routes.securedRoutes
 import com.example.bot.routes.webAppRoutes
 import com.example.bot.server.installServerTuning
+import com.example.bot.telegram.GuestFlowHandler
 import com.example.bot.telegram.Keyboards
 import com.example.bot.telegram.MenuCallbacksHandler
 import com.example.bot.telegram.ott.BookTableAction
@@ -44,6 +46,10 @@ import com.example.bot.workers.OutboxWorker
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.UpdatesListener
 import com.pengrad.telegrambot.model.Update
+import com.pengrad.telegrambot.model.WebAppInfo
+import com.pengrad.telegrambot.model.request.InlineKeyboardButton
+import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
+import com.pengrad.telegrambot.request.BaseRequest
 import com.pengrad.telegrambot.request.SendMessage
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
@@ -66,11 +72,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.koin.dsl.module
 import org.koin.ktor.ext.get
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
+import org.slf4j.LoggerFactory
+import com.example.bot.plugins.appConfig
 
 /** Значения по умолчанию для запуска сервера (выносим «магические» литералы). */
 private const val DEFAULT_HTTP_PORT: Int = 8080
@@ -133,6 +142,18 @@ fun Application.module() {
             single<ClubRepository> { ExposedClubRepository(get()) }
             single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
             single<ChatUiSessionStore> { InMemoryChatUiSessionStore() }
+            single {
+                val bot: TelegramBot = get()
+                GuestFlowHandler(
+                    send = { request ->
+                        @Suppress("UNCHECKED_CAST")
+                        bot.execute((request as? BaseRequest<*, *>) ?: error("Unsupported request type: ${request::class}"))
+                    },
+                    texts = get(),
+                    keyboards = get(),
+                    promoService = get(),
+                )
+            }
             single { MenuCallbacksHandler(get(), get(), get(), get(), get(), get(), get(), get()) }
             single { CallbackQueryHandler(get(), get(), get()) }
         }
@@ -157,6 +178,10 @@ fun Application.module() {
     val bookingService by inject<BookingService>()
     val guestListRepository: GuestListRepository = get()
     val availability: AvailabilityService = get()
+    val guestFlowHandler by inject<GuestFlowHandler>()
+    val clubRepository by inject<ClubRepository>()
+    val startMenuLogger = LoggerFactory.getLogger("TelegramStartMenu")
+    val webAppBaseUrl = resolveWebAppBaseUrl()
 
     var workerJob: Job? = null
     // Подписка на события жизненного цикла
@@ -220,15 +245,32 @@ fun Application.module() {
 
                     when {
                         // Обрабатываем /start (и "старт"/"start" на всякий)
-                        text.equals("/start", ignoreCase = true) ||
+                        text.startsWith("/start", ignoreCase = true) ||
                             text.equals("start", ignoreCase = true) ||
                             text.equals("старт", ignoreCase = true) -> {
-                            bot.execute(
-                                SendMessage(
-                                    chatId,
-                                    "Я на связи 👋\nДоступные команды:\n• /demo — показать пример клавиатуры",
-                                ),
-                            )
+                            runBlocking {
+                                if (text.startsWith("/start", ignoreCase = true)) {
+                                    guestFlowHandler.handle(u)
+                                }
+                                val clubs = clubRepository.listClubs(limit = START_CLUBS_LIMIT).take(START_CLUBS_LIMIT)
+                                if (clubs.size == START_CLUBS_LIMIT) {
+                                    val keyboard = buildStartKeyboard(webAppBaseUrl, clubs)
+                                    val message = SendMessage(chatId, "Выберите клуб:").replyMarkup(keyboard)
+                                    bot.execute(message)
+                                    startMenuLogger.info(
+                                        "telegram.start_menu.sent chatId={} clubs={}",
+                                        chatId,
+                                        clubs.map { it.id },
+                                    )
+                                } else {
+                                    startMenuLogger.warn(
+                                        "telegram.start_menu.skipped chatId={} reason={} available={}",
+                                        chatId,
+                                        "insufficient_clubs",
+                                        clubs.size,
+                                    )
+                                }
+                            }
                         }
 
                         // Твой уже существующий демо-обработчик
@@ -246,4 +288,28 @@ fun Application.module() {
             }
         },
     )
+}
+
+private const val START_CLUBS_LIMIT = 4
+
+private fun Application.resolveWebAppBaseUrl(): String {
+    val envBase = System.getenv("WEBAPP_BASE_URL")?.takeIf { it.isNotBlank() }
+    val configBase =
+        listOfNotNull(
+            runCatching { appConfig.localApi.baseUrl }.getOrNull(),
+            runCatching { appConfig.webhook.baseUrl }.getOrNull(),
+        ).firstOrNull { it.isNotBlank() }
+    val base = envBase ?: configBase ?: "http://localhost:8080"
+    return base.removeSuffix("/")
+}
+
+private fun buildStartKeyboard(baseUrl: String, clubs: List<ClubDto>): InlineKeyboardMarkup {
+    require(clubs.size >= START_CLUBS_LIMIT) { "Expected at least $START_CLUBS_LIMIT clubs" }
+    val normalizedBase = baseUrl.removeSuffix("/")
+    val buttons =
+        clubs.take(START_CLUBS_LIMIT).map { club ->
+            InlineKeyboardButton(club.name).webApp(WebAppInfo("$normalizedBase/app?clubId=${club.id}"))
+        }
+    val rows = buttons.chunked(2).map { it.toTypedArray() }
+    return InlineKeyboardMarkup(*rows.toTypedArray())
 }
