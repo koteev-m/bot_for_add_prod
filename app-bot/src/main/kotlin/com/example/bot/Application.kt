@@ -23,6 +23,7 @@ import com.example.bot.plugins.meterRegistry
 import com.example.bot.render.DefaultHallRenderer
 import com.example.bot.routes.availabilityApiRoutes
 import com.example.bot.routes.availabilityRoutes
+import com.example.bot.routes.bookingFinalizeRoutes
 import com.example.bot.routes.checkinRoutes
 import com.example.bot.routes.clubsPublicRoutes
 import com.example.bot.routes.guestFlowRoutes
@@ -211,6 +212,8 @@ fun Application.module() {
 
     // Чек-ин верификатор (WebApp → POST /api/clubs/{clubId}/checkin/scan)
     checkinRoutes(repository = guestListRepository, initDataAuth = initDataAuthConfig)
+
+    bookingFinalizeRoutes(bookingService) { telegramToken }
 
     // RBAC-защищённые брони: /api/clubs/{clubId}/bookings/hold|confirm
     securedRoutes(bookingService, initDataAuth = initDataAuthConfig)
