@@ -5,6 +5,8 @@ import com.example.bot.data.security.Role
 import com.example.bot.security.rbac.ClubScope
 import com.example.bot.security.rbac.authorize
 import com.example.bot.security.rbac.clubScoped
+import com.example.bot.webapp.InitDataAuthConfig
+import com.example.bot.webapp.InitDataAuthPlugin
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
 import io.ktor.server.response.respondText
@@ -16,23 +18,29 @@ import io.ktor.server.routing.routing
 /**
  * Example secured HTTP routes using RBAC DSL.
  */
-fun Application.securedRoutes(bookingService: BookingService) {
+fun Application.securedRoutes(
+    bookingService: BookingService,
+    initDataAuth: InitDataAuthConfig.() -> Unit,
+) {
     routing {
-        securedBookingRoutes(bookingService)
-        authorize(Role.OWNER, Role.GLOBAL_ADMIN, Role.HEAD_MANAGER) {
-            get("/api/admin/overview") {
-                call.respondText("overview")
-            }
-        }
-        route("/api/clubs/{clubId}") {
-            authorize(Role.CLUB_ADMIN, Role.MANAGER, Role.ENTRY_MANAGER) {
-                clubScoped(ClubScope.Own) {
-                    get("/bookings") { call.respondText("bookings") }
+        route("") {
+            install(InitDataAuthPlugin, initDataAuth)
+            securedBookingRoutes(bookingService)
+            authorize(Role.OWNER, Role.GLOBAL_ADMIN, Role.HEAD_MANAGER) {
+                get("/api/admin/overview") {
+                    call.respondText("overview")
                 }
             }
-            authorize(Role.PROMOTER, Role.CLUB_ADMIN, Role.MANAGER, Role.GUEST) {
-                clubScoped(ClubScope.Own) {
-                    post("/tables/{tableId}/booking") { call.respondText("booked") }
+            route("/api/clubs/{clubId}") {
+                authorize(Role.CLUB_ADMIN, Role.MANAGER, Role.ENTRY_MANAGER) {
+                    clubScoped(ClubScope.Own) {
+                        get("/bookings") { call.respondText("bookings") }
+                    }
+                }
+                authorize(Role.PROMOTER, Role.CLUB_ADMIN, Role.MANAGER, Role.GUEST) {
+                    clubScoped(ClubScope.Own) {
+                        post("/tables/{tableId}/booking") { call.respondText("booked") }
+                    }
                 }
             }
         }

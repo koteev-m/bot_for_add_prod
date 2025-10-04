@@ -149,6 +149,12 @@ class InitDataAuthPluginTest {
                 }
             assertEquals(HttpStatusCode.OK, success.status)
 
+            val alias =
+                client.get("/t") {
+                    header("X-Telegram-InitData", header)
+                }
+            assertEquals(HttpStatusCode.OK, alias.status)
+
             val missing = client.get("/t")
             assertEquals(HttpStatusCode.Unauthorized, missing.status)
 

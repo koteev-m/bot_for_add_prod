@@ -1,8 +1,7 @@
 package com.example.bot.webapp
 
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.application.createApplicationPlugin
+import io.ktor.server.application.createRouteScopedPlugin
 import io.ktor.server.response.respond
 import io.ktor.util.AttributeKey
 import org.slf4j.LoggerFactory
@@ -23,9 +22,7 @@ class InitDataAuthConfig {
     var maxAge: Duration = Duration.ofHours(24)
     var clock: Clock = Clock.systemUTC()
     var headerName: String = "X-Telegram-Init-Data"
-
-    /** Возврати true, чтобы пропустить проверку initData для конкретного запроса. */
-    var exclude: (ApplicationCall) -> Boolean = { false }
+    var headerAliases: List<String> = listOf("X-Telegram-InitData")
 
     internal fun validate() {
         check(::botTokenProvider.isInitialized) { "botTokenProvider must be provided" }
@@ -35,15 +32,16 @@ class InitDataAuthConfig {
 val InitDataPrincipalKey: AttributeKey<TelegramPrincipal> = AttributeKey("webapp.principal")
 
 val InitDataAuthPlugin =
-    createApplicationPlugin("InitDataAuthPlugin", ::InitDataAuthConfig) {
+    createRouteScopedPlugin("InitDataAuthPlugin", ::InitDataAuthConfig) {
         pluginConfig.validate()
         val logger = LoggerFactory.getLogger("InitDataAuth")
 
         onCall { call ->
-            // >>> пропуск для публичных эндпоинтов
-            if (pluginConfig.exclude(call)) return@onCall
-
-            val header = call.request.headers[pluginConfig.headerName]
+            val header =
+                sequenceOf(pluginConfig.headerName)
+                    .plus(pluginConfig.headerAliases)
+                    .mapNotNull { headerName -> call.request.headers[headerName] }
+                    .firstOrNull()
             if (header == null || header.length > MAX_HEADER_LENGTH) {
                 logger.warn("initData header missing or too large")
                 call.respond(HttpStatusCode.Unauthorized)

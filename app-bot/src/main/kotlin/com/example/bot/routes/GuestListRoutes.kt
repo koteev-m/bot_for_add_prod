@@ -12,6 +12,8 @@ import com.example.bot.data.security.Role
 import com.example.bot.security.rbac.RbacContext
 import com.example.bot.security.rbac.authorize
 import com.example.bot.security.rbac.rbacContext
+import com.example.bot.webapp.InitDataAuthConfig
+import com.example.bot.webapp.InitDataAuthPlugin
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -25,6 +27,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.server.util.getOrFail
 import kotlinx.serialization.Serializable
@@ -39,24 +42,27 @@ import kotlin.io.use
 fun Application.guestListRoutes(
     repository: GuestListRepository,
     parser: GuestListCsvParser,
+    initDataAuth: InitDataAuthConfig.() -> Unit,
 ) {
     routing {
-        authorize(
-            Role.OWNER,
-            Role.GLOBAL_ADMIN,
-            Role.HEAD_MANAGER,
-            Role.CLUB_ADMIN,
-            Role.MANAGER,
-            Role.ENTRY_MANAGER,
-            Role.PROMOTER,
-        ) {
-            get("/api/guest-lists") {
-                val context = call.rbacContext()
-                val query = call.extractSearch(context)
-                if (query.forbidden) {
-                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "forbidden"))
-                    return@get
-                }
+        route("") {
+            install(InitDataAuthPlugin, initDataAuth)
+            authorize(
+                Role.OWNER,
+                Role.GLOBAL_ADMIN,
+                Role.HEAD_MANAGER,
+                Role.CLUB_ADMIN,
+                Role.MANAGER,
+                Role.ENTRY_MANAGER,
+                Role.PROMOTER,
+            ) {
+                get("/api/guest-lists") {
+                    val context = call.rbacContext()
+                    val query = call.extractSearch(context)
+                    if (query.forbidden) {
+                        call.respond(HttpStatusCode.Forbidden, mapOf("error" to "forbidden"))
+                        return@get
+                    }
                 if (query.empty) {
                     call.respond(GuestListPageResponse(emptyList(), total = 0, page = query.page, size = query.size))
                     return@get
@@ -77,12 +83,12 @@ fun Application.guestListRoutes(
                 call.respond(response)
             }
 
-            get("/api/guest-lists/export") {
-                val context = call.rbacContext()
-                val query = call.extractSearch(context)
-                if (query.forbidden) {
-                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "forbidden"))
-                    return@get
+                get("/api/guest-lists/export") {
+                    val context = call.rbacContext()
+                    val query = call.extractSearch(context)
+                    if (query.forbidden) {
+                        call.respond(HttpStatusCode.Forbidden, mapOf("error" to "forbidden"))
+                        return@get
                 }
                 val items =
                     if (query.empty) {
@@ -94,12 +100,12 @@ fun Application.guestListRoutes(
                 call.respondText(csv, ContentType.Text.CSV)
             }
 
-            post("/api/guest-lists/{listId}/import") {
-                val listIdParam = call.parameters.getOrFail("listId")
-                val listId = listIdParam.toLongOrNull()
-                if (listId == null) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid listId"))
-                    return@post
+                post("/api/guest-lists/{listId}/import") {
+                    val listIdParam = call.parameters.getOrFail("listId")
+                    val listId = listIdParam.toLongOrNull()
+                    if (listId == null) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid listId"))
+                        return@post
                 }
                 val list = repository.getList(listId)
                 if (list == null) {
@@ -141,6 +147,7 @@ fun Application.guestListRoutes(
                     call.respondText(report.toCsv(), ContentType.Text.CSV)
                 } else {
                     call.respond(report.toResponse())
+                }
                 }
             }
         }

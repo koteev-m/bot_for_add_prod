@@ -7,6 +7,8 @@ import com.example.bot.metrics.UiCheckinMetrics
 import com.example.bot.security.rbac.ClubScope
 import com.example.bot.security.rbac.authorize
 import com.example.bot.security.rbac.clubScoped
+import com.example.bot.webapp.InitDataAuthConfig
+import com.example.bot.webapp.InitDataAuthPlugin
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
@@ -30,6 +32,7 @@ private data class ScanPayload(val qr: String)
 
 fun Application.checkinRoutes(
     repository: GuestListRepository,
+    initDataAuth: InitDataAuthConfig.() -> Unit,
     qrSecretProvider: () -> String = {
         System.getenv("QR_SECRET") ?: error("QR_SECRET missing")
     },
@@ -40,7 +43,7 @@ fun Application.checkinRoutes(
 
     routing {
         route("/api/clubs/{clubId}/checkin") {
-            // InitDataAuthPlugin ставится глобально в Application.module()
+            install(InitDataAuthPlugin, initDataAuth)
             authorize(Role.CLUB_ADMIN, Role.MANAGER, Role.ENTRY_MANAGER) {
                 clubScoped(ClubScope.Own) {
                     post("/scan") {
