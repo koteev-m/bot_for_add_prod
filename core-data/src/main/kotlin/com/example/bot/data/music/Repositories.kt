@@ -17,6 +17,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import java.time.Instant
 import java.time.ZoneOffset
 
 /** Exposed implementation of [MusicItemRepository] and [MusicPlaylistRepository]. */
@@ -66,6 +67,18 @@ class MusicItemRepositoryImpl(private val db: Database) : MusicItemRepository {
                 .orderBy(MusicItemsTable.publishedAt, SortOrder.DESC)
                 .limit(limit, offset.toLong())
                 .map { it.toView() }
+        }
+    }
+
+    override suspend fun lastUpdatedAt(): Instant? {
+        return newSuspendedTransaction(Dispatchers.IO, db) {
+            val maxUpdatedAt = MusicItemsTable.updatedAt.max()
+            MusicItemsTable
+                .slice(maxUpdatedAt)
+                .selectAll()
+                .firstOrNull()
+                ?.get(maxUpdatedAt)
+                ?.toInstant()
         }
     }
 
@@ -122,6 +135,31 @@ class MusicPlaylistRepositoryImpl(private val db: Database) : MusicPlaylistRepos
         }
     }
 
+    override suspend fun listActive(limit: Int, offset: Int): List<PlaylistView> {
+        return newSuspendedTransaction(Dispatchers.IO, db) {
+            MusicPlaylistsTable
+                .selectAll()
+                .where { MusicPlaylistsTable.isActive eq true }
+                .orderBy(MusicPlaylistsTable.updatedAt, SortOrder.DESC)
+                .limit(limit, offset.toLong())
+                .map { it.toView() }
+        }
+    }
+
+    override suspend fun itemsCount(playlistIds: Collection<Long>): Map<Long, Int> {
+        if (playlistIds.isEmpty()) return emptyMap()
+        return newSuspendedTransaction(Dispatchers.IO, db) {
+            val countColumn = MusicPlaylistItemsTable.itemId.count()
+            MusicPlaylistItemsTable
+                .slice(MusicPlaylistItemsTable.playlistId, countColumn)
+                .select { MusicPlaylistItemsTable.playlistId inList playlistIds }
+                .groupBy(MusicPlaylistItemsTable.playlistId)
+                .associate { row ->
+                    row[MusicPlaylistItemsTable.playlistId] to row[countColumn]
+                }
+        }
+    }
+
     override suspend fun getFull(id: Long): PlaylistFullView? {
         return newSuspendedTransaction(Dispatchers.IO, db) {
             val p =
@@ -138,6 +176,18 @@ class MusicPlaylistRepositoryImpl(private val db: Database) : MusicPlaylistRepos
                     .orderBy(MusicPlaylistItemsTable.position)
                     .map { it.toItemView() }
             PlaylistFullView(p.id, p.clubId, p.title, p.description, p.coverUrl, items)
+        }
+    }
+
+    override suspend fun lastUpdatedAt(): Instant? {
+        return newSuspendedTransaction(Dispatchers.IO, db) {
+            val maxUpdatedAt = MusicPlaylistsTable.updatedAt.max()
+            MusicPlaylistsTable
+                .slice(maxUpdatedAt)
+                .selectAll()
+                .firstOrNull()
+                ?.get(maxUpdatedAt)
+                ?.toInstant()
         }
     }
 

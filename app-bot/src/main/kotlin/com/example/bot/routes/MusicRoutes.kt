@@ -1,54 +1,80 @@
 package com.example.bot.routes
 
-import com.example.bot.music.MusicItemCreate
 import com.example.bot.music.MusicService
-import com.example.bot.music.MusicService.ItemFilter
+import com.example.bot.webapp.InitDataAuthPlugin
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.Application
 import io.ktor.server.application.call
-import io.ktor.server.request.receive
+import io.ktor.server.application.install
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
-import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
-import io.ktor.server.routing.post
 import io.ktor.server.routing.route
-import java.security.MessageDigest
+import io.ktor.server.routing.routing
+import org.slf4j.LoggerFactory
 
-/** Routes serving music items. */
-fun Route.musicRoutes(service: MusicService) {
-    route("/api/music") {
-        get("/items") {
-            val clubId = call.request.queryParameters["clubId"]?.toLongOrNull()
-            val tag = call.request.queryParameters["tag"]
-            val q = call.request.queryParameters["q"]
-            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_MUSIC_LIMIT
-            val offset = call.request.queryParameters["offset"]?.toIntOrNull() ?: DEFAULT_OFFSET
-            val filter = ItemFilter(clubId, tag, q, limit, offset)
-            val items = service.listItems(filter)
-            val updatedMax = items.maxOfOrNull { it.publishedAt ?: java.time.Instant.EPOCH } ?: java.time.Instant.EPOCH
-            val etagSource = "$clubId|$tag|$q|${updatedMax.toEpochMilli()}"
-            val etag =
-                MessageDigest
-                    .getInstance("SHA-256")
-                    .digest(etagSource.toByteArray())
-                    .joinToString(separator = "") { java.lang.String.format(java.util.Locale.ROOT, "%02x", it) }
-            val ifNone = call.request.headers["If-None-Match"]
-            val weak = "W/\"$etag\""
-            if (ifNone == weak) {
-                call.respond(HttpStatusCode.NotModified)
-            } else {
-                call.response.headers.append("ETag", weak)
-                call.respond(items)
+private const val DEFAULT_LIMIT = 100
+
+fun Application.musicRoutes(service: MusicService) {
+    val logger = LoggerFactory.getLogger("MusicRoutes")
+
+    routing {
+        route("/api/music") {
+            install(InitDataAuthPlugin) {
+                botTokenProvider = {
+                    System.getenv("TELEGRAM_BOT_TOKEN")
+                        ?: error("TELEGRAM_BOT_TOKEN missing")
+                }
             }
-        }
 
-        post("/items") {
-            val req = call.receive<MusicItemCreate>()
-            val actor = 0L // authentication omitted for brevity
-            val item = service.createItem(req, actor)
-            call.respond(HttpStatusCode.Created, item)
+            get("/items") {
+                val ifNoneMatch = call.request.headers[HttpHeaders.IfNoneMatch]
+                val (etag, items) = service.listItems(limit = DEFAULT_LIMIT)
+                if (ifNoneMatch == etag) {
+                    logger.debug("music.items.not_modified etag={}", etag)
+                    call.respond(HttpStatusCode.NotModified)
+                    return@get
+                }
+                call.response.header(HttpHeaders.ETag, etag)
+                call.respond(HttpStatusCode.OK, items)
+            }
+
+            get("/playlists") {
+                val ifNoneMatch = call.request.headers[HttpHeaders.IfNoneMatch]
+                val (etag, playlists) = service.listPlaylists(limit = DEFAULT_LIMIT)
+                if (ifNoneMatch == etag) {
+                    logger.debug("music.playlists.not_modified etag={}", etag)
+                    call.respond(HttpStatusCode.NotModified)
+                    return@get
+                }
+                call.response.header(HttpHeaders.ETag, etag)
+                call.respond(HttpStatusCode.OK, playlists)
+            }
+
+            get("/playlists/{id}") {
+                val id = call.parameters["id"]?.toLongOrNull()
+                if (id == null) {
+                    logger.warn("music.playlists.invalid_id value={}", call.parameters["id"])
+                    call.respond(HttpStatusCode.BadRequest, "Invalid id")
+                    return@get
+                }
+                val ifNoneMatch = call.request.headers[HttpHeaders.IfNoneMatch]
+                val result = service.getPlaylist(id)
+                if (result == null) {
+                    logger.debug("music.playlists.not_found id={}", id)
+                    call.respond(HttpStatusCode.NotFound, "Playlist not found")
+                    return@get
+                }
+                val (etag, payload) = result
+                if (ifNoneMatch == etag) {
+                    logger.debug("music.playlists.not_modified id={} etag={}", id, etag)
+                    call.respond(HttpStatusCode.NotModified)
+                    return@get
+                }
+                call.response.header(HttpHeaders.ETag, etag)
+                call.respond(HttpStatusCode.OK, payload)
+            }
         }
     }
 }
-
-private const val DEFAULT_MUSIC_LIMIT = 20
-private const val DEFAULT_OFFSET = 0
