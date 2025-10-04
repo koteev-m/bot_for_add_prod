@@ -21,6 +21,7 @@ import com.example.bot.plugins.installRateLimitPluginDefaults
 import com.example.bot.plugins.installRequestLogging
 import com.example.bot.plugins.meterRegistry
 import com.example.bot.render.DefaultHallRenderer
+import com.example.bot.routes.availabilityApiRoutes
 import com.example.bot.routes.availabilityRoutes
 import com.example.bot.routes.checkinRoutes
 import com.example.bot.routes.clubsPublicRoutes
@@ -201,6 +202,9 @@ fun Application.module() {
     }
 
     clubsPublicRoutes(clubRepository)
+
+    // Новые публичные API-доступы для Mini App
+    availabilityApiRoutes(availability)
 
     // Mini App статика, CSP, gzip
     webAppRoutes()
