@@ -24,6 +24,7 @@ import com.example.bot.render.DefaultHallRenderer
 import com.example.bot.routes.availabilityApiRoutes
 import com.example.bot.routes.availabilityRoutes
 import com.example.bot.routes.bookingFinalizeRoutes
+import com.example.bot.routes.checkinCompatRoutes
 import com.example.bot.routes.checkinRoutes
 import com.example.bot.routes.clubsPublicRoutes
 import com.example.bot.routes.guestFlowRoutes
@@ -212,6 +213,8 @@ fun Application.module() {
 
     // Чек-ин верификатор (WebApp → POST /api/clubs/{clubId}/checkin/scan)
     checkinRoutes(repository = guestListRepository, initDataAuth = initDataAuthConfig)
+    // алиасы для Mini App коротких путей
+    checkinCompatRoutes(repository = guestListRepository)
 
     bookingFinalizeRoutes(bookingService) { telegramToken }
 
