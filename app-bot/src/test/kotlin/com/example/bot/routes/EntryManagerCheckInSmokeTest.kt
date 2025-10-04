@@ -384,7 +384,7 @@ private fun Application.configureTestApplication(module: Module) {
         qrSecretProvider = { QR_SECRET },
         clock = fixedClock,
         qrTtl = qrTtl,
-        initDataBotTokenProvider = { TEST_BOT_TOKEN },
+        initDataAuth = { botTokenProvider = { TEST_BOT_TOKEN } },
     )
 }
 

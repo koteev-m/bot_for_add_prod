@@ -88,7 +88,7 @@ class CheckinRoutesTest : StringSpec({
         configureSecurity()
         checkinRoutes(
             repository = repository,
-            initDataBotTokenProvider = { TEST_BOT_TOKEN },
+            initDataAuth = { botTokenProvider = { TEST_BOT_TOKEN } },
             qrSecretProvider = { qrSecret },
             clock = clock,
             qrTtl = qrTtl,

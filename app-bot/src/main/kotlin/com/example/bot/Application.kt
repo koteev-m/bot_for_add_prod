@@ -41,7 +41,7 @@ import com.example.bot.telegram.ott.KeyboardFactory
 import com.example.bot.telegram.ui.ChatUiSessionStore
 import com.example.bot.telegram.ui.InMemoryChatUiSessionStore
 import com.example.bot.text.BotTexts
-import com.example.bot.webapp.InitDataAuthPlugin
+import com.example.bot.webapp.InitDataAuthConfig
 import com.example.bot.workers.OutboxWorker
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.UpdatesListener
@@ -52,7 +52,6 @@ import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.request.BaseRequest
 import com.pengrad.telegrambot.request.SendMessage
 import io.ktor.http.ContentType
-import io.ktor.http.HttpMethod
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStarted
@@ -61,8 +60,6 @@ import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.server.request.httpMethod
-import io.ktor.server.request.path
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
@@ -119,18 +116,7 @@ fun Application.module() {
     install(ContentNegotiation) { json() }
 
     val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN") ?: BotLimits.Demo.FALLBACK_TOKEN
-
-    // 0.1) Telegram WebApp auth — пропускаем публичные пути (/ping, /ready и т.п.)
-    install(InitDataAuthPlugin) {
-        botTokenProvider = { System.getenv("TELEGRAM_BOT_TOKEN") ?: error("TELEGRAM_BOT_TOKEN is not set") }
-        exclude = { call ->
-            call.request.httpMethod == HttpMethod.Get &&
-                when (call.request.path()) {
-                    "/ping", "/ready", "/healthz" -> true
-                    else -> false
-                }
-        }
-    }
+    val initDataAuthConfig: InitDataAuthConfig.() -> Unit = { botTokenProvider = { telegramToken } }
 
     // DI модуль Telegram/бота (pengrad)
     val telegramModule =
@@ -217,13 +203,17 @@ fun Application.module() {
     webAppRoutes()
 
     // Чек-ин верификатор (WebApp → POST /api/clubs/{clubId}/checkin/scan)
-    checkinRoutes(repository = guestListRepository)
+    checkinRoutes(repository = guestListRepository, initDataAuth = initDataAuthConfig)
 
     // RBAC-защищённые брони: /api/clubs/{clubId}/bookings/hold|confirm
-    securedRoutes(bookingService)
+    securedRoutes(bookingService, initDataAuth = initDataAuthConfig)
 
     // Гостевые списки: поиск/экспорт/импорт (RBAC/club scope внутри)
-    guestListRoutes(repository = guestListRepository, parser = GuestListCsvParser())
+    guestListRoutes(
+        repository = guestListRepository,
+        parser = GuestListCsvParser(),
+        initDataAuth = initDataAuthConfig,
+    )
 
     // Telegram bot (polling demo)
     bot.setUpdatesListener(
