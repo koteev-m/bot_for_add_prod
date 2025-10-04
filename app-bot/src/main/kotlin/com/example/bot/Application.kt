@@ -23,6 +23,7 @@ import com.example.bot.plugins.meterRegistry
 import com.example.bot.render.DefaultHallRenderer
 import com.example.bot.routes.availabilityRoutes
 import com.example.bot.routes.checkinRoutes
+import com.example.bot.routes.clubsPublicRoutes
 import com.example.bot.routes.guestFlowRoutes
 import com.example.bot.routes.guestListRoutes
 import com.example.bot.routes.hallImageRoute
@@ -198,6 +199,8 @@ fun Application.module() {
         // Публичный API доступности: ночи и свободные столы
         availabilityRoutes(availability)
     }
+
+    clubsPublicRoutes(clubRepository)
 
     // Mini App статика, CSP, gzip
     webAppRoutes()
