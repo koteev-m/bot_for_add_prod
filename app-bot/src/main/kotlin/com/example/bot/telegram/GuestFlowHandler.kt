@@ -11,6 +11,7 @@ import com.pengrad.telegrambot.response.BaseResponse
 /**
  * Handles guest flow interactions for Telegram updates.
  */
+@Suppress("UnusedPrivateMember")
 class GuestFlowHandler(
     private val send: suspend (Any) -> BaseResponse,
     private val texts: BotTexts,
@@ -36,12 +37,9 @@ class GuestFlowHandler(
                         when (result) {
                             PromoStartResult.Stored -> "Промо отмечена ✅"
                             PromoStartResult.Invalid -> "Некорректная промо-ссылка"
-                        }
+                    }
                     send(SendMessage(chatId, ack))
                 }
-                val greeting = texts.greeting(lang)
-                val keyboard = keyboards.startMenu(lang)
-                send(SendMessage(chatId, greeting).replyMarkup(keyboard))
             }
 
             text.equals("Моя промо-ссылка", ignoreCase = true) -> {
