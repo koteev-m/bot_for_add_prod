@@ -1,4 +1,6 @@
+import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.JavaExec
+import org.gradle.language.jvm.tasks.ProcessResources
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -75,6 +77,28 @@ dependencies {
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.testcontainers.junit)
     testImplementation(projects.coreTesting)
+}
+
+// =========================
+// Mini App assets → resources
+// =========================
+
+val miniAppDist = rootProject.layout.projectDirectory.dir("miniapp/dist").asFile
+
+tasks.register<Copy>("copyMiniAppDist") {
+    description = "Copy Mini App compiled assets into resources so Ktor can serve them from the JAR."
+    group = "build"
+    from(miniAppDist)
+    include("**/*")
+    into(layout.buildDirectory.dir("generated/miniapp/webapp/app"))
+    onlyIf { miniAppDist.exists() && miniAppDist.isDirectory && miniAppDist.listFiles()?.isNotEmpty() == true }
+}
+
+tasks.named<ProcessResources>("processResources") {
+    dependsOn("copyMiniAppDist")
+    from(layout.buildDirectory.dir("generated/miniapp")) {
+        into("")
+    }
 }
 
 application {
