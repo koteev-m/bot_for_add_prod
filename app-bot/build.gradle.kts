@@ -1,5 +1,6 @@
 import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.JavaExec
+import org.gradle.api.tasks.testing.Test
 import org.gradle.language.jvm.tasks.ProcessResources
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -20,6 +21,10 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
         jvmTarget.set(JvmTarget.JVM_21)
         freeCompilerArgs.add("-Xjsr305=strict")
     }
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
 }
 
 dependencies {
@@ -64,8 +69,10 @@ dependencies {
     implementation(libs.koin.logger.slf4j)
 
     // Tests
+    testImplementation(kotlin("test"))
     testImplementation(libs.ktor.server.test.host)
-    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.junit.jupiter.api)
+    testRuntimeOnly(libs.junit.jupiter.engine)
     testImplementation(libs.kotest.runner)
     testImplementation(libs.kotest.assertions)
     testImplementation(libs.mockk)
@@ -125,7 +132,6 @@ val runMigrations by tasks.registering(JavaExec::class) {
 }
 
 tasks.test {
-    useJUnitPlatform()
     if (project.hasProperty("runIT")) {
         systemProperty("junit.jupiter.tags.include", "it")
     } else {
