@@ -17,6 +17,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.time.ZoneOffset
 
@@ -100,6 +101,8 @@ class MusicItemRepositoryImpl(private val db: Database) : MusicItemRepository {
 }
 
 class MusicPlaylistRepositoryImpl(private val db: Database) : MusicPlaylistRepository {
+    private val logger = LoggerFactory.getLogger(MusicPlaylistRepositoryImpl::class.java)
+
     override suspend fun create(
         req: PlaylistCreate,
         actor: UserId,
@@ -155,7 +158,20 @@ class MusicPlaylistRepositoryImpl(private val db: Database) : MusicPlaylistRepos
                 .select { MusicPlaylistItemsTable.playlistId inList playlistIds }
                 .groupBy(MusicPlaylistItemsTable.playlistId)
                 .associate { row ->
-                    row[MusicPlaylistItemsTable.playlistId] to row[countColumn]
+                    val playlistId = row[MusicPlaylistItemsTable.playlistId]
+                    val countLong = row[countColumn]
+                    val count =
+                        if (countLong > Int.MAX_VALUE) {
+                            logger.warn(
+                                "music.playlist.itemsCount overflow playlistId={} count={}",
+                                playlistId,
+                                countLong,
+                            )
+                            Int.MAX_VALUE
+                        } else {
+                            countLong.toInt()
+                        }
+                    playlistId to count
                 }
         }
     }
