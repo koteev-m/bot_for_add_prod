@@ -2,7 +2,9 @@ package com.example.bot
 
 import com.example.bot.availability.AvailabilityService
 import com.example.bot.booking.BookingService
+import com.example.bot.config.AppConfig
 import com.example.bot.config.BotLimits
+import com.example.bot.config.BotRunMode
 import com.example.bot.data.club.GuestListCsvParser
 import com.example.bot.data.repo.ClubDto
 import com.example.bot.data.repo.ClubRepository
@@ -37,6 +39,7 @@ import com.example.bot.routes.healthRoute
 import com.example.bot.routes.musicRoutes
 import com.example.bot.routes.readinessRoute
 import com.example.bot.routes.securedRoutes
+import com.example.bot.routes.telegramWebhookRoutes
 import com.example.bot.routes.webAppRoutes
 import com.example.bot.server.installServerTuning
 import com.example.bot.telegram.GuestFlowHandler
@@ -58,7 +61,10 @@ import com.pengrad.telegrambot.model.WebAppInfo
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.request.BaseRequest
+import com.pengrad.telegrambot.request.DeleteWebhook
+import com.pengrad.telegrambot.request.GetWebhookInfo
 import com.pengrad.telegrambot.request.SendMessage
+import com.pengrad.telegrambot.request.SetWebhook
 import io.ktor.http.ContentType
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -71,13 +77,11 @@ import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
-import jdk.internal.vm.ScopedValueContainer.call
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import org.koin.dsl.module
 import org.koin.ktor.ext.get
 import org.koin.ktor.ext.inject
@@ -235,69 +239,144 @@ fun Application.module() {
         initDataAuth = initDataAuthConfig,
     )
 
-    // Telegram bot (polling demo)
-    bot.setUpdatesListener(
-        object : UpdatesListener {
-            override fun process(updates: MutableList<Update>?): Int {
-                if (updates == null) return UpdatesListener.CONFIRMED_UPDATES_ALL
+    val telegramStartupLogger = LoggerFactory.getLogger("TelegramStartup")
+    val koinAppConfig: AppConfig? = runCatching { get<AppConfig>() }.getOrNull()
+    val resolvedAppConfig = koinAppConfig ?: runCatching { appConfig }.getOrNull()
+    val runMode =
+        resolvedAppConfig?.runMode ?: run {
+            val pollingEnv = System.getenv("TELEGRAM_USE_POLLING")?.equals("true", ignoreCase = true) ?: false
+            if (pollingEnv) BotRunMode.POLLING else BotRunMode.WEBHOOK
+        }
+    telegramStartupLogger.info("bot.runMode={}", runMode)
 
-                for (u in updates) {
-                    // 1) Callback-кнопки
-                    u.callbackQuery()?.let {
-                        callbackHandler.handle(u)
-                        continue
-                    }
+    val updateHandlerScope = CoroutineScope(coroutineContext + SupervisorJob())
+    val updateHandlerLogger = LoggerFactory.getLogger("TelegramUpdateHandler")
 
-                    // 2) Обычные сообщения
-                    val msg = u.message() ?: continue
-                    val text = msg.text()?.trim() ?: ""
-                    val chatId = msg.chat().id()
+    val handleUpdate: suspend (Update) -> Unit = handler@ { update ->
+        if (update.callbackQuery() != null) {
+            callbackHandler.handle(update)
+            return@handler
+        }
 
-                    when {
-                        // Обрабатываем /start (и "старт"/"start" на всякий)
-                        text.startsWith("/start", ignoreCase = true) ||
-                            text.equals("start", ignoreCase = true) ||
-                            text.equals("старт", ignoreCase = true) -> {
-                            runBlocking {
-                                if (text.startsWith("/start", ignoreCase = true)) {
-                                    guestFlowHandler.handle(u)
-                                }
-                                val clubs = clubRepository.listClubs(limit = START_CLUBS_LIMIT).take(START_CLUBS_LIMIT)
-                                if (clubs.size == START_CLUBS_LIMIT) {
-                                    val keyboard = buildStartKeyboard(webAppBaseUrl, clubs)
-                                    val message = SendMessage(chatId, "Выберите клуб:").replyMarkup(keyboard)
-                                    bot.execute(message)
-                                    startMenuLogger.info(
-                                        "telegram.start_menu.sent chatId={} clubs={}",
-                                        chatId,
-                                        clubs.map { it.id },
-                                    )
-                                } else {
-                                    startMenuLogger.warn(
-                                        "telegram.start_menu.skipped chatId={} reason={} available={}",
-                                        chatId,
-                                        "insufficient_clubs",
-                                        clubs.size,
-                                    )
-                                }
-                            }
-                        }
+        val msg = update.message() ?: return@handler
+        val text = msg.text()?.trim() ?: ""
+        val chatId = msg.chat().id()
 
-                        // Твой уже существующий демо-обработчик
-                        text.equals("/demo", ignoreCase = true) -> {
-                            val items = demoTableIds.map { tableId ->
-                                "Стол $tableId" to BookTableAction(demoClubId, demoStartUtc, tableId)
-                            }
-                            val kb = KeyboardFactory.tableKeyboard(service = ottService, items = items)
-                            bot.execute(SendMessage(chatId, "Выберите стол:").replyMarkup(kb))
-                        }
-                    }
+        when {
+            text.startsWith("/start", ignoreCase = true) ||
+                text.equals("start", ignoreCase = true) ||
+                text.equals("старт", ignoreCase = true) -> {
+                if (text.startsWith("/start", ignoreCase = true)) {
+                    guestFlowHandler.handle(update)
                 }
-
-                return UpdatesListener.CONFIRMED_UPDATES_ALL
+                val clubs = clubRepository.listClubs(limit = START_CLUBS_LIMIT).take(START_CLUBS_LIMIT)
+                if (clubs.size == START_CLUBS_LIMIT) {
+                    val keyboard = buildStartKeyboard(webAppBaseUrl, clubs)
+                    val message = SendMessage(chatId, "Выберите клуб:").replyMarkup(keyboard)
+                    bot.execute(message)
+                    startMenuLogger.info(
+                        "telegram.start_menu.sent chatId={} clubs={}",
+                        chatId,
+                        clubs.map { it.id },
+                    )
+                } else {
+                    startMenuLogger.warn(
+                        "telegram.start_menu.skipped chatId={} reason={} available={}",
+                        chatId,
+                        "insufficient_clubs",
+                        clubs.size,
+                    )
+                }
             }
-        },
-    )
+
+            text.equals("/demo", ignoreCase = true) -> {
+                val items = demoTableIds.map { tableId ->
+                    "Стол $tableId" to BookTableAction(demoClubId, demoStartUtc, tableId)
+                }
+                val kb = KeyboardFactory.tableKeyboard(service = ottService, items = items)
+                bot.execute(SendMessage(chatId, "Выберите стол:").replyMarkup(kb))
+            }
+        }
+    }
+
+    val dispatchUpdate: (Update) -> Unit = { update ->
+        updateHandlerScope.launch(Dispatchers.IO) {
+            runCatching { handleUpdate(update) }
+                .onFailure { t -> updateHandlerLogger.warn("telegram.update.failed: {}", t.toString()) }
+        }
+    }
+
+    when (runMode) {
+        BotRunMode.POLLING -> {
+            try {
+                val response = bot.execute(DeleteWebhook().dropPendingUpdates(true))
+                telegramStartupLogger.info(
+                    "telegram.deleteWebhook ok={} error={}",
+                    response.isOk,
+                    response.description(),
+                )
+            } catch (t: Throwable) {
+                telegramStartupLogger.warn("telegram.deleteWebhook failed: {}", t.toString())
+            }
+
+            bot.setUpdatesListener(
+                object : UpdatesListener {
+                    override fun process(updates: MutableList<Update>?): Int {
+                        if (updates == null) {
+                            return UpdatesListener.CONFIRMED_UPDATES_ALL
+                        }
+                        updates.forEach { update -> dispatchUpdate(update) }
+                        return UpdatesListener.CONFIRMED_UPDATES_ALL
+                    }
+                },
+            )
+            telegramStartupLogger.info("telegram.runMode=POLLING: updates listener started")
+        }
+        BotRunMode.WEBHOOK -> {
+            telegramStartupLogger.info("telegram.runMode=WEBHOOK: updates listener NOT started")
+
+            val baseUrl = resolvedAppConfig?.webhook?.baseUrl
+            val secret = resolvedAppConfig?.webhook?.secretToken
+            if (!baseUrl.isNullOrBlank() && !secret.isNullOrBlank()) {
+                val webhookUrl = baseUrl.trimEnd('/') + "/telegram/webhook"
+                try {
+                    val response =
+                        bot.execute(
+                            SetWebhook()
+                                .url(webhookUrl)
+                                .secretToken(secret)
+                        )
+                    telegramStartupLogger.info(
+                        "telegram.setWebhook url={} ok={} err={}",
+                        webhookUrl,
+                        response.isOk,
+                        response.description(),
+                    )
+                } catch (t: Throwable) {
+                    telegramStartupLogger.warn("telegram.setWebhook failed: {}", t.toString())
+                }
+            } else {
+                telegramStartupLogger.warn("telegram.webhook not set: webhook baseUrl/secretToken is missing in AppConfig")
+            }
+
+            try {
+                val response = bot.execute(GetWebhookInfo())
+                val webhookInfo = response.webhookInfo()
+                telegramStartupLogger.info(
+                    "telegram.getWebhookInfo ok={} url={} pending={} last_error_date={} last_error_message={}",
+                    response.isOk,
+                    webhookInfo?.url(),
+                    webhookInfo?.pendingUpdateCount(),
+                    webhookInfo?.lastErrorDate(),
+                    webhookInfo?.lastErrorMessage(),
+                )
+            } catch (t: Throwable) {
+                telegramStartupLogger.warn("telegram.getWebhookInfo failed: {}", t.toString())
+            }
+
+            telegramWebhookRoutes(bot, secret) { update -> dispatchUpdate(update) }
+        }
+    }
 }
 
 private const val START_CLUBS_LIMIT = 4
