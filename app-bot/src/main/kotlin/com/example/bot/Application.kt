@@ -144,14 +144,29 @@ fun Application.module() {
                 GuestFlowHandler(
                     send = { request ->
                         @Suppress("UNCHECKED_CAST")
-                        bot.execute((request as? BaseRequest<*, *>) ?: error("Unsupported request type: ${request::class}"))
+                        bot.execute(
+                            (request as? BaseRequest<*, *>) ?: error(
+                                "Unsupported request type: ${request::class}",
+                            ),
+                        )
                     },
                     texts = get(),
                     keyboards = get(),
                     promoService = get(),
                 )
             }
-            single { MenuCallbacksHandler(get(), get(), get(), get(), get(), get(), get(), get()) }
+            single {
+                MenuCallbacksHandler(
+                    get(),
+                    get(),
+                    get(),
+                    get(),
+                    get(),
+                    get(),
+                    get(),
+                    get(),
+                )
+            }
             single { CallbackQueryHandler(get(), get(), get()) }
         }
 
@@ -244,7 +259,10 @@ fun Application.module() {
     val resolvedAppConfig = koinAppConfig ?: runCatching { appConfig }.getOrNull()
     val runMode =
         resolvedAppConfig?.runMode ?: run {
-            val pollingEnv = System.getenv("TELEGRAM_USE_POLLING")?.equals("true", ignoreCase = true) ?: false
+            val pollingEnv =
+                System.getenv("TELEGRAM_USE_POLLING")
+                    ?.equals("true", ignoreCase = true)
+                    ?: false
             if (pollingEnv) BotRunMode.POLLING else BotRunMode.WEBHOOK
         }
     telegramStartupLogger.info("bot.runMode={}", runMode)
@@ -252,7 +270,7 @@ fun Application.module() {
     val updateHandlerScope = CoroutineScope(coroutineContext + SupervisorJob())
     val updateHandlerLogger = LoggerFactory.getLogger("TelegramUpdateHandler")
 
-    val handleUpdate: suspend (Update) -> Unit = handler@ { update ->
+    val handleUpdate: suspend (Update) -> Unit = handler@{ update ->
         if (update.callbackQuery() != null) {
             callbackHandler.handle(update)
             return@handler
@@ -290,9 +308,15 @@ fun Application.module() {
             }
 
             text.equals("/demo", ignoreCase = true) -> {
-                val items = demoTableIds.map { tableId ->
-                    "Стол $tableId" to BookTableAction(demoClubId, demoStartUtc, tableId)
-                }
+                val items =
+                    demoTableIds.map { tableId ->
+                        "Стол $tableId" to
+                            BookTableAction(
+                                demoClubId,
+                                demoStartUtc,
+                                tableId,
+                            )
+                    }
                 val kb = KeyboardFactory.tableKeyboard(service = ottService, items = items)
                 bot.execute(SendMessage(chatId, "Выберите стол:").replyMarkup(kb))
             }
@@ -302,7 +326,12 @@ fun Application.module() {
     val dispatchUpdate: (Update) -> Unit = { update ->
         updateHandlerScope.launch(Dispatchers.IO) {
             runCatching { handleUpdate(update) }
-                .onFailure { t -> updateHandlerLogger.warn("telegram.update.failed: {}", t.toString()) }
+                .onFailure { t ->
+                    updateHandlerLogger.warn(
+                        "telegram.update.failed: {}",
+                        t.toString(),
+                    )
+                }
         }
     }
 
@@ -344,7 +373,7 @@ fun Application.module() {
                         bot.execute(
                             SetWebhook()
                                 .url(webhookUrl)
-                                .secretToken(secret)
+                                .secretToken(secret),
                         )
                     telegramStartupLogger.info(
                         "telegram.setWebhook url={} ok={} err={}",
@@ -356,7 +385,9 @@ fun Application.module() {
                     telegramStartupLogger.warn("telegram.setWebhook failed: {}", t.toString())
                 }
             } else {
-                telegramStartupLogger.warn("telegram.webhook not set: webhook baseUrl/secretToken is missing in AppConfig")
+                telegramStartupLogger.warn(
+                    "telegram.webhook not set: webhook baseUrl/secretToken is missing in AppConfig",
+                )
             }
 
             try {
@@ -393,12 +424,17 @@ private fun Application.resolveWebAppBaseUrl(): String {
 }
 
 @Suppress("SpreadOperator")
-private fun buildStartKeyboard(baseUrl: String, clubs: List<ClubDto>): InlineKeyboardMarkup {
+private fun buildStartKeyboard(
+    baseUrl: String,
+    clubs: List<ClubDto>,
+): InlineKeyboardMarkup {
     require(clubs.size >= START_CLUBS_LIMIT) { "Expected at least $START_CLUBS_LIMIT clubs" }
     val normalizedBase = baseUrl.removeSuffix("/")
     val buttons =
         clubs.take(START_CLUBS_LIMIT).map { club ->
-            InlineKeyboardButton(club.name).webApp(WebAppInfo("$normalizedBase/app?clubId=${club.id}"))
+            InlineKeyboardButton(club.name).webApp(
+                WebAppInfo("$normalizedBase/app?clubId=${club.id}"),
+            )
         }
     val rows = buttons.chunked(2).map { it.toTypedArray() }
     return InlineKeyboardMarkup(*rows.toTypedArray())
