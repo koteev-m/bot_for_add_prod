@@ -12,6 +12,7 @@ import com.example.bot.music.PlaylistView
 import com.example.bot.music.UserId
 import com.example.bot.webapp.TEST_BOT_TOKEN
 import com.example.bot.webapp.WebAppInitDataTestHelper
+import com.example.bot.testing.applicationDev
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
@@ -94,7 +95,7 @@ class MusicRoutesTest {
     @Test
     fun `items endpoint returns list and respects etag`() {
         testApplication {
-            application {
+            applicationDev {
                 install(ContentNegotiation) { json() }
                 musicRoutes(service)
             }
@@ -123,7 +124,7 @@ class MusicRoutesTest {
     @Test
     fun `playlists endpoint returns list`() {
         testApplication {
-            application {
+            applicationDev {
                 install(ContentNegotiation) { json() }
                 musicRoutes(service)
             }
@@ -141,7 +142,7 @@ class MusicRoutesTest {
     @Test
     fun `playlist details return 200 and 404`() {
         testApplication {
-            application {
+            applicationDev {
                 install(ContentNegotiation) { json() }
                 musicRoutes(service)
             }

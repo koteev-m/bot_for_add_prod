@@ -20,6 +20,7 @@ import com.example.bot.plugins.installMetrics
 import com.example.bot.plugins.meterRegistry
 import com.example.bot.security.auth.TelegramPrincipal
 import com.example.bot.security.rbac.RbacPlugin
+import com.example.bot.testing.applicationDev
 import com.example.bot.webapp.InitDataPrincipalKey
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -72,7 +73,7 @@ class EntryManagerCheckInSmokeTest {
         testApplication {
             val guestListRepository = TestGuestListRepository()
             val module = baseModule(guestListRepository = guestListRepository)
-            application { configureTestApplication(module) }
+            applicationDev { configureTestApplication(module) }
 
             val issued = fixedNow.minusSeconds(60)
             val qrToken = encodeQr(QR_SECRET, LIST_ID, ENTRY_ID, issued)
@@ -136,7 +137,7 @@ class EntryManagerCheckInSmokeTest {
     fun `malformed or expired qr returns 400`() {
         testApplication {
             val module = baseModule()
-            application { configureTestApplication(module) }
+            applicationDev { configureTestApplication(module) }
 
             val userJson = """{"id":$TELEGRAM_USER_ID,"username":"entry_mgr"}"""
             val initData =
@@ -190,7 +191,7 @@ class EntryManagerCheckInSmokeTest {
             val guestListRepository = TestGuestListRepository()
             guestListRepository.removeList(LIST_ID)
             val module = baseModule(guestListRepository = guestListRepository)
-            application { configureTestApplication(module) }
+            applicationDev { configureTestApplication(module) }
 
             val issued = fixedNow.minusSeconds(30)
             val qrToken = encodeQr(QR_SECRET, LIST_ID, ENTRY_ID, issued)
@@ -221,7 +222,7 @@ class EntryManagerCheckInSmokeTest {
             val guestListRepository = TestGuestListRepository()
             guestListRepository.removeEntry(ENTRY_ID)
             val module = baseModule(guestListRepository = guestListRepository)
-            application { configureTestApplication(module) }
+            applicationDev { configureTestApplication(module) }
 
             val issued = fixedNow.minusSeconds(30)
             val qrToken = encodeQr(QR_SECRET, LIST_ID, ENTRY_ID, issued)
@@ -254,7 +255,7 @@ class EntryManagerCheckInSmokeTest {
                 guestListRepository.currentEntry().copy(listId = LIST_ID + 1),
             )
             val module = baseModule(guestListRepository = guestListRepository)
-            application { configureTestApplication(module) }
+            applicationDev { configureTestApplication(module) }
 
             val issued = fixedNow.minusSeconds(30)
             val qrToken = encodeQr(QR_SECRET, LIST_ID, ENTRY_ID, issued)
@@ -286,7 +287,7 @@ class EntryManagerCheckInSmokeTest {
                 baseModule(
                     userRoleRepository = TestUserRoleRepository(clubIds = setOf(CLUB_ID + 1)),
                 )
-            application { configureTestApplication(module) }
+            applicationDev { configureTestApplication(module) }
 
             val issued = fixedNow.minusSeconds(30)
             val qrToken = encodeQr(QR_SECRET, LIST_ID, ENTRY_ID, issued)
@@ -315,7 +316,7 @@ class EntryManagerCheckInSmokeTest {
     fun `missing or invalid init data returns 401`() {
         testApplication {
             val module = baseModule()
-            application { configureTestApplication(module) }
+            applicationDev { configureTestApplication(module) }
 
             val issued = fixedNow.minusSeconds(30)
             val qrToken = encodeQr(QR_SECRET, LIST_ID, ENTRY_ID, issued)
