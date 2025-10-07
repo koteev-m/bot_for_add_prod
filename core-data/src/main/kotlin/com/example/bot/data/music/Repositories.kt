@@ -138,7 +138,10 @@ class MusicPlaylistRepositoryImpl(private val db: Database) : MusicPlaylistRepos
         }
     }
 
-    override suspend fun listActive(limit: Int, offset: Int): List<PlaylistView> {
+    override suspend fun listActive(
+        limit: Int,
+        offset: Int,
+    ): List<PlaylistView> {
         return newSuspendedTransaction(Dispatchers.IO, db) {
             MusicPlaylistsTable
                 .selectAll()

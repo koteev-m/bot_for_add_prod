@@ -11,11 +11,10 @@ import io.ktor.server.testing.ApplicationTestBuilder
  *   val authed = defaultRequest { withInitData(createInitData()) }
  *   val resp = authed.get("/api/...")
  */
-public fun ApplicationTestBuilder.defaultRequest(
-    block: HttpRequestBuilder.() -> Unit,
-): HttpClient = createClient {
-    defaultRequest {
-        val requestBuilder = HttpRequestBuilder().apply(block)
-        headers.appendAll(requestBuilder.headers.build())
+public fun ApplicationTestBuilder.defaultRequest(block: HttpRequestBuilder.() -> Unit): HttpClient =
+    createClient {
+        defaultRequest {
+            val requestBuilder = HttpRequestBuilder().apply(block)
+            headers.appendAll(requestBuilder.headers.build())
+        }
     }
-}
