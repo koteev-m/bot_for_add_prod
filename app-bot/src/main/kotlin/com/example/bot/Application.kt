@@ -110,13 +110,30 @@ fun main() {
 
 @Suppress("unused", "LoopWithTooManyJumpStatements", "MaxLineLength")
 fun Application.module() {
+    // 0) Профиль приложения
+    val appProfile: String =
+        environment.config.propertyOrNull("app.profile")?.getString()
+            ?: System.getenv("APP_PROFILE")
+            ?: "DEV"
+    val isTestProfile: Boolean = appProfile.equals("TEST", ignoreCase = true)
+
+    if (isTestProfile) {
+        install(ContentNegotiation) { json() }
+        routing {
+            get("/health") { call.respondText("OK", ContentType.Text.Plain) }
+            get("/ready") { call.respondText("READY", ContentType.Text.Plain) }
+            get("/ping") { call.respondText("OK", ContentType.Text.Plain) }
+        }
+        return
+    }
+
     // demo constants
     val demoStateKey = BotLimits.Demo.STATE_KEY
     val demoClubId = BotLimits.Demo.CLUB_ID
     val demoStartUtc = BotLimits.Demo.START_UTC
     val demoTableIds = BotLimits.Demo.TABLE_IDS
 
-    // 0) Тюнинг сервера и наблюдаемость
+    // 1) Тюнинг сервера и наблюдаемость
     installServerTuning()
     installRateLimitPluginDefaults()
     installMetrics()
