@@ -1,5 +1,6 @@
 package com.example.bot.guestlist
 
+import com.example.bot.testing.applicationDev
 import com.example.bot.testing.createInitData
 import com.example.bot.testing.defaultRequest
 import com.example.bot.testing.header
@@ -189,7 +190,7 @@ class GuestListRoutesTest : StringSpec({
         registerRbacUser(telegramId = 100L, roles = setOf(Role.MANAGER), clubs = setOf(clubId))
 
         testApplication {
-            application { testModule() }
+            applicationDev { testModule() }
             val authedClient = authenticatedClient(telegramId = 100L)
             val response =
                 authedClient.post("/api/guest-lists/${list.id}/import?dry_run=true") {
@@ -223,7 +224,7 @@ class GuestListRoutesTest : StringSpec({
         registerRbacUser(telegramId = 200L, roles = setOf(Role.MANAGER), clubs = setOf(clubId))
 
         testApplication {
-            application { testModule() }
+            applicationDev { testModule() }
             val authedClient = authenticatedClient(telegramId = 200L)
             val response =
                 authedClient.post("/api/guest-lists/${list.id}/import") {
@@ -273,7 +274,7 @@ class GuestListRoutesTest : StringSpec({
         registerRbacUser(telegramId = 300L, roles = setOf(Role.MANAGER), clubs = setOf(clubA))
 
         testApplication {
-            application { testModule() }
+            applicationDev { testModule() }
             val authedClient = authenticatedClient(telegramId = 300L)
             val response = authedClient.get("/api/guest-lists")
             response.status shouldBe HttpStatusCode.OK
@@ -319,7 +320,7 @@ class GuestListRoutesTest : StringSpec({
         repository.addEntry(managerList.id, "Club Guest", "+222", 1, null)
 
         testApplication {
-            application { testModule() }
+            applicationDev { testModule() }
             val authedClient = authenticatedClient(telegramId = 400L)
             val response = authedClient.get("/api/guest-lists")
             response.status shouldBe HttpStatusCode.OK
@@ -349,7 +350,7 @@ class GuestListRoutesTest : StringSpec({
         registerRbacUser(telegramId = 500L, roles = setOf(Role.HEAD_MANAGER), clubs = emptySet())
 
         testApplication {
-            application { testModule() }
+            applicationDev { testModule() }
             val authedClient = authenticatedClient(telegramId = 500L)
             val response = authedClient.get("/api/guest-lists/export")
             response.status shouldBe HttpStatusCode.OK

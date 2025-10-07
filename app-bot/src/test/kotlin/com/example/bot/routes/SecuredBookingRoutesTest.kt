@@ -1,5 +1,6 @@
 package com.example.bot.routes
 
+import com.example.bot.testing.applicationDev
 import com.example.bot.testing.createInitData
 import com.example.bot.testing.defaultRequest
 import com.example.bot.testing.header
@@ -141,7 +142,7 @@ class SecuredBookingRoutesTest : StringSpec({
     "returns 401 when principal missing" {
         val bookingService = mockk<BookingService>()
         testApplication {
-            application { testModule(bookingService) }
+            applicationDev { testModule(bookingService) }
             val response =
                 client.post {
                     route("/api/clubs/1/bookings/hold")
@@ -169,7 +170,7 @@ class SecuredBookingRoutesTest : StringSpec({
         val bookingService = mockk<BookingService>()
         registerUser(telegramId = 200L, roles = setOf(Role.MANAGER), clubs = setOf(2L))
         testApplication {
-            application { testModule(bookingService) }
+            applicationDev { testModule(bookingService) }
             val authedClient = authenticatedClient(telegramId = 200L)
             val response =
                 authedClient.post {
@@ -198,7 +199,7 @@ class SecuredBookingRoutesTest : StringSpec({
         val bookingService = mockk<BookingService>()
         registerUser(telegramId = 300L, roles = setOf(Role.MANAGER), clubs = setOf(1L))
         testApplication {
-            application { testModule(bookingService) }
+            applicationDev { testModule(bookingService) }
             val authedClient = authenticatedClient(telegramId = 300L)
             val response =
                 authedClient.post {
@@ -231,7 +232,7 @@ class SecuredBookingRoutesTest : StringSpec({
         coEvery { bookingService.confirm(holdId, "idem-confirm") } returns BookingCmdResult.Booked(bookingId)
 
         testApplication {
-            application { testModule(bookingService) }
+            applicationDev { testModule(bookingService) }
             val authedClient = authenticatedClient(telegramId = 400L)
             val holdResponse =
                 authedClient.post {
@@ -291,7 +292,7 @@ class SecuredBookingRoutesTest : StringSpec({
         coEvery { bookingService.hold(any(), "idem-dup") } returns BookingCmdResult.DuplicateActiveBooking
 
         testApplication {
-            application { testModule(bookingService) }
+            applicationDev { testModule(bookingService) }
             val authedClient = authenticatedClient(telegramId = 500L)
             val response =
                 authedClient.post {
@@ -322,7 +323,7 @@ class SecuredBookingRoutesTest : StringSpec({
         coEvery { bookingService.confirm(holdId, "idem-expire") } returns BookingCmdResult.HoldExpired
 
         testApplication {
-            application { testModule(bookingService) }
+            applicationDev { testModule(bookingService) }
             val authedClient = authenticatedClient(telegramId = 600L)
             val response =
                 authedClient.post {
@@ -342,7 +343,7 @@ class SecuredBookingRoutesTest : StringSpec({
         coEvery { bookingService.confirm(holdId, "idem-missing") } returns BookingCmdResult.NotFound
 
         testApplication {
-            application { testModule(bookingService) }
+            applicationDev { testModule(bookingService) }
             val authedClient = authenticatedClient(telegramId = 700L)
             val response =
                 authedClient.post {

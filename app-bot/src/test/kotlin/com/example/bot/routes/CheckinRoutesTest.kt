@@ -12,6 +12,7 @@ import com.example.bot.plugins.DataSourceHolder
 import com.example.bot.plugins.configureSecurity
 import com.example.bot.webapp.TEST_BOT_TOKEN
 import com.example.bot.webapp.WebAppInitDataTestHelper
+import com.example.bot.testing.applicationDev
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.ktor.client.request.header
@@ -156,7 +157,7 @@ class CheckinRoutesTest : StringSpec({
         coEvery { repository.markArrived(entryId, any()) } returns true
 
         testApplication {
-            application { testModule(repository) }
+            applicationDev { testModule(repository) }
             val response =
                 client.post("/api/clubs/$clubId/checkin/scan") {
                     header("X-Telegram-Init-Data", initData)
@@ -177,7 +178,7 @@ class CheckinRoutesTest : StringSpec({
         val initData = validInitData()
 
         testApplication {
-            application { testModule(repository) }
+            applicationDev { testModule(repository) }
             val malformed =
                 client.post("/api/clubs/$clubId/checkin/scan") {
                     header("X-Telegram-Init-Data", initData)
@@ -217,7 +218,7 @@ class CheckinRoutesTest : StringSpec({
         coEvery { repository.getList(listId) } returns null
 
         testApplication {
-            application { testModule(repository) }
+            applicationDev { testModule(repository) }
             val response =
                 client.post("/api/clubs/$clubId/checkin/scan") {
                     header("X-Telegram-Init-Data", initData)
@@ -243,7 +244,7 @@ class CheckinRoutesTest : StringSpec({
         coEvery { repository.findEntry(entryId) } returns null
 
         testApplication {
-            application { testModule(repository) }
+            applicationDev { testModule(repository) }
             val response =
                 client.post("/api/clubs/$clubId/checkin/scan") {
                     header("X-Telegram-Init-Data", initData)
@@ -268,7 +269,7 @@ class CheckinRoutesTest : StringSpec({
         coEvery { repository.findEntry(entryId) } returns entry
 
         testApplication {
-            application { testModule(repository) }
+            applicationDev { testModule(repository) }
             val response =
                 client.post("/api/clubs/$clubId/checkin/scan") {
                     header("X-Telegram-Init-Data", initData)
@@ -294,7 +295,7 @@ class CheckinRoutesTest : StringSpec({
         coEvery { repository.markArrived(entryId, any()) } returns true
 
         testApplication {
-            application { testModule(repository) }
+            applicationDev { testModule(repository) }
             val response =
                 client.post("/api/clubs/$clubId/checkin/scan") {
                     header("X-Telegram-Init-Data", initData)
@@ -320,7 +321,7 @@ class CheckinRoutesTest : StringSpec({
         coEvery { repository.markArrived(entryId, any()) } returns true
 
         testApplication {
-            application { testModule(repository) }
+            applicationDev { testModule(repository) }
             repeat(2) {
                 val response =
                     client.post("/api/clubs/$clubId/checkin/scan") {
