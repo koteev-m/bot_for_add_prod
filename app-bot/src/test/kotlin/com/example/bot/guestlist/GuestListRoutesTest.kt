@@ -1,5 +1,9 @@
 package com.example.bot.guestlist
 
+import com.example.bot.testing.createInitData
+import com.example.bot.testing.defaultRequest
+import com.example.bot.testing.header
+import com.example.bot.testing.withInitData
 import com.example.bot.club.GuestListOwnerType
 import com.example.bot.club.GuestListRepository
 import com.example.bot.club.GuestListStatus
@@ -10,10 +14,6 @@ import com.example.bot.data.security.Role
 import com.example.bot.plugins.DataSourceHolder
 import com.example.bot.plugins.configureSecurity
 import com.example.bot.routes.guestListRoutes
-import com.example.bot.testing.createInitData
-import com.example.bot.testing.defaultRequest
-import com.example.bot.testing.header
-import com.example.bot.testing.withInitData
 import com.example.bot.webapp.TEST_BOT_TOKEN
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
