@@ -10,15 +10,16 @@ import com.example.bot.data.security.Role
 import com.example.bot.plugins.DataSourceHolder
 import com.example.bot.plugins.configureSecurity
 import com.example.bot.routes.guestListRoutes
+import com.example.bot.testing.createInitData
+import com.example.bot.testing.defaultRequest
+import com.example.bot.testing.header
+import com.example.bot.testing.withInitData
 import com.example.bot.webapp.TEST_BOT_TOKEN
-import com.example.bot.webapp.WebAppInitDataTestHelper
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.ktor.client.HttpClient
-import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
-import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -30,6 +31,7 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -73,12 +75,16 @@ class GuestListRoutesTest : StringSpec({
         )
     }
 
-    fun HttpClient.authenticatedClient(
+    fun ApplicationTestBuilder.authenticatedClient(
         telegramId: Long,
         username: String = "user$telegramId",
     ): HttpClient {
-        return config {
-            defaultRequest { withInitData(telegramId, username) }
+        return defaultRequest {
+            withInitData(createInitData(userId = telegramId, username = username))
+            header("X-Telegram-Id", telegramId.toString())
+            if (username.isNotBlank()) {
+                header("X-Telegram-Username", username)
+            }
         }
     }
 
@@ -164,30 +170,6 @@ class GuestListRoutesTest : StringSpec({
         }
     }
 
-    fun HttpRequestBuilder.withInitData(
-        telegramId: Long,
-        username: String?,
-    ) {
-        val initData = createInitData(telegramId, username)
-        header("X-Telegram-Init-Data", initData)
-        header("X-Telegram-Id", telegramId.toString())
-        if (!username.isNullOrBlank()) {
-            header("X-Telegram-Username", username)
-        }
-    }
-
-    fun createInitData(
-        telegramId: Long,
-        username: String?,
-    ): String {
-        val params =
-            linkedMapOf(
-                "user" to WebAppInitDataTestHelper.encodeUser(telegramId, username = username),
-                "auth_date" to Instant.now().epochSecond.toString(),
-            )
-        return WebAppInitDataTestHelper.createInitData(TEST_BOT_TOKEN, params)
-    }
-
     "import dry run returns json report" {
         val clubId = createClub("Nebula")
         val eventId = createEvent(clubId, "Launch")
@@ -208,7 +190,7 @@ class GuestListRoutesTest : StringSpec({
 
         testApplication {
             application { testModule() }
-            val authedClient = client.authenticatedClient(telegramId = 100L)
+            val authedClient = authenticatedClient(telegramId = 100L)
             val response =
                 authedClient.post("/api/guest-lists/${list.id}/import?dry_run=true") {
                     contentType(ContentType.Text.CSV)
@@ -242,7 +224,7 @@ class GuestListRoutesTest : StringSpec({
 
         testApplication {
             application { testModule() }
-            val authedClient = client.authenticatedClient(telegramId = 200L)
+            val authedClient = authenticatedClient(telegramId = 200L)
             val response =
                 authedClient.post("/api/guest-lists/${list.id}/import") {
                     header(HttpHeaders.Accept, ContentType.Text.CSV.toString())
@@ -292,7 +274,7 @@ class GuestListRoutesTest : StringSpec({
 
         testApplication {
             application { testModule() }
-            val authedClient = client.authenticatedClient(telegramId = 300L)
+            val authedClient = authenticatedClient(telegramId = 300L)
             val response = authedClient.get("/api/guest-lists")
             response.status shouldBe HttpStatusCode.OK
             val items = Json.parseToJsonElement(response.bodyAsText()).jsonObject["items"]!!.jsonArray
@@ -338,7 +320,7 @@ class GuestListRoutesTest : StringSpec({
 
         testApplication {
             application { testModule() }
-            val authedClient = client.authenticatedClient(telegramId = 400L)
+            val authedClient = authenticatedClient(telegramId = 400L)
             val response = authedClient.get("/api/guest-lists")
             response.status shouldBe HttpStatusCode.OK
             val items = Json.parseToJsonElement(response.bodyAsText()).jsonObject["items"]!!.jsonArray
@@ -368,7 +350,7 @@ class GuestListRoutesTest : StringSpec({
 
         testApplication {
             application { testModule() }
-            val authedClient = client.authenticatedClient(telegramId = 500L)
+            val authedClient = authenticatedClient(telegramId = 500L)
             val response = authedClient.get("/api/guest-lists/export")
             response.status shouldBe HttpStatusCode.OK
             response.headers[HttpHeaders.ContentType]!!.startsWith("text/csv") shouldBe true

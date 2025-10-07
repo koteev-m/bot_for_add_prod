@@ -5,13 +5,16 @@ import com.example.bot.booking.BookingService
 import com.example.bot.data.security.Role
 import com.example.bot.plugins.DataSourceHolder
 import com.example.bot.plugins.configureSecurity
+import com.example.bot.testing.createInitData
+import com.example.bot.testing.defaultRequest
+import com.example.bot.testing.header
+import com.example.bot.testing.route
+import com.example.bot.testing.withInitData
 import com.example.bot.webapp.InitDataAuthPlugin
 import com.example.bot.webapp.TEST_BOT_TOKEN
-import com.example.bot.webapp.WebAppInitDataTestHelper
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.ktor.client.HttpClient
-import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -22,7 +25,9 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
+import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -85,12 +90,16 @@ class SecuredBookingRoutesTest : StringSpec({
         }
     }
 
-    fun HttpClient.authenticatedClient(
+    fun ApplicationTestBuilder.authenticatedClient(
         telegramId: Long,
         username: String = "user$telegramId",
     ): HttpClient {
-        return config {
-            defaultRequest { withInitData(telegramId, username) }
+        return defaultRequest {
+            withInitData(createInitData(userId = telegramId, username = username))
+            header("X-Telegram-Id", telegramId.toString())
+            if (username.isNotBlank()) {
+                header("X-Telegram-Username", username)
+            }
         }
     }
 
@@ -129,36 +138,13 @@ class SecuredBookingRoutesTest : StringSpec({
         }
     }
 
-    fun HttpRequestBuilder.withInitData(
-        telegramId: Long,
-        username: String?,
-    ) {
-        val initData = createInitData(telegramId, username)
-        header("X-Telegram-Init-Data", initData)
-        header("X-Telegram-Id", telegramId.toString())
-        if (!username.isNullOrBlank()) {
-            header("X-Telegram-Username", username)
-        }
-    }
-
-    fun createInitData(
-        telegramId: Long,
-        username: String?,
-    ): String {
-        val params =
-            linkedMapOf(
-                "user" to WebAppInitDataTestHelper.encodeUser(telegramId, username = username),
-                "auth_date" to Instant.now().epochSecond.toString(),
-            )
-        return WebAppInitDataTestHelper.createInitData(TEST_BOT_TOKEN, params)
-    }
-
     "returns 401 when principal missing" {
         val bookingService = mockk<BookingService>()
         testApplication {
             application { testModule(bookingService) }
             val response =
-                client.post("/api/clubs/1/bookings/hold") {
+                client.post {
+                    route("/api/clubs/1/bookings/hold")
                     contentType(ContentType.Application.Json)
                     header("Idempotency-Key", "idem-unauth")
                     setBody(
@@ -184,9 +170,10 @@ class SecuredBookingRoutesTest : StringSpec({
         registerUser(telegramId = 200L, roles = setOf(Role.MANAGER), clubs = setOf(2L))
         testApplication {
             application { testModule(bookingService) }
-            val authedClient = client.authenticatedClient(telegramId = 200L)
+            val authedClient = authenticatedClient(telegramId = 200L)
             val response =
-                authedClient.post("/api/clubs/1/bookings/hold") {
+                authedClient.post {
+                    route("/api/clubs/1/bookings/hold")
                     header("Idempotency-Key", "idem-scope")
                     contentType(ContentType.Application.Json)
                     setBody(
@@ -212,9 +199,10 @@ class SecuredBookingRoutesTest : StringSpec({
         registerUser(telegramId = 300L, roles = setOf(Role.MANAGER), clubs = setOf(1L))
         testApplication {
             application { testModule(bookingService) }
-            val authedClient = client.authenticatedClient(telegramId = 300L)
+            val authedClient = authenticatedClient(telegramId = 300L)
             val response =
-                authedClient.post("/api/clubs/1/bookings/hold") {
+                authedClient.post {
+                    route("/api/clubs/1/bookings/hold")
                     contentType(ContentType.Application.Json)
                     setBody(
                         """
@@ -244,9 +232,10 @@ class SecuredBookingRoutesTest : StringSpec({
 
         testApplication {
             application { testModule(bookingService) }
-            val authedClient = client.authenticatedClient(telegramId = 400L)
+            val authedClient = authenticatedClient(telegramId = 400L)
             val holdResponse =
-                authedClient.post("/api/clubs/1/bookings/hold") {
+                authedClient.post {
+                    route("/api/clubs/1/bookings/hold")
                     header("Idempotency-Key", "idem-hold")
                     contentType(ContentType.Application.Json)
                     setBody(
@@ -269,7 +258,8 @@ class SecuredBookingRoutesTest : StringSpec({
             holdJson["holdId"]!!.jsonPrimitive.content shouldBe holdId.toString()
 
             val confirmResponse =
-                authedClient.post("/api/clubs/1/bookings/confirm") {
+                authedClient.post {
+                    route("/api/clubs/1/bookings/confirm")
                     header("Idempotency-Key", "idem-confirm")
                     contentType(ContentType.Application.Json)
                     setBody("""{"clubId":1,"holdId":"$holdId"}""")
@@ -302,9 +292,10 @@ class SecuredBookingRoutesTest : StringSpec({
 
         testApplication {
             application { testModule(bookingService) }
-            val authedClient = client.authenticatedClient(telegramId = 500L)
+            val authedClient = authenticatedClient(telegramId = 500L)
             val response =
-                authedClient.post("/api/clubs/1/bookings/hold") {
+                authedClient.post {
+                    route("/api/clubs/1/bookings/hold")
                     header("Idempotency-Key", "idem-dup")
                     contentType(ContentType.Application.Json)
                     setBody(
@@ -332,9 +323,10 @@ class SecuredBookingRoutesTest : StringSpec({
 
         testApplication {
             application { testModule(bookingService) }
-            val authedClient = client.authenticatedClient(telegramId = 600L)
+            val authedClient = authenticatedClient(telegramId = 600L)
             val response =
-                authedClient.post("/api/clubs/1/bookings/confirm") {
+                authedClient.post {
+                    route("/api/clubs/1/bookings/confirm")
                     header("Idempotency-Key", "idem-expire")
                     contentType(ContentType.Application.Json)
                     setBody("""{"holdId":"$holdId"}""")
@@ -351,9 +343,10 @@ class SecuredBookingRoutesTest : StringSpec({
 
         testApplication {
             application { testModule(bookingService) }
-            val authedClient = client.authenticatedClient(telegramId = 700L)
+            val authedClient = authenticatedClient(telegramId = 700L)
             val response =
-                authedClient.post("/api/clubs/1/bookings/confirm") {
+                authedClient.post {
+                    route("/api/clubs/1/bookings/confirm")
                     header("Idempotency-Key", "idem-missing")
                     contentType(ContentType.Application.Json)
                     setBody("""{"holdId":"$holdId"}""")
