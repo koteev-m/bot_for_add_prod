@@ -8,7 +8,10 @@ import io.ktor.http.path
  * Если в тестах уже есть import io.ktor.client.request.header, этот header не помешает;
  * при отсутствии импорта — даст компиляцию.
  */
-public fun HttpRequestBuilder.header(name: String, value: String) {
+public fun HttpRequestBuilder.header(
+    name: String,
+    value: String,
+) {
     headers.append(name, value)
 }
 

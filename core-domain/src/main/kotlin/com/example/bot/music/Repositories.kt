@@ -32,7 +32,10 @@ interface MusicPlaylistRepository {
         itemIds: List<Long>,
     )
 
-    suspend fun listActive(limit: Int, offset: Int = 0): List<PlaylistView>
+    suspend fun listActive(
+        limit: Int,
+        offset: Int = 0,
+    ): List<PlaylistView>
 
     suspend fun itemsCount(playlistIds: Collection<Long>): Map<Long, Int>
 

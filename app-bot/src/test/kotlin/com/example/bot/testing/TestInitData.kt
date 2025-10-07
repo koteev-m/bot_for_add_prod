@@ -13,18 +13,19 @@ public fun createInitData(
     clubId: Long? = null,
 ): String {
     val encoder = Base64.getEncoder()
-    val userJson = buildString {
-        append('{')
-        append("\"id\":")
-        append(userId)
-        if (username != null) {
-            append(',')
-            append("\"username\":\"")
-            append(username)
-            append('\"')
+    val userJson =
+        buildString {
+            append('{')
+            append("\"id\":")
+            append(userId)
+            if (username != null) {
+                append(',')
+                append("\"username\":\"")
+                append(username)
+                append('\"')
+            }
+            append('}')
         }
-        append('}')
-    }
 
     val parts = mutableListOf("user=${encoder.encodeToString(userJson.toByteArray(UTF_8))}")
     clubId?.let { club ->

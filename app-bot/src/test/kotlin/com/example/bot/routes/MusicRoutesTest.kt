@@ -171,7 +171,10 @@ class MusicRoutesTest {
         return WebAppInitDataTestHelper.createInitData(TEST_BOT_TOKEN, params)
     }
 
-    private fun setEnv(name: String, value: String) {
+    private fun setEnv(
+        name: String,
+        value: String,
+    ) {
         try {
             val processEnvironmentClass =
                 Class.forName("java.lang.ProcessEnvironment")
@@ -231,7 +234,10 @@ class MusicRoutesTest {
             itemIds: List<Long>,
         ) = throw UnsupportedOperationException("Not implemented")
 
-        override suspend fun listActive(limit: Int, offset: Int): List<PlaylistView> = playlists.drop(offset).take(limit)
+        override suspend fun listActive(
+            limit: Int,
+            offset: Int,
+        ): List<PlaylistView> = playlists.drop(offset).take(limit)
 
         override suspend fun itemsCount(playlistIds: Collection<Long>): Map<Long, Int> =
             playlistIds.associateWith { id -> itemsByPlaylist[id]?.size ?: 0 }
@@ -240,7 +246,14 @@ class MusicRoutesTest {
             val view = playlists.firstOrNull { it.id == id }
             val items = itemsByPlaylist[id]
             return if (view != null && items != null) {
-                PlaylistFullView(view.id, view.clubId, view.title, view.description, view.coverUrl, items)
+                PlaylistFullView(
+                    view.id,
+                    view.clubId,
+                    view.title,
+                    view.description,
+                    view.coverUrl,
+                    items,
+                )
             } else {
                 null
             }
