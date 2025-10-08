@@ -73,12 +73,12 @@ class MusicItemRepositoryImpl(private val db: Database) : MusicItemRepository {
 
     override suspend fun lastUpdatedAt(): Instant? {
         return newSuspendedTransaction(Dispatchers.IO, db) {
-            val maxUpdatedAt = MusicItemsTable.updatedAt.max()
             MusicItemsTable
-                .slice(maxUpdatedAt)
                 .selectAll()
+                .orderBy(MusicItemsTable.updatedAt, SortOrder.DESC)
+                .limit(1)
                 .firstOrNull()
-                ?.get(maxUpdatedAt)
+                ?.get(MusicItemsTable.updatedAt)
                 ?.toInstant()
         }
     }
@@ -155,27 +155,25 @@ class MusicPlaylistRepositoryImpl(private val db: Database) : MusicPlaylistRepos
     override suspend fun itemsCount(playlistIds: Collection<Long>): Map<Long, Int> {
         if (playlistIds.isEmpty()) return emptyMap()
         return newSuspendedTransaction(Dispatchers.IO, db) {
-            val countColumn = MusicPlaylistItemsTable.itemId.count()
-            MusicPlaylistItemsTable
-                .slice(MusicPlaylistItemsTable.playlistId, countColumn)
-                .select { MusicPlaylistItemsTable.playlistId inList playlistIds }
-                .groupBy(MusicPlaylistItemsTable.playlistId)
-                .associate { row ->
-                    val playlistId = row[MusicPlaylistItemsTable.playlistId]
-                    val countLong = row[countColumn]
-                    val count =
-                        if (countLong > Int.MAX_VALUE) {
-                            logger.warn(
-                                "music.playlist.itemsCount overflow playlistId={} count={}",
-                                playlistId,
-                                countLong,
-                            )
-                            Int.MAX_VALUE
-                        } else {
-                            countLong.toInt()
-                        }
-                    playlistId to count
-                }
+            playlistIds.associateWith { id ->
+                val countLong =
+                    MusicPlaylistItemsTable
+                        .selectAll()
+                        .where { MusicPlaylistItemsTable.playlistId eq id }
+                        .count()
+                val count =
+                    if (countLong > Int.MAX_VALUE) {
+                        logger.warn(
+                            "music.playlist.itemsCount overflow playlistId={} count={}",
+                            id,
+                            countLong,
+                        )
+                        Int.MAX_VALUE
+                    } else {
+                        countLong.toInt()
+                    }
+                count
+            }
         }
     }
 
@@ -200,12 +198,12 @@ class MusicPlaylistRepositoryImpl(private val db: Database) : MusicPlaylistRepos
 
     override suspend fun lastUpdatedAt(): Instant? {
         return newSuspendedTransaction(Dispatchers.IO, db) {
-            val maxUpdatedAt = MusicPlaylistsTable.updatedAt.max()
             MusicPlaylistsTable
-                .slice(maxUpdatedAt)
                 .selectAll()
+                .orderBy(MusicPlaylistsTable.updatedAt, SortOrder.DESC)
+                .limit(1)
                 .firstOrNull()
-                ?.get(maxUpdatedAt)
+                ?.get(MusicPlaylistsTable.updatedAt)
                 ?.toInstant()
         }
     }

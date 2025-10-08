@@ -10,9 +10,10 @@ import com.example.bot.music.PlaylistCreate
 import com.example.bot.music.PlaylistFullView
 import com.example.bot.music.PlaylistView
 import com.example.bot.music.UserId
+import com.example.bot.testing.applicationDev
+import com.example.bot.testing.withInitData
 import com.example.bot.webapp.TEST_BOT_TOKEN
 import com.example.bot.webapp.WebAppInitDataTestHelper
-import com.example.bot.testing.applicationDev
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
@@ -26,9 +27,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.lang.reflect.Field
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -39,6 +38,7 @@ class MusicRoutesTest {
     private val json = Json { ignoreUnknownKeys = true }
     private val fixedClock: Clock = Clock.fixed(Instant.parse("2024-05-01T10:15:30Z"), ZoneOffset.UTC)
     private val updatedAt: Instant = Instant.parse("2024-05-01T09:00:00Z")
+
     private val items =
         listOf(
             MusicItemView(
@@ -68,6 +68,7 @@ class MusicRoutesTest {
                 publishedAt = updatedAt,
             ),
         )
+
     private val playlists =
         listOf(
             PlaylistView(
@@ -78,6 +79,7 @@ class MusicRoutesTest {
                 coverUrl = "https://example.com/pl.jpg",
             ),
         )
+
     private val playlistItems = mapOf(10L to items)
 
     private val service =
@@ -87,117 +89,85 @@ class MusicRoutesTest {
             clock = fixedClock,
         )
 
-    @BeforeEach
-    fun setupEnv() {
-        setEnv("TELEGRAM_BOT_TOKEN", TEST_BOT_TOKEN)
+    @Test
+    fun `items endpoint returns list and respects etag`() = testApplication {
+        // TELEGRAM_BOT_TOKEN отдаём через Gradle Test.environment(...)
+        applicationDev {
+            install(ContentNegotiation) { json() }
+            musicRoutes(service)
+        }
+
+        val initData = createInitData()
+
+        val firstResponse =
+            client.get("/api/music/items") {
+                withInitData(initData)
+            }
+        println("DBG music items-first: status=${firstResponse.status} body=${firstResponse.bodyAsText()}")
+        assertEquals(HttpStatusCode.OK, firstResponse.status)
+
+        val etag = firstResponse.headers[HttpHeaders.ETag]
+        assertNotNull(etag)
+        val body = json.parseToJsonElement(firstResponse.bodyAsText())
+        assertEquals(2, body.jsonArray.size)
+
+        val cachedResponse =
+            client.get("/api/music/items") {
+                withInitData(initData)
+                header(HttpHeaders.IfNoneMatch, etag)
+            }
+        println("DBG music items-cached: status=${cachedResponse.status} body=${cachedResponse.bodyAsText()}")
+        assertEquals(HttpStatusCode.NotModified, cachedResponse.status)
     }
 
     @Test
-    fun `items endpoint returns list and respects etag`() {
-        testApplication {
-            applicationDev {
-                install(ContentNegotiation) { json() }
-                musicRoutes(service)
-            }
-
-            val initData = createInitData()
-
-            val firstResponse =
-                client.get("/api/music/items") {
-                    header("X-Telegram-Init-Data", initData)
-                }
-            assertEquals(HttpStatusCode.OK, firstResponse.status)
-            val etag = firstResponse.headers[HttpHeaders.ETag]
-            assertNotNull(etag)
-            val body = json.parseToJsonElement(firstResponse.bodyAsText())
-            assertEquals(2, body.jsonArray.size)
-
-            val cachedResponse =
-                client.get("/api/music/items") {
-                    header("X-Telegram-Init-Data", initData)
-                    header(HttpHeaders.IfNoneMatch, etag)
-                }
-            assertEquals(HttpStatusCode.NotModified, cachedResponse.status)
+    fun `playlists endpoint returns list`() = testApplication {
+        applicationDev {
+            install(ContentNegotiation) { json() }
+            musicRoutes(service)
         }
+
+        val response =
+            client.get("/api/music/playlists") {
+                withInitData(createInitData())
+            }
+        println("DBG music playlists: status=${response.status} body=${response.bodyAsText()}")
+        assertEquals(HttpStatusCode.OK, response.status)
+        val payload = json.parseToJsonElement(response.bodyAsText())
+        assertEquals(1, payload.jsonArray.size)
     }
 
     @Test
-    fun `playlists endpoint returns list`() {
-        testApplication {
-            applicationDev {
-                install(ContentNegotiation) { json() }
-                musicRoutes(service)
-            }
-
-            val response =
-                client.get("/api/music/playlists") {
-                    header("X-Telegram-Init-Data", createInitData())
-                }
-            assertEquals(HttpStatusCode.OK, response.status)
-            val payload = json.parseToJsonElement(response.bodyAsText())
-            assertEquals(1, payload.jsonArray.size)
+    fun `playlist details return 200 and 404`() = testApplication {
+        applicationDev {
+            install(ContentNegotiation) { json() }
+            musicRoutes(service)
         }
-    }
 
-    @Test
-    fun `playlist details return 200 and 404`() {
-        testApplication {
-            applicationDev {
-                install(ContentNegotiation) { json() }
-                musicRoutes(service)
+        val okResponse =
+            client.get("/api/music/playlists/10") {
+                withInitData(createInitData())
             }
+        println("DBG music playlist-ok: status=${okResponse.status} body=${okResponse.bodyAsText()}")
+        assertEquals(HttpStatusCode.OK, okResponse.status)
+        val details = json.parseToJsonElement(okResponse.bodyAsText())
+        assertEquals("Top Hits", details.jsonObject["name"]?.jsonPrimitive?.content)
 
-            val okResponse =
-                client.get("/api/music/playlists/10") {
-                    header("X-Telegram-Init-Data", createInitData())
-                }
-            assertEquals(HttpStatusCode.OK, okResponse.status)
-            val details = json.parseToJsonElement(okResponse.bodyAsText())
-            assertEquals("Top Hits", details.jsonObject["name"]?.jsonPrimitive?.content)
-
-            val notFound =
-                client.get("/api/music/playlists/999") {
-                    header("X-Telegram-Init-Data", createInitData())
-                }
-            assertEquals(HttpStatusCode.NotFound, notFound.status)
-        }
+        val notFound =
+            client.get("/api/music/playlists/999") {
+                withInitData(createInitData())
+            }
+        println("DBG music playlist-404: status=${notFound.status} body=${notFound.bodyAsText()}")
+        assertEquals(HttpStatusCode.NotFound, notFound.status)
     }
 
     private fun createInitData(): String {
         val params =
             linkedMapOf(
                 "user" to WebAppInitDataTestHelper.encodeUser(id = 777, username = "tester"),
-                "auth_date" to Instant.now().epochSecond.toString(),
+                "auth_date" to Instant.now().epochSecond.toString(), // важно — «свежее» время
             )
         return WebAppInitDataTestHelper.createInitData(TEST_BOT_TOKEN, params)
-    }
-
-    private fun setEnv(
-        name: String,
-        value: String,
-    ) {
-        try {
-            val processEnvironmentClass =
-                Class.forName("java.lang.ProcessEnvironment")
-            val theEnvironmentField: Field =
-                processEnvironmentClass.getDeclaredField("theEnvironment")
-            theEnvironmentField.isAccessible = true
-            val env = theEnvironmentField.get(null) as MutableMap<String, String>
-            env[name] = value
-            val theCaseInsensitiveEnvironmentField: Field =
-                processEnvironmentClass.getDeclaredField("theCaseInsensitiveEnvironment")
-            theCaseInsensitiveEnvironmentField.isAccessible = true
-            val cienv =
-                theCaseInsensitiveEnvironmentField.get(null) as MutableMap<String, String>
-            cienv[name] = value
-        } catch (_: NoSuchFieldException) {
-            val env = System.getenv()
-            val cl = env.javaClass
-            val field = cl.getDeclaredField("m")
-            field.isAccessible = true
-            val map = field.get(env) as MutableMap<String, String>
-            map[name] = value
-        }
     }
 
     private class FakeMusicItemRepository(

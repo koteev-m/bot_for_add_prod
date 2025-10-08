@@ -25,6 +25,19 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+
+    // показывать println() и System.out/System.err в консоли Gradle
+    testLogging {
+        showStandardStreams = true
+        events("passed", "failed", "skipped", "standardOut", "standardError")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+
+    // Для Kotest: явно просим не глушить stdout
+    systemProperty("kotest.framework.dump.test.stdout", "true")
+
+    // TELEGRAM_BOT_TOKEN нужен для плагина InitDataAuth в тестах (MusicRoutesTest и др.)
+    environment("TELEGRAM_BOT_TOKEN", "111111:TEST_BOT_TOKEN")
 }
 
 dependencies {
@@ -90,15 +103,21 @@ dependencies {
 // Mini App assets → resources
 // =========================
 
-val miniAppDist = rootProject.layout.projectDirectory.dir("miniapp/dist").asFile
+val miniAppDistDir = rootProject.layout.projectDirectory.dir("miniapp/dist")
 
 tasks.register<Copy>("copyMiniAppDist") {
     description = "Copy Mini App compiled assets into resources so Ktor can serve them from the JAR."
     group = "build"
-    from(miniAppDist)
+
+    // провайдер-директория — безопасно для configuration cache
+    from(miniAppDistDir)
     include("**/*")
+
     into(layout.buildDirectory.dir("generated/miniapp/webapp/app"))
-    onlyIf { miniAppDist.exists() && miniAppDist.isDirectory && miniAppDist.listFiles()?.isNotEmpty() == true }
+
+    // ⚠️ больше никакого onlyIf { ... } — Copy просто ничего не скопирует, если папка пуста/не существует
+    // при желании можно явно пометить вход каталога как опциональный:
+    inputs.dir(miniAppDistDir).optional()
 }
 
 tasks.named<ProcessResources>("processResources") {

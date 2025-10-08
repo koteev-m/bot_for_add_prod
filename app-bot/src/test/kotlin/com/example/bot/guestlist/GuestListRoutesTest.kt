@@ -1,7 +1,6 @@
 package com.example.bot.guestlist
 
 import com.example.bot.testing.applicationDev
-import com.example.bot.testing.createInitData
 import com.example.bot.testing.defaultRequest
 import com.example.bot.testing.header
 import com.example.bot.testing.withInitData
@@ -9,13 +8,20 @@ import com.example.bot.club.GuestListOwnerType
 import com.example.bot.club.GuestListRepository
 import com.example.bot.club.GuestListStatus
 import com.example.bot.data.booking.EventsTable
+import com.example.bot.data.booking.core.AuditLogRepository
 import com.example.bot.data.club.GuestListCsvParser
 import com.example.bot.data.club.GuestListRepositoryImpl
 import com.example.bot.data.security.Role
+import com.example.bot.data.security.User
+import com.example.bot.data.security.UserRepository
+import com.example.bot.data.security.UserRoleRepository
 import com.example.bot.plugins.DataSourceHolder
-import com.example.bot.plugins.configureSecurity
 import com.example.bot.routes.guestListRoutes
+import com.example.bot.security.auth.TelegramPrincipal
+import com.example.bot.security.rbac.RbacPlugin
+import com.example.bot.webapp.InitDataPrincipalKey
 import com.example.bot.webapp.TEST_BOT_TOKEN
+import com.example.bot.webapp.WebAppInitDataTestHelper
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
@@ -32,11 +38,15 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.request.header
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
+import io.mockk.mockk
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.flywaydb.core.Flyway
 import org.h2.jdbcx.JdbcDataSource
 import org.jetbrains.exposed.sql.Database
@@ -44,10 +54,25 @@ import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.koin.core.module.Module
+import org.koin.dsl.module
+import org.koin.ktor.ext.get
+import org.koin.ktor.plugin.Koin
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.UUID
 
+// --- HMAC-подписанный initData для этого файла (file-private) ---
+private fun buildSignedInitData(userId: Long, username: String?): String {
+    val params =
+        linkedMapOf(
+            "user" to WebAppInitDataTestHelper.encodeUser(id = userId, username = username),
+            "auth_date" to Instant.now().epochSecond.toString(),
+        )
+    return WebAppInitDataTestHelper.createInitData(TEST_BOT_TOKEN, params)
+}
+
+@Suppress("unused")
 class GuestListRoutesTest : StringSpec({
     lateinit var dataSource: JdbcDataSource
     lateinit var database: Database
@@ -68,9 +93,43 @@ class GuestListRoutesTest : StringSpec({
     fun Application.testModule() {
         DataSourceHolder.dataSource = dataSource
         install(ContentNegotiation) { json() }
-        configureSecurity()
+
+        // Локальный модуль только для теста: User/UserRole/Audit + уже созданный GuestListRepository
+        val testModule: Module =
+            module {
+                single<GuestListRepository> { repository }
+                single<UserRepository> { GLUserRepositoryStub(database) }
+                single<UserRoleRepository> { GLUserRoleRepositoryStub(database) }
+                single<AuditLogRepository> { relaxedAuditRepository() }
+            }
+
+        install(Koin) { modules(testModule) }
+
+        // ВАЖНО: не ставим InitDataAuthPlugin глобально — его поставит guestListRoutes по initDataAuth.
+        install(RbacPlugin) {
+            userRepository = get()
+            userRoleRepository = get()
+            auditLogRepository = get()
+            principalExtractor = { call ->
+                val initDataPrincipal =
+                    if (call.attributes.contains(InitDataPrincipalKey)) {
+                        call.attributes[InitDataPrincipalKey]
+                    } else {
+                        null
+                    }
+                if (initDataPrincipal != null) {
+                    TelegramPrincipal(initDataPrincipal.userId, initDataPrincipal.username)
+                } else {
+                    call.request.header("X-Telegram-Id")?.toLongOrNull()?.let { id ->
+                        TelegramPrincipal(id, call.request.header("X-Telegram-Username"))
+                    }
+                }
+            }
+        }
+
+        // Сами маршруты списка гостей (+ InitDataAuthPlugin внутри)
         guestListRoutes(
-            repository = repository,
+            repository = get(),
             parser = parser,
             initDataAuth = { botTokenProvider = { TEST_BOT_TOKEN } },
         )
@@ -81,7 +140,8 @@ class GuestListRoutesTest : StringSpec({
         username: String = "user$telegramId",
     ): HttpClient {
         return defaultRequest {
-            withInitData(createInitData(userId = telegramId, username = username))
+            val initData = buildSignedInitData(telegramId, username)
+            withInitData(initData)
             header("X-Telegram-Id", telegramId.toString())
             if (username.isNotBlank()) {
                 header("X-Telegram-Username", username)
@@ -89,21 +149,21 @@ class GuestListRoutesTest : StringSpec({
         }
     }
 
-    suspend fun createClub(name: String): Long {
+    fun createClub(name: String): Long {
         return transaction(database) {
-            ClubsTable.insert {
-                it[ClubsTable.name] = name
+            GLClubsTable.insert {
+                it[GLClubsTable.name] = name
                 it[timezone] = "Europe/Moscow"
                 it[description] = null
                 it[adminChannelId] = null
                 it[bookingsTopicId] = null
                 it[checkinTopicId] = null
                 it[qaTopicId] = null
-            } get ClubsTable.id
+            } get GLClubsTable.id
         }
     }
 
-    suspend fun createEvent(
+    fun createEvent(
         clubId: Long,
         title: String,
     ): Long {
@@ -119,47 +179,53 @@ class GuestListRoutesTest : StringSpec({
         }
     }
 
-    suspend fun createDomainUser(username: String): Long {
+    fun createDomainUser(username: String): Long {
         return transaction(database) {
-            UsersTable.insert {
+            GLDomainUsersTable.insert {
                 it[telegramUserId] = null
-                it[UsersTable.username] = username
+                it[GLDomainUsersTable.username] = username
                 it[displayName] = username
                 it[phone] = null
-            } get UsersTable.id
+            } get GLDomainUsersTable.id
         }
     }
 
-    suspend fun registerRbacUser(
+    fun registerRbacUser(
         telegramId: Long,
         roles: Set<Role>,
         clubs: Set<Long>,
     ): Long {
         return transaction(database) {
             roles.forEach { role ->
-                if (RolesTable.selectAll().none { it[RolesTable.code] == role.name }) {
-                    RolesTable.insert { it[code] = role.name }
+                val exists =
+                    GLRolesTable
+                        .selectAll()
+                        .where { GLRolesTable.code eq role.name }
+                        .limit(1)
+                        .any()
+                if (!exists) {
+                    GLRolesTable.insert { it[code] = role.name }
                 }
             }
             val userId =
-                UsersTable.insert {
-                    it[UsersTable.telegramUserId] = telegramId
+                GLDomainUsersTable.insert {
+                    it[telegramUserId] = telegramId
                     it[username] = "user$telegramId"
                     it[displayName] = "user$telegramId"
                     it[phone] = null
-                } get UsersTable.id
+                } get GLDomainUsersTable.id
             roles.forEach { role ->
                 if (clubs.isEmpty()) {
-                    UserRolesTable.insert {
-                        it[UserRolesTable.userId] = userId
+                    GLUserRolesTable.insert {
+                        it[GLUserRolesTable.userId] = userId
                         it[roleCode] = role.name
                         it[scopeType] = "GLOBAL"
                         it[scopeClubId] = null
                     }
                 } else {
                     clubs.forEach { clubId ->
-                        UserRolesTable.insert {
-                            it[UserRolesTable.userId] = userId
+                        GLUserRolesTable.insert {
+                            it[GLUserRolesTable.userId] = userId
                             it[roleCode] = role.name
                             it[scopeType] = "CLUB"
                             it[scopeClubId] = clubId
@@ -197,10 +263,12 @@ class GuestListRoutesTest : StringSpec({
                     contentType(ContentType.Text.CSV)
                     setBody("name,phone,guests_count,notes\nAlice,+123456789,2,VIP\n")
                 }
+            // Диагностика
+            println("DBG guestlists dry-run: status=${response.status} body=${response.bodyAsText()}")
             response.status shouldBe HttpStatusCode.OK
-            val json = Json.parseToJsonElement(response.bodyAsText()).jsonObject
-            json["accepted"]!!.toString() shouldBe "1"
-            json["rejected"]!!.jsonArray.shouldHaveSize(0)
+            val jsonBody = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+            jsonBody["accepted"]!!.jsonPrimitive.int shouldBe 1
+            jsonBody["rejected"]!!.jsonArray.size shouldBe 0
             repository.listEntries(list.id, page = 0, size = 10) shouldHaveSize 0
         }
     }
@@ -232,6 +300,8 @@ class GuestListRoutesTest : StringSpec({
                     contentType(ContentType.Text.CSV)
                     setBody("name,phone,guests_count,notes\nBob,+123456700,3,\n")
                 }
+            // Диагностика
+            println("DBG guestlists: status=${response.status} body=${response.bodyAsText()}")
             response.status shouldBe HttpStatusCode.OK
             response.headers[HttpHeaders.ContentType]!!.startsWith("text/csv") shouldBe true
             repository.listEntries(list.id, page = 0, size = 10) shouldHaveSize 1
@@ -277,12 +347,15 @@ class GuestListRoutesTest : StringSpec({
             applicationDev { testModule() }
             val authedClient = authenticatedClient(telegramId = 300L)
             val response = authedClient.get("/api/guest-lists")
+            // Диагностика
+            println("DBG guestlists manager: status=${response.status} body=${response.bodyAsText()}")
             response.status shouldBe HttpStatusCode.OK
             val items = Json.parseToJsonElement(response.bodyAsText()).jsonObject["items"]!!.jsonArray
             items.shouldHaveSize(1)
             items.first().jsonObject["clubId"].toString() shouldBe clubA.toString()
 
             val forbidden = authedClient.get("/api/guest-lists?club=$clubB")
+            println("DBG guestlists manager forbidden: status=${forbidden.status} body=${forbidden.bodyAsText()}")
             forbidden.status shouldBe HttpStatusCode.Forbidden
         }
     }
@@ -290,7 +363,8 @@ class GuestListRoutesTest : StringSpec({
     "promoter filtered by owner" {
         val club = createClub("Pulse")
         val event = createEvent(club, "Promo")
-        val promoterUserId = registerRbacUser(telegramId = 400L, roles = setOf(Role.PROMOTER), clubs = setOf(club))
+        val promoterUserId =
+            registerRbacUser(telegramId = 400L, roles = setOf(Role.PROMOTER), clubs = setOf(club))
         val managerOwner = createDomainUser("manager")
         val promoterList =
             repository.createList(
@@ -323,6 +397,8 @@ class GuestListRoutesTest : StringSpec({
             applicationDev { testModule() }
             val authedClient = authenticatedClient(telegramId = 400L)
             val response = authedClient.get("/api/guest-lists")
+            // Диагностика
+            println("DBG guestlists promoter: status=${response.status} body=${response.bodyAsText()}")
             response.status shouldBe HttpStatusCode.OK
             val items = Json.parseToJsonElement(response.bodyAsText()).jsonObject["items"]!!.jsonArray
             items.shouldHaveSize(1)
@@ -353,6 +429,8 @@ class GuestListRoutesTest : StringSpec({
             applicationDev { testModule() }
             val authedClient = authenticatedClient(telegramId = 500L)
             val response = authedClient.get("/api/guest-lists/export")
+            // Диагностика
+            println("DBG guestlists export: status=${response.status} body=${response.bodyAsText()}")
             response.status shouldBe HttpStatusCode.OK
             response.headers[HttpHeaders.ContentType]!!.startsWith("text/csv") shouldBe true
             response.bodyAsText().contains("Guest One") shouldBe true
@@ -360,9 +438,14 @@ class GuestListRoutesTest : StringSpec({
     }
 })
 
-private data class DbSetup(val dataSource: JdbcDataSource, val database: Database)
+/* ===== Локальная БД/таблицы для этого файла ===== */
 
-private fun prepareDatabase(): DbSetup {
+private data class GLDbSetup(
+    val dataSource: JdbcDataSource,
+    val database: Database,
+)
+
+private fun prepareDatabase(): GLDbSetup {
     val dbName = "guestlists_${UUID.randomUUID()}"
     val dataSource =
         JdbcDataSource().apply {
@@ -384,10 +467,10 @@ private fun prepareDatabase(): DbSetup {
         }
         exec("ALTER TABLE audit_log ALTER COLUMN resource_id DROP NOT NULL")
     }
-    return DbSetup(dataSource, database)
+    return GLDbSetup(dataSource, database)
 }
 
-private object ClubsTable : Table("clubs") {
+private object GLClubsTable : Table("clubs") {
     val id = long("id").autoIncrement()
     val name = text("name")
     val description = text("description").nullable()
@@ -399,7 +482,7 @@ private object ClubsTable : Table("clubs") {
     override val primaryKey = PrimaryKey(id)
 }
 
-private object UsersTable : Table("users") {
+private object GLDomainUsersTable : Table("users") {
     val id = long("id").autoIncrement()
     val telegramUserId = long("telegram_user_id").nullable()
     val username = text("username").nullable()
@@ -408,12 +491,12 @@ private object UsersTable : Table("users") {
     override val primaryKey = PrimaryKey(id)
 }
 
-private object RolesTable : Table("roles") {
+private object GLRolesTable : Table("roles") {
     val code = text("code")
     override val primaryKey = PrimaryKey(code)
 }
 
-private object UserRolesTable : Table("user_roles") {
+private object GLUserRolesTable : Table("user_roles") {
     val id = long("id").autoIncrement()
     val userId = long("user_id")
     val roleCode = text("role_code")
@@ -421,3 +504,54 @@ private object UserRolesTable : Table("user_roles") {
     val scopeClubId = long("scope_club_id").nullable()
     override val primaryKey = PrimaryKey(id)
 }
+
+/* ===== Тестовые реализации RBAC на таблицах этого файла ===== */
+
+private class GLUserRepositoryStub(
+    private val db: Database,
+) : UserRepository {
+    override suspend fun getByTelegramId(id: Long): User? {
+        return transaction(db) {
+            GLDomainUsersTable
+                .selectAll()
+                .where { GLDomainUsersTable.telegramUserId eq id }
+                .limit(1)
+                .firstOrNull()
+                ?.let { row ->
+                    val userId = row[GLDomainUsersTable.id]
+                    val username = row[GLDomainUsersTable.username]
+                    User(
+                        id = userId,
+                        telegramId = id,
+                        username = username,
+                    )
+                }
+        }
+    }
+}
+
+private class GLUserRoleRepositoryStub(
+    private val db: Database,
+) : UserRoleRepository {
+    override suspend fun listRoles(userId: Long): Set<Role> {
+        return transaction(db) {
+            GLUserRolesTable
+                .selectAll()
+                .where { GLUserRolesTable.userId eq userId }
+                .map { row -> Role.valueOf(row[GLUserRolesTable.roleCode]) }
+                .toSet()
+        }
+    }
+
+    override suspend fun listClubIdsFor(userId: Long): Set<Long> {
+        return transaction(db) {
+            GLUserRolesTable
+                .selectAll()
+                .where { GLUserRolesTable.userId eq userId }
+                .mapNotNull { row -> row[GLUserRolesTable.scopeClubId] }
+                .toSet()
+        }
+    }
+}
+
+private fun relaxedAuditRepository(): AuditLogRepository = mockk(relaxed = true)

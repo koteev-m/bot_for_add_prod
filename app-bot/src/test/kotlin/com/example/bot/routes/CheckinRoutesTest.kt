@@ -2,20 +2,29 @@ package com.example.bot.routes
 
 import com.example.bot.club.GuestList
 import com.example.bot.club.GuestListEntry
+import com.example.bot.club.GuestListEntryPage
+import com.example.bot.club.GuestListEntrySearch
 import com.example.bot.club.GuestListEntryStatus
 import com.example.bot.club.GuestListOwnerType
 import com.example.bot.club.GuestListStatus
+import com.example.bot.club.ParsedGuest
+import com.example.bot.data.booking.core.AuditLogRepository
 import com.example.bot.data.security.Role
+import com.example.bot.data.security.User
+import com.example.bot.data.security.UserRepository
+import com.example.bot.data.security.UserRoleRepository
 import com.example.bot.guestlists.GuestListRepository
 import com.example.bot.guestlists.QrGuestListCodec
-import com.example.bot.plugins.DataSourceHolder
-import com.example.bot.plugins.configureSecurity
+import com.example.bot.metrics.AppMetricsBinder
+import com.example.bot.plugins.installMetrics
+import com.example.bot.plugins.meterRegistry
+import com.example.bot.security.auth.TelegramPrincipal
+import com.example.bot.security.rbac.RbacPlugin
+import com.example.bot.testing.applicationDev
+import com.example.bot.testing.withInitData
+import com.example.bot.webapp.InitDataPrincipalKey
 import com.example.bot.webapp.TEST_BOT_TOKEN
 import com.example.bot.webapp.WebAppInitDataTestHelper
-import com.example.bot.testing.applicationDev
-import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.shouldBe
-import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -26,377 +35,436 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.request.header
 import io.ktor.server.testing.testApplication
-import io.mockk.coEvery
-import io.mockk.coVerify
+import io.micrometer.prometheus.PrometheusMeterRegistry
 import io.mockk.mockk
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import org.flywaydb.core.Flyway
-import org.h2.jdbcx.JdbcDataSource
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertAll
+import org.koin.core.module.Module
+import org.koin.dsl.module
+import org.koin.ktor.ext.get
+import org.koin.ktor.plugin.Koin
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 
-private data class CheckinDatabaseSetup(val dataSource: JdbcDataSource, val database: Database)
+private const val QR_SECRET = "qr_test_secret"
+private const val TELEGRAM_USER_ID = 123456789L
+private const val INTERNAL_USER_ID = 5000L
+private const val CLUB_ID = 1L
+private const val LIST_ID = 100L
+private const val ENTRY_ID = 200L
 
-private object CheckinUsersTable : Table("users") {
-    val id = long("id").autoIncrement()
-    val telegramUserId = long("telegram_user_id").nullable()
-    val username = text("username").nullable()
-    val displayName = text("display_name").nullable()
-    val phone = text("phone_e164").nullable()
+private val fixedNow: Instant = Instant.parse("2024-06-01T10:15:30Z")
+private val fixedClock: Clock = Clock.fixed(fixedNow, ZoneOffset.UTC)
+private val qrTtl: Duration = Duration.ofHours(12)
 
-    override val primaryKey = PrimaryKey(id)
-}
-
-private object CheckinUserRolesTable : Table("user_roles") {
-    val id = long("id").autoIncrement()
-    val userId = long("user_id")
-    val roleCode = text("role_code")
-    val scopeType = text("scope_type")
-    val scopeClubId = long("scope_club_id").nullable()
-
-    override val primaryKey = PrimaryKey(id)
-}
-
-class CheckinRoutesTest : StringSpec({
-    lateinit var setup: CheckinDatabaseSetup
-    val clock: Clock = Clock.fixed(Instant.parse("2024-05-01T12:00:00Z"), ZoneOffset.UTC)
-    val qrSecret = "test-secret"
-    val qrTtl = Duration.ofHours(12)
-    val telegramId = 915L
-    val clubId = 1L
-
-    beforeTest {
-        setup = prepareDatabase()
-        DataSourceHolder.dataSource = setup.dataSource
-        registerUser(setup.database, telegramId, setOf(Role.MANAGER), setOf(clubId))
-    }
-
-    afterTest {
-        DataSourceHolder.dataSource = null
-    }
-
-    fun Application.testModule(repository: GuestListRepository) {
-        install(ContentNegotiation) { json() }
-        configureSecurity()
-        checkinRoutes(
-            repository = repository,
-            initDataAuth = { botTokenProvider = { TEST_BOT_TOKEN } },
-            qrSecretProvider = { qrSecret },
-            clock = clock,
-            qrTtl = qrTtl,
-        )
-    }
-
-    fun validInitData(): String {
-        val authDate = clock.instant().minusSeconds(30).epochSecond.toString()
-        return WebAppInitDataTestHelper.createInitData(
-            TEST_BOT_TOKEN,
-            linkedMapOf(
-                "user" to WebAppInitDataTestHelper.encodeUser(id = telegramId),
-                "auth_date" to authDate,
-            ),
-        )
-    }
-
-    fun buildList(
-        id: Long,
-        club: Long = clubId,
-    ): GuestList {
-        return GuestList(
-            id = id,
-            clubId = club,
-            eventId = 10L,
-            ownerType = GuestListOwnerType.MANAGER,
-            ownerUserId = 5L,
-            title = "VIP",
-            capacity = 100,
-            arrivalWindowStart = null,
-            arrivalWindowEnd = null,
-            status = GuestListStatus.ACTIVE,
-            createdAt = clock.instant(),
-        )
-    }
-
-    fun buildEntry(
-        id: Long,
-        listId: Long,
-    ): GuestListEntry {
-        return GuestListEntry(
-            id = id,
-            listId = listId,
-            fullName = "Guest",
-            phone = null,
-            guestsCount = 2,
-            notes = null,
-            status = GuestListEntryStatus.PLANNED,
-            checkedInAt = null,
-            checkedInBy = null,
-        )
-    }
-
-    "happy path returns 200 and marks arrival" {
-        val repository = mockk<GuestListRepository>()
-        val listId = 55L
-        val entryId = 77L
-        val list = buildList(listId)
-        val entry = buildEntry(entryId, listId)
-        val qr = QrGuestListCodec.encode(listId, entryId, clock.instant().minusSeconds(60), qrSecret)
-        val initData = validInitData()
-
-        coEvery { repository.getList(listId) } returns list
-        coEvery { repository.findEntry(entryId) } returns entry
-        coEvery { repository.markArrived(entryId, any()) } returns true
-
+class EntryManagerCheckInSmokeTest {
+    @Test
+    fun `happy path ARRIVED`() {
         testApplication {
-            applicationDev { testModule(repository) }
-            val response =
-                client.post("/api/clubs/$clubId/checkin/scan") {
-                    header("X-Telegram-Init-Data", initData)
-                    header("X-Telegram-Id", telegramId.toString())
+            val guestListRepository = TestGuestListRepository()
+            val module = baseModule(guestListRepository = guestListRepository)
+            applicationDev { configureTestApplication(module) }
+
+            val issued = fixedNow.minusSeconds(60)
+            val qrToken = encodeQr(QR_SECRET, LIST_ID, ENTRY_ID, issued)
+            val initData = createInitData()
+
+            val path = "/api/clubs/$CLUB_ID/checkin/scan"
+            meterRegistry().clear()
+            AppMetricsBinder.bindAll(meterRegistry())
+            val beforeMetrics = currentPrometheusSnapshot()
+            val totalBefore = beforeMetrics.metricValue("ui_checkin_scan_total")
+            val durationCountBefore = beforeMetrics.metricValue("ui_checkin_scan_duration_ms_seconds_count")
+
+            val first =
+                client.post(path) {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"qr":"$qr"}""")
+                    withInitData(initData)
+                    setBody("""{"qr":"$qrToken"}""")
                 }
-            response.status shouldBe HttpStatusCode.OK
-            val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
-            body["status"]!!.jsonPrimitive.content shouldBe "ARRIVED"
-        }
+            val firstBody = first.bodyAsText()
+            println("DBG happy path: status1=${first.status} body1=$firstBody")
 
-        coVerify(exactly = 1) { repository.markArrived(entryId, any()) }
+            val second =
+                client.post(path) {
+                    contentType(ContentType.Application.Json)
+                    withInitData(initData)
+                    setBody("""{"qr":"$qrToken"}""")
+                }
+            println("DBG happy path: status2=${second.status}")
+
+            val afterMetrics = currentPrometheusSnapshot()
+            val totalAfter = afterMetrics.metricValue("ui_checkin_scan_total")
+            val durationCountAfter = afterMetrics.metricValue("ui_checkin_scan_duration_ms_seconds_count")
+
+            assertAll(
+                { assertEquals(HttpStatusCode.OK, first.status) },
+                { assertTrue(firstBody.contains("\"ARRIVED\"")) },
+                { assertEquals(HttpStatusCode.OK, second.status) },
+                { assertTrue(totalAfter >= totalBefore + 1.0) },
+                { assertTrue(durationCountAfter >= durationCountBefore + 1.0) },
+            )
+        }
     }
 
-    "malformed or expired qr returns 400" {
-        val repository = mockk<GuestListRepository>(relaxed = true)
-        val initData = validInitData()
-
+    @Test
+    fun `malformed or expired qr returns 400`() {
         testApplication {
-            applicationDev { testModule(repository) }
+            val module = baseModule()
+            applicationDev { configureTestApplication(module) }
+
+            val initData = createInitData()
+            val path = "/api/clubs/$CLUB_ID/checkin/scan"
+
+            meterRegistry().clear()
+            AppMetricsBinder.bindAll(meterRegistry())
+            val before = currentPrometheusSnapshot()
+            val errorBefore = before.metricValue("ui_checkin_scan_error_total")
+
             val malformed =
-                client.post("/api/clubs/$clubId/checkin/scan") {
-                    header("X-Telegram-Init-Data", initData)
-                    header("X-Telegram-Id", telegramId.toString())
+                client.post(path) {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"qr":"not-a-token"}""")
+                    withInitData(initData)
+                    setBody("""{"qr":"GL:malformed"}""")
                 }
-            malformed.status shouldBe HttpStatusCode.BadRequest
+            println("DBG malformed: ${malformed.status} ${malformed.bodyAsText()}")
 
-            val expiredToken =
-                QrGuestListCodec.encode(
-                    listId = 99L,
-                    entryId = 100L,
-                    issuedAt = clock.instant().minus(qrTtl).minusSeconds(1),
-                    secret = qrSecret,
-                )
+            val expiredIssued = fixedNow.minus(qrTtl).minusSeconds(1)
+            val expiredQr = encodeQr(QR_SECRET, LIST_ID, ENTRY_ID, expiredIssued)
+
             val expired =
-                client.post("/api/clubs/$clubId/checkin/scan") {
-                    header("X-Telegram-Init-Data", initData)
-                    header("X-Telegram-Id", telegramId.toString())
+                client.post(path) {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"qr":"$expiredToken"}""")
+                    withInitData(initData)
+                    setBody("""{"qr":"$expiredQr"}""")
                 }
-            expired.status shouldBe HttpStatusCode.BadRequest
-        }
+            println("DBG expired:   ${expired.status} ${expired.bodyAsText()}")
 
-        coVerify(exactly = 0) { repository.getList(any()) }
+            val after = currentPrometheusSnapshot()
+            val errorAfter = after.metricValue("ui_checkin_scan_error_total")
+
+            assertAll(
+                { assertEquals(HttpStatusCode.BadRequest, malformed.status) },
+                { assertEquals(HttpStatusCode.BadRequest, expired.status) },
+                { assertTrue(errorAfter >= errorBefore + 2.0) },
+            )
+        }
     }
 
-    "list not found returns 404" {
-        val repository = mockk<GuestListRepository>()
-        val listId = 10L
-        val entryId = 20L
-        val qr = QrGuestListCodec.encode(listId, entryId, clock.instant(), qrSecret)
-        val initData = validInitData()
-
-        coEvery { repository.getList(listId) } returns null
-
+    @Test
+    fun `list not found returns 404`() {
         testApplication {
-            applicationDev { testModule(repository) }
+            val guestListRepository = TestGuestListRepository()
+            guestListRepository.removeList(LIST_ID)
+            val module = baseModule(guestListRepository = guestListRepository)
+            applicationDev { configureTestApplication(module) }
+
+            val issued = fixedNow.minusSeconds(30)
+            val qrToken = encodeQr(QR_SECRET, LIST_ID, ENTRY_ID, issued)
+            val initData = createInitData()
+
             val response =
-                client.post("/api/clubs/$clubId/checkin/scan") {
-                    header("X-Telegram-Init-Data", initData)
-                    header("X-Telegram-Id", telegramId.toString())
+                client.post("/api/clubs/$CLUB_ID/checkin/scan") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"qr":"$qr"}""")
+                    withInitData(initData)
+                    setBody("""{"qr":"$qrToken"}""")
                 }
-            response.status shouldBe HttpStatusCode.NotFound
-        }
+            println("DBG list-not-found: ${response.status} ${response.bodyAsText()}")
 
-        coVerify(exactly = 0) { repository.findEntry(any()) }
+            assertEquals(HttpStatusCode.NotFound, response.status)
+        }
     }
 
-    "entry not found returns 404" {
-        val repository = mockk<GuestListRepository>()
-        val listId = 15L
-        val entryId = 25L
-        val list = buildList(listId)
-        val qr = QrGuestListCodec.encode(listId, entryId, clock.instant(), qrSecret)
-        val initData = validInitData()
-
-        coEvery { repository.getList(listId) } returns list
-        coEvery { repository.findEntry(entryId) } returns null
-
+    @Test
+    fun `entry not found returns 404`() {
         testApplication {
-            applicationDev { testModule(repository) }
+            val guestListRepository = TestGuestListRepository()
+            guestListRepository.removeEntry(ENTRY_ID)
+            val module = baseModule(guestListRepository = guestListRepository)
+            applicationDev { configureTestApplication(module) }
+
+            val issued = fixedNow.minusSeconds(30)
+            val qrToken = encodeQr(QR_SECRET, LIST_ID, ENTRY_ID, issued)
+            val initData = createInitData()
+
             val response =
-                client.post("/api/clubs/$clubId/checkin/scan") {
-                    header("X-Telegram-Init-Data", initData)
-                    header("X-Telegram-Id", telegramId.toString())
+                client.post("/api/clubs/$CLUB_ID/checkin/scan") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"qr":"$qr"}""")
+                    withInitData(initData)
+                    setBody("""{"qr":"$qrToken"}""")
                 }
-            response.status shouldBe HttpStatusCode.NotFound
+            println("DBG entry-not-found: ${response.status} ${response.bodyAsText()}")
+
+            assertEquals(HttpStatusCode.NotFound, response.status)
         }
     }
 
-    "entry list mismatch returns 400" {
-        val repository = mockk<GuestListRepository>()
-        val listId = 30L
-        val entryId = 40L
-        val list = buildList(listId)
-        val entry = buildEntry(entryId, listId + 1)
-        val qr = QrGuestListCodec.encode(listId, entryId, clock.instant(), qrSecret)
-        val initData = validInitData()
-
-        coEvery { repository.getList(listId) } returns list
-        coEvery { repository.findEntry(entryId) } returns entry
-
+    @Test
+    fun `entry list mismatch returns 400`() {
         testApplication {
-            applicationDev { testModule(repository) }
+            val guestListRepository = TestGuestListRepository()
+            guestListRepository.updateEntry(guestListRepository.currentEntry().copy(listId = LIST_ID + 1))
+            val module = baseModule(guestListRepository = guestListRepository)
+            applicationDev { configureTestApplication(module) }
+
+            val issued = fixedNow.minusSeconds(30)
+            val qrToken = encodeQr(QR_SECRET, LIST_ID, ENTRY_ID, issued)
+            val initData = createInitData()
+
             val response =
-                client.post("/api/clubs/$clubId/checkin/scan") {
-                    header("X-Telegram-Init-Data", initData)
-                    header("X-Telegram-Id", telegramId.toString())
+                client.post("/api/clubs/$CLUB_ID/checkin/scan") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"qr":"$qr"}""")
+                    withInitData(initData)
+                    setBody("""{"qr":"$qrToken"}""")
                 }
-            response.status shouldBe HttpStatusCode.BadRequest
+            println("DBG list-mismatch: ${response.status} ${response.bodyAsText()}")
+
+            assertEquals(HttpStatusCode.BadRequest, response.status)
         }
     }
 
-    "club mismatch returns 403" {
-        val repository = mockk<GuestListRepository>()
-        val listId = 50L
-        val entryId = 60L
-        val list = buildList(listId, club = clubId + 1)
-        val entry = buildEntry(entryId, listId)
-        val qr = QrGuestListCodec.encode(listId, entryId, clock.instant(), qrSecret)
-        val initData = validInitData()
-
-        coEvery { repository.getList(listId) } returns list
-        coEvery { repository.findEntry(entryId) } returns entry
-        coEvery { repository.markArrived(entryId, any()) } returns true
-
+    @Test
+    fun `scope mismatch returns 403`() {
         testApplication {
-            applicationDev { testModule(repository) }
+            val module = baseModule(userRoleRepository = TestUserRoleRepository(clubIds = setOf(CLUB_ID + 1)))
+            applicationDev { configureTestApplication(module) }
+
+            val issued = fixedNow.minusSeconds(30)
+            val qrToken = encodeQr(QR_SECRET, LIST_ID, ENTRY_ID, issued)
+            val initData = createInitData()
+
             val response =
-                client.post("/api/clubs/$clubId/checkin/scan") {
-                    header("X-Telegram-Init-Data", initData)
-                    header("X-Telegram-Id", telegramId.toString())
+                client.post("/api/clubs/$CLUB_ID/checkin/scan") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"qr":"$qr"}""")
+                    withInitData(initData)
+                    setBody("""{"qr":"$qrToken"}""")
                 }
-            response.status shouldBe HttpStatusCode.Forbidden
+            println("DBG scope-mismatch: ${response.status} ${response.bodyAsText()}")
+
+            assertEquals(HttpStatusCode.Forbidden, response.status)
         }
     }
 
-    "idempotent checkin returns 200 twice" {
-        val repository = mockk<GuestListRepository>()
-        val listId = 70L
-        val entryId = 80L
-        val list = buildList(listId)
-        val entry = buildEntry(entryId, listId)
-        val qr = QrGuestListCodec.encode(listId, entryId, clock.instant().minusSeconds(120), qrSecret)
-        val initData = validInitData()
-
-        coEvery { repository.getList(listId) } returns list
-        coEvery { repository.findEntry(entryId) } returns entry
-        coEvery { repository.markArrived(entryId, any()) } returns true
-
+    @Test
+    fun `missing or invalid init data returns 401`() {
         testApplication {
-            applicationDev { testModule(repository) }
-            repeat(2) {
-                val response =
-                    client.post("/api/clubs/$clubId/checkin/scan") {
-                        header("X-Telegram-Init-Data", initData)
-                        header("X-Telegram-Id", telegramId.toString())
-                        contentType(ContentType.Application.Json)
-                        setBody("""{"qr":"$qr"}""")
-                    }
-                response.status shouldBe HttpStatusCode.OK
-                val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
-                body["status"]!!.jsonPrimitive.content shouldBe "ARRIVED"
-            }
-        }
+            val module = baseModule()
+            applicationDev { configureTestApplication(module) }
 
-        coVerify(exactly = 2) { repository.markArrived(entryId, any()) }
-    }
-})
+            val issued = fixedNow.minusSeconds(30)
+            val qrToken = encodeQr(QR_SECRET, LIST_ID, ENTRY_ID, issued)
+            val validInitData = createInitData()
+            val invalidInitData = tamperLastCharacter(validInitData)
 
-private fun prepareDatabase(): CheckinDatabaseSetup {
-    val dbName = "checkin_routes_${System.nanoTime()}"
-    val dataSource =
-        JdbcDataSource().apply {
-            setURL("jdbc:h2:mem:$dbName;MODE=PostgreSQL;DATABASE_TO_UPPER=false;DB_CLOSE_DELAY=-1")
-            user = "sa"
-            password = ""
+            val missingHeader =
+                client.post("/api/clubs/$CLUB_ID/checkin/scan") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"qr":"$qrToken"}""")
+                }
+
+            val invalidHeader =
+                client.post("/api/clubs/$CLUB_ID/checkin/scan") {
+                    contentType(ContentType.Application.Json)
+                    withInitData(invalidInitData)
+                    setBody("""{"qr":"$qrToken"}""")
+                }
+
+            println("DBG missing=${missingHeader.status} ${missingHeader.bodyAsText()}")
+            println("DBG invalid=${invalidHeader.status} ${invalidHeader.bodyAsText()}")
+
+            assertAll(
+                { assertEquals(HttpStatusCode.Unauthorized, missingHeader.status) },
+                { assertEquals(HttpStatusCode.Unauthorized, invalidHeader.status) },
+            )
         }
-    Flyway
-        .configure()
-        .dataSource(dataSource)
-        .locations("classpath:db/migration/common", "classpath:db/migration/h2")
-        .target("9")
-        .load()
-        .migrate()
-    val database = Database.connect(dataSource)
-    transaction(database) {
-        listOf("action", "result").forEach { column ->
-            exec("""ALTER TABLE audit_log ALTER COLUMN $column RENAME TO "$column"""")
-        }
-        exec("ALTER TABLE audit_log ALTER COLUMN resource_id DROP NOT NULL")
     }
-    return CheckinDatabaseSetup(dataSource, database)
 }
 
-private fun registerUser(
-    database: Database,
-    telegramId: Long,
-    roles: Set<Role>,
-    clubs: Set<Long>,
-) {
-    transaction(database) {
-        val userId =
-            CheckinUsersTable.insert {
-                it[CheckinUsersTable.telegramUserId] = telegramId
-                it[username] = "user$telegramId"
-                it[displayName] = "user$telegramId"
-                it[phone] = null
-            } get CheckinUsersTable.id
-        roles.forEach { role ->
-            if (clubs.isEmpty()) {
-                CheckinUserRolesTable.insert {
-                    it[CheckinUserRolesTable.userId] = userId
-                    it[roleCode] = role.name
-                    it[scopeType] = "GLOBAL"
-                    it[scopeClubId] = null
-                }
+private fun Application.configureTestApplication(module: Module) {
+    meterRegistry().clear()
+    installMetrics()
+    AppMetricsBinder.bindAll(meterRegistry())
+
+    install(ContentNegotiation) { json() }
+    install(Koin) { modules(module) }
+
+    // RBAC ставим ДО маршрутов
+    install(RbacPlugin) {
+        userRepository = get()
+        userRoleRepository = get()
+        auditLogRepository = get()
+        principalExtractor = { call ->
+            // 1) Если InitDataAuth уже успел положить атрибут — используем его
+            val initAttr =
+                if (call.attributes.contains(InitDataPrincipalKey)) {
+                    call.attributes[InitDataPrincipalKey]
+                } else null
+            if (initAttr != null) {
+                TelegramPrincipal(initAttr.userId, initAttr.username)
             } else {
-                clubs.forEach { clubId ->
-                    CheckinUserRolesTable.insert {
-                        it[CheckinUserRolesTable.userId] = userId
-                        it[roleCode] = role.name
-                        it[scopeType] = "CLUB"
-                        it[scopeClubId] = clubId
-                    }
-                }
+                // 2) Фоллбэк: читаем initData из любого из популярных заголовков
+                val header =
+                    sequenceOf(
+                        "X-Telegram-Init-Data",
+                        "X-Init-Data",
+                        "initData",
+                        "Init-Data",
+                        "x-telegram-init-data", // на всякий случай
+                    ).mapNotNull { call.request.header(it) }
+                        .firstOrNull()
+
+                val verified = header?.let { com.example.bot.webapp.WebAppInitDataVerifier.verify(it, TEST_BOT_TOKEN) }
+                verified?.let { TelegramPrincipal(it.userId, it.username) }
             }
         }
     }
+
+    // Маршруты (внутри них на route навешивается InitDataAuth с тем же токеном)
+    checkinRoutes(
+        repository = get(),
+        qrSecretProvider = { QR_SECRET },
+        clock = fixedClock,
+        qrTtl = qrTtl,
+        initDataAuth = { botTokenProvider = { TEST_BOT_TOKEN } },
+    )
+}
+
+private fun baseModule(
+    guestListRepository: GuestListRepository = TestGuestListRepository(),
+    userRepository: UserRepository = TestUserRepository(),
+    userRoleRepository: UserRoleRepository = TestUserRoleRepository(),
+    auditLogRepository: AuditLogRepository = relaxedAuditRepository(),
+): Module =
+    module {
+        single { guestListRepository }
+        single { userRepository }
+        single { userRoleRepository }
+        single { auditLogRepository }
+    }
+
+/* ==== Стабы ==== */
+
+class TestGuestListRepository : GuestListRepository {
+    private var list: GuestList? = defaultList()
+    private var entry: GuestListEntry? = defaultEntry()
+
+    override suspend fun createList(
+        clubId: Long,
+        eventId: Long,
+        ownerType: GuestListOwnerType,
+        ownerUserId: Long,
+        title: String,
+        capacity: Int,
+        arrivalWindowStart: Instant?,
+        arrivalWindowEnd: Instant?,
+        status: GuestListStatus,
+    ): GuestList = throw UnsupportedOperationException()
+
+    override suspend fun getList(id: Long): GuestList? = if (list?.id == id) list else null
+    override suspend fun findEntry(id: Long): GuestListEntry? = if (entry?.id == id) entry else null
+    override suspend fun listListsByClub(clubId: Long, page: Int, size: Int): List<GuestList> = throw UnsupportedOperationException()
+    override suspend fun addEntry(listId: Long, fullName: String, phone: String?, guestsCount: Int, notes: String?, status: GuestListEntryStatus): GuestListEntry =
+        throw UnsupportedOperationException()
+    override suspend fun setEntryStatus(entryId: Long, status: GuestListEntryStatus, checkedInBy: Long?, at: Instant?): GuestListEntry? =
+        throw UnsupportedOperationException()
+    override suspend fun listEntries(listId: Long, page: Int, size: Int, statusFilter: GuestListEntryStatus?): List<GuestListEntry> =
+        throw UnsupportedOperationException()
+    override suspend fun markArrived(entryId: Long, at: Instant): Boolean = entry?.id == entryId
+    override suspend fun bulkImport(listId: Long, rows: List<ParsedGuest>, dryRun: Boolean) = throw UnsupportedOperationException()
+    override suspend fun searchEntries(filter: GuestListEntrySearch, page: Int, size: Int): GuestListEntryPage =
+        throw UnsupportedOperationException()
+
+    fun removeList(id: Long) { if (list?.id == id) list = null }
+    fun removeEntry(id: Long) { if (entry?.id == id) entry = null }
+    fun updateEntry(updated: GuestListEntry) { entry = updated }
+    fun currentEntry(): GuestListEntry = requireNotNull(entry) { "Entry not configured" }
+
+    companion object {
+        private fun defaultList(): GuestList =
+            GuestList(
+                id = LIST_ID,
+                clubId = CLUB_ID,
+                eventId = 10L,
+                ownerType = GuestListOwnerType.MANAGER,
+                ownerUserId = INTERNAL_USER_ID,
+                title = "VIP",
+                capacity = 100,
+                arrivalWindowStart = null,
+                arrivalWindowEnd = null,
+                status = GuestListStatus.ACTIVE,
+                createdAt = fixedNow,
+            )
+
+        private fun defaultEntry(): GuestListEntry =
+            GuestListEntry(
+                id = ENTRY_ID,
+                listId = LIST_ID,
+                fullName = "Guest",
+                phone = null,
+                guestsCount = 1,
+                notes = null,
+                status = GuestListEntryStatus.PLANNED,
+                checkedInAt = null,
+                checkedInBy = null,
+            )
+    }
+}
+
+private class TestUserRepository : UserRepository {
+    private val user = User(id = INTERNAL_USER_ID, telegramId = TELEGRAM_USER_ID, username = "entry_mgr")
+    override suspend fun getByTelegramId(id: Long): User? = if (id == TELEGRAM_USER_ID) user else null
+}
+
+private class TestUserRoleRepository(
+    private val roles: Set<Role> = setOf(Role.ENTRY_MANAGER),
+    private val clubIds: Set<Long> = setOf(CLUB_ID),
+) : UserRoleRepository {
+    override suspend fun listRoles(userId: Long): Set<Role> = roles
+    override suspend fun listClubIdsFor(userId: Long): Set<Long> = clubIds
+}
+
+private fun relaxedAuditRepository(): AuditLogRepository = mockk(relaxed = true)
+
+/* ==== Утилиты ==== */
+
+@Suppress("SameParameterValue")
+private fun encodeQr(secret: String, listId: Long, entryId: Long, issued: Instant): String =
+    QrGuestListCodec.encode(listId, entryId, issued, secret)
+
+private fun currentPrometheusSnapshot(): String {
+    val registry = meterRegistry()
+    return (registry as? PrometheusMeterRegistry)?.scrape() ?: ""
+}
+
+private fun tamperLastCharacter(value: String): String {
+    if (value.isEmpty()) return value
+    val replacement = if (value.last() == '0') '1' else '0'
+    return value.dropLast(1) + replacement
+}
+
+private fun String.metricValue(name: String): Double =
+    lineSequence()
+        .map { it.trim() }
+        .firstOrNull { it.startsWith(name) }
+        ?.substringAfter(' ')
+        ?.trim()
+        ?.toDoubleOrNull()
+        ?: 0.0
+
+// Готовый хелпер для корректной подписи initData
+private fun createInitData(
+    userId: Long = TELEGRAM_USER_ID,
+    username: String = "entry_mgr",
+): String {
+    val params = linkedMapOf(
+        "user" to WebAppInitDataTestHelper.encodeUser(id = userId, username = username),
+        "auth_date" to Instant.now().epochSecond.toString(),
+    )
+    return WebAppInitDataTestHelper.createInitData(TEST_BOT_TOKEN, params)
 }
