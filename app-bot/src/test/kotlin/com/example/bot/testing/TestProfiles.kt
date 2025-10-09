@@ -10,9 +10,7 @@ import io.ktor.server.testing.ApplicationTestBuilder
  */
 fun ApplicationTestBuilder.applicationDev(block: Application.() -> Unit) {
     environment {
-        config = MapApplicationConfig(
-            "app.profile" to "DEV",
-        )
+        config = MapApplicationConfig("app.profile" to "DEV")
     }
     application(block)
 }

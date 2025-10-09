@@ -31,66 +31,80 @@ import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.sql.Database
 import org.koin.dsl.module
 
-val bookingModule = module {
-    // DB
-    single {
-        val ds = DataSourceHolder.dataSource ?: error("DataSource is not initialized")
-        Database.connect(ds)
+val bookingModule =
+    module {
+        // DB
+        single {
+            val ds = DataSourceHolder.dataSource ?: error("DataSource is not initialized")
+            Database.connect(ds)
+        }
+
+        // Core repos
+        single { BookingRepository(get()) }
+        single { BookingHoldRepository(get()) }
+        single { OutboxRepository(get()) }
+        single { NotificationsOutboxRepository(get()) }
+        single { AuditLogRepository(get()) }
+
+        // Guests
+        single<GuestListRepository> { GuestListRepositoryImpl(get()) }
+
+        // Promo repos (interfaces -> impl)
+        single<PromoLinkRepository> { PromoLinkRepositoryImpl(get()) }
+        single<PromoAttributionRepository> { PromoAttributionRepositoryImpl(get()) }
+        single<BookingTemplateRepository> { BookingTemplateRepositoryImpl(get()) }
+
+        // Security repos (interfaces -> impl)
+        single<UserRepository> { ExposedUserRepository(get()) }
+        single<UserRoleRepository> { ExposedUserRoleRepository(get()) }
+
+        // Promo store/service
+        single<PromoAttributionStore> { InMemoryPromoAttributionStore() }
+
+        // ВНИМАНИЕ: порядок параметров соответствует реальной сигнатуре
+        single {
+            PromoAttributionService(
+                get<PromoLinkRepository>(),
+                get<PromoAttributionRepository>(),
+                get<PromoAttributionStore>(),
+                get<UserRepository>(),
+                get<UserRoleRepository>(),
+            )
+        }
+        single<PromoAttributionCoordinator> { get<PromoAttributionService>() }
+
+        // ВНИМАНИЕ: порядок параметров соответствует реальной сигнатуре
+        single {
+            BookingTemplateService(
+                get<BookingTemplateRepository>(),
+                get<BookingService>(),
+                get<UserRepository>(),
+                get<UserRoleRepository>(),
+                get<NotificationsOutboxRepository>(),
+            )
+        }
+
+        // Outbound port stub
+        single<SendPort> { DummySendPort }
+
+        // High-level services/workers
+        single {
+            BookingService(
+                get(),
+                get(),
+                get(),
+                get(),
+                get(),
+            )
+        }
+        single { OutboxWorker(get(), get()) }
     }
-
-    // Core repos
-    single { BookingRepository(get()) }
-    single { BookingHoldRepository(get()) }
-    single { OutboxRepository(get()) }
-    single { NotificationsOutboxRepository(get()) }
-    single { AuditLogRepository(get()) }
-
-    // Guests
-    single<GuestListRepository> { GuestListRepositoryImpl(get()) }
-
-    // Promo repos (interfaces -> impl)
-    single<PromoLinkRepository> { PromoLinkRepositoryImpl(get()) }
-    single<PromoAttributionRepository> { PromoAttributionRepositoryImpl(get()) }
-    single<BookingTemplateRepository> { BookingTemplateRepositoryImpl(get()) }
-
-    // Security repos (interfaces -> impl)
-    single<UserRepository> { ExposedUserRepository(get()) }
-    single<UserRoleRepository> { ExposedUserRoleRepository(get()) }
-
-    // Promo store/service
-    single<PromoAttributionStore> { InMemoryPromoAttributionStore() }
-
-    // ВНИМАНИЕ: порядок параметров соответствует реальной сигнатуре
-    single {
-        PromoAttributionService(
-            get<PromoLinkRepository>(),
-            get<PromoAttributionRepository>(),
-            get<PromoAttributionStore>(),
-            get<UserRepository>(),
-            get<UserRoleRepository>(),
-        )
-    }
-    single<PromoAttributionCoordinator> { get<PromoAttributionService>() }
-
-    // ВНИМАНИЕ: порядок параметров соответствует реальной сигнатуре
-    single {
-        BookingTemplateService(
-            get<BookingTemplateRepository>(),
-            get<BookingService>(),
-            get<UserRepository>(),
-            get<UserRoleRepository>(),
-            get<NotificationsOutboxRepository>(),
-        )
-    }
-
-    // Outbound port stub
-    single<SendPort> { DummySendPort }
-
-    // High-level services/workers
-    single { BookingService(get(), get(), get(), get(), get()) }
-    single { OutboxWorker(get(), get()) }
-}
 
 private object DummySendPort : SendPort {
-    override suspend fun send(topic: String, payload: JsonObject): SendOutcome = SendOutcome.Ok
+    override suspend fun send(
+        topic: String,
+        payload: JsonObject,
+    ): SendOutcome {
+        return SendOutcome.Ok
+    }
 }

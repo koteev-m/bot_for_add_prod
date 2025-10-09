@@ -54,6 +54,7 @@ data class TemplateBookingRequest(
 )
 
 class TemplateAccessException(message: String) : RuntimeException(message)
+
 class TemplateNotFoundException(message: String) : RuntimeException(message)
 
 /**
@@ -103,7 +104,10 @@ class BookingTemplateService(
         return repository.create(promoterId, clubId, tableCapacityMin, notes)
     }
 
-    suspend fun toggleActive(id: Long, active: Boolean) {
+    suspend fun toggleActive(
+        id: Long,
+        active: Boolean,
+    ) {
         val template = repository.get(id) ?: throw TemplateNotFoundException("template $id not found")
         val result = repository.update(id, template.tableCapacityMin, template.notes, active)
         if (result !is BookingTemplateResult.Success<*>) {
@@ -162,7 +166,8 @@ class BookingTemplateService(
         actor: TemplateActor,
         request: TemplateUpdateRequest,
     ): BookingTemplate {
-        val template = repository.get(request.id) ?: throw TemplateNotFoundException("template ${request.id} not found")
+        val template =
+            repository.get(request.id) ?: throw TemplateNotFoundException("template ${request.id} not found")
         ensureCanAccess(actor, template)
         return when (
             val result =
@@ -178,7 +183,10 @@ class BookingTemplateService(
         }
     }
 
-    suspend fun deactivateTemplate(actor: TemplateActor, id: Long) {
+    suspend fun deactivateTemplate(
+        actor: TemplateActor,
+        id: Long,
+    ) {
         val template = repository.get(id) ?: throw TemplateNotFoundException("template $id not found")
         ensureCanAccess(actor, template)
         when (repository.deactivate(id)) {
@@ -200,6 +208,7 @@ class BookingTemplateService(
         if (request.clubId != template.clubId) {
             throw TemplateAccessException("template $templateId cannot be applied to club ${request.clubId}")
         }
+
         val idempotency =
             templateIdempotencyKey(
                 template.id,
@@ -207,8 +216,10 @@ class BookingTemplateService(
                 request.slotStart,
                 request.tableId,
             )
+
         MDC.put(MDC_IDEMPOTENCY_KEY, idempotency)
         MDC.put(MDC_TEMPLATE_ID, templateId.toString())
+
         return try {
             val guests = request.guestsOverride ?: template.tableCapacityMin
             val holdResult =
@@ -278,7 +289,11 @@ class BookingTemplateService(
         return finalized
     }
 
-    private fun ensureCanCreate(actor: TemplateActor, promoterId: Long, clubId: Long) {
+    private fun ensureCanCreate(
+        actor: TemplateActor,
+        promoterId: Long,
+        clubId: Long,
+    ) {
         val allowed =
             when {
                 actor.hasRole(Role.OWNER, Role.HEAD_MANAGER) -> true
@@ -291,7 +306,10 @@ class BookingTemplateService(
         }
     }
 
-    private fun ensureCanAccess(actor: TemplateActor, template: BookingTemplate) {
+    private fun ensureCanAccess(
+        actor: TemplateActor,
+        template: BookingTemplate,
+    ) {
         if (!actor.canAccess(template)) {
             throw TemplateAccessException("actor ${actor.userId} cannot access template ${template.id}")
         }
@@ -306,7 +324,10 @@ class BookingTemplateService(
         }
     }
 
-    private fun determineClubScope(actor: TemplateActor, requestedClub: Long?): Set<Long> {
+    private fun determineClubScope(
+        actor: TemplateActor,
+        requestedClub: Long?,
+    ): Set<Long> {
         val privileged = actor.hasRole(Role.OWNER, Role.HEAD_MANAGER)
         val scopedRoles = actor.hasRole(Role.CLUB_ADMIN, Role.MANAGER)
         return when {

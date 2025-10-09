@@ -31,7 +31,6 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.server.request.header as serverHeader
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
@@ -53,6 +52,7 @@ import org.koin.ktor.ext.get
 import org.koin.ktor.plugin.Koin
 import java.time.Instant
 import java.util.UUID
+import io.ktor.server.request.header as serverHeader
 
 // ---------- Вспомогательные сущности и таблицы (file-private) ----------
 

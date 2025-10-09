@@ -22,56 +22,16 @@ class MusicService(
                 tag = null,
                 q = null,
             )
-        val etag = etagFor(
-            updatedAt = itemsRepo.lastUpdatedAt(),
-            count = items.size,
-            seed = "items",
-        )
-        val payload = items.map {
-            MusicItemDto(
-                id = it.id,
-                title = it.title,
-                artist = it.dj,
-                durationSec = it.durationSec,
-                coverUrl = it.coverUrl,
-            )
-        }
-        return etag to payload
-    }
 
-    suspend fun listPlaylists(limit: Int = 100): Pair<String, List<MusicPlaylistDto>> {
-        val playlists = playlistsRepo.listActive(limit)
-        val counts = playlistsRepo.itemsCount(playlists.map { it.id })
-        val etag = etagFor(
-            updatedAt = playlistsRepo.lastUpdatedAt(),
-            count = playlists.size,
-            seed = "playlists",
-        )
-        val payload = playlists.map {
-            MusicPlaylistDto(
-                id = it.id,
-                name = it.title,
-                description = it.description,
-                coverUrl = it.coverUrl,
-                itemsCount = counts[it.id] ?: 0,
+        val etag =
+            etagFor(
+                updatedAt = itemsRepo.lastUpdatedAt(),
+                count = items.size,
+                seed = "items",
             )
-        }
-        return etag to payload
-    }
 
-    suspend fun getPlaylist(id: Long): Pair<String, MusicPlaylistDetailsDto>? {
-        val playlist = playlistsRepo.getFull(id) ?: return null
-        val etag = etagFor(
-            updatedAt = playlistsRepo.lastUpdatedAt(),
-            count = playlist.items.size,
-            seed = "playlist:$id",
-        )
-        val payload = MusicPlaylistDetailsDto(
-            id = playlist.id,
-            name = playlist.title,
-            description = playlist.description,
-            coverUrl = playlist.coverUrl,
-            items = playlist.items.map {
+        val payload =
+            items.map {
                 MusicItemDto(
                     id = it.id,
                     title = it.title,
@@ -79,8 +39,64 @@ class MusicService(
                     durationSec = it.durationSec,
                     coverUrl = it.coverUrl,
                 )
-            },
-        )
+            }
+
+        return etag to payload
+    }
+
+    suspend fun listPlaylists(limit: Int = 100): Pair<String, List<MusicPlaylistDto>> {
+        val playlists = playlistsRepo.listActive(limit)
+        val counts = playlistsRepo.itemsCount(playlists.map { it.id })
+
+        val etag =
+            etagFor(
+                updatedAt = playlistsRepo.lastUpdatedAt(),
+                count = playlists.size,
+                seed = "playlists",
+            )
+
+        val payload =
+            playlists.map {
+                MusicPlaylistDto(
+                    id = it.id,
+                    name = it.title,
+                    description = it.description,
+                    coverUrl = it.coverUrl,
+                    itemsCount = counts[it.id] ?: 0,
+                )
+            }
+
+        return etag to payload
+    }
+
+    suspend fun getPlaylist(id: Long): Pair<String, MusicPlaylistDetailsDto>? {
+        val playlist = playlistsRepo.getFull(id) ?: return null
+
+        val etag =
+            etagFor(
+                updatedAt = playlistsRepo.lastUpdatedAt(),
+                count = playlist.items.size,
+                seed = "playlist:$id",
+            )
+
+        val payload =
+            MusicPlaylistDetailsDto(
+                id = playlist.id,
+                name = playlist.title,
+                description = playlist.description,
+                coverUrl = playlist.coverUrl,
+                items =
+                    playlist.items.map {
+                        MusicItemDto(
+                            id = it.id,
+                            title = it.title,
+                            artist = it.dj,
+                            durationSec = it.durationSec,
+                            coverUrl = it.coverUrl,
+                        )
+                    },
+            )
+
         return etag to payload
     }
 

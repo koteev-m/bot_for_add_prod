@@ -1,9 +1,5 @@
 package com.example.bot.guestlist
 
-import com.example.bot.testing.applicationDev
-import com.example.bot.testing.defaultRequest
-import com.example.bot.testing.header
-import com.example.bot.testing.withInitData
 import com.example.bot.club.GuestListOwnerType
 import com.example.bot.club.GuestListRepository
 import com.example.bot.club.GuestListStatus
@@ -19,6 +15,10 @@ import com.example.bot.plugins.DataSourceHolder
 import com.example.bot.routes.guestListRoutes
 import com.example.bot.security.auth.TelegramPrincipal
 import com.example.bot.security.rbac.RbacPlugin
+import com.example.bot.testing.applicationDev
+import com.example.bot.testing.defaultRequest
+import com.example.bot.testing.header
+import com.example.bot.testing.withInitData
 import com.example.bot.webapp.InitDataPrincipalKey
 import com.example.bot.webapp.TEST_BOT_TOKEN
 import com.example.bot.webapp.WebAppInitDataTestHelper
@@ -63,7 +63,10 @@ import java.time.ZoneOffset
 import java.util.UUID
 
 // --- HMAC-подписанный initData для этого файла (file-private) ---
-private fun buildSignedInitData(userId: Long, username: String?): String {
+private fun buildSignedInitData(
+    userId: Long,
+    username: String?,
+): String {
     val params =
         linkedMapOf(
             "user" to WebAppInitDataTestHelper.encodeUser(id = userId, username = username),
@@ -73,372 +76,393 @@ private fun buildSignedInitData(userId: Long, username: String?): String {
 }
 
 @Suppress("unused")
-class GuestListRoutesTest : StringSpec({
-    lateinit var dataSource: JdbcDataSource
-    lateinit var database: Database
-    lateinit var repository: GuestListRepository
-    val parser = GuestListCsvParser()
+class GuestListRoutesTest :
+    StringSpec(
+        {
+            lateinit var dataSource: JdbcDataSource
+            lateinit var database: Database
+            lateinit var repository: GuestListRepository
+            val parser = GuestListCsvParser()
 
-    beforeTest {
-        val setup = prepareDatabase()
-        dataSource = setup.dataSource
-        database = setup.database
-        repository = GuestListRepositoryImpl(database)
-    }
-
-    afterTest {
-        DataSourceHolder.dataSource = null
-    }
-
-    fun Application.testModule() {
-        DataSourceHolder.dataSource = dataSource
-        install(ContentNegotiation) { json() }
-
-        // Локальный модуль только для теста: User/UserRole/Audit + уже созданный GuestListRepository
-        val testModule: Module =
-            module {
-                single<GuestListRepository> { repository }
-                single<UserRepository> { GLUserRepositoryStub(database) }
-                single<UserRoleRepository> { GLUserRoleRepositoryStub(database) }
-                single<AuditLogRepository> { relaxedAuditRepository() }
+            beforeTest {
+                val setup = prepareDatabase()
+                dataSource = setup.dataSource
+                database = setup.database
+                repository = GuestListRepositoryImpl(database)
             }
 
-        install(Koin) { modules(testModule) }
+            afterTest {
+                DataSourceHolder.dataSource = null
+            }
 
-        // ВАЖНО: не ставим InitDataAuthPlugin глобально — его поставит guestListRoutes по initDataAuth.
-        install(RbacPlugin) {
-            userRepository = get()
-            userRoleRepository = get()
-            auditLogRepository = get()
-            principalExtractor = { call ->
-                val initDataPrincipal =
-                    if (call.attributes.contains(InitDataPrincipalKey)) {
-                        call.attributes[InitDataPrincipalKey]
-                    } else {
-                        null
+            fun Application.testModule() {
+                DataSourceHolder.dataSource = dataSource
+                install(ContentNegotiation) { json() }
+
+                // Локальный модуль только для теста: User/UserRole/Audit + уже созданный GuestListRepository
+                val testModule: Module =
+                    module {
+                        single<GuestListRepository> { repository }
+                        single<UserRepository> { GLUserRepositoryStub(database) }
+                        single<UserRoleRepository> { GLUserRoleRepositoryStub(database) }
+                        single<AuditLogRepository> { relaxedAuditRepository() }
                     }
-                if (initDataPrincipal != null) {
-                    TelegramPrincipal(initDataPrincipal.userId, initDataPrincipal.username)
-                } else {
-                    call.request.header("X-Telegram-Id")?.toLongOrNull()?.let { id ->
-                        TelegramPrincipal(id, call.request.header("X-Telegram-Username"))
-                    }
-                }
-            }
-        }
 
-        // Сами маршруты списка гостей (+ InitDataAuthPlugin внутри)
-        guestListRoutes(
-            repository = get(),
-            parser = parser,
-            initDataAuth = { botTokenProvider = { TEST_BOT_TOKEN } },
-        )
-    }
+                install(Koin) { modules(testModule) }
 
-    fun ApplicationTestBuilder.authenticatedClient(
-        telegramId: Long,
-        username: String = "user$telegramId",
-    ): HttpClient {
-        return defaultRequest {
-            val initData = buildSignedInitData(telegramId, username)
-            withInitData(initData)
-            header("X-Telegram-Id", telegramId.toString())
-            if (username.isNotBlank()) {
-                header("X-Telegram-Username", username)
-            }
-        }
-    }
-
-    fun createClub(name: String): Long {
-        return transaction(database) {
-            GLClubsTable.insert {
-                it[GLClubsTable.name] = name
-                it[timezone] = "Europe/Moscow"
-                it[description] = null
-                it[adminChannelId] = null
-                it[bookingsTopicId] = null
-                it[checkinTopicId] = null
-                it[qaTopicId] = null
-            } get GLClubsTable.id
-        }
-    }
-
-    fun createEvent(
-        clubId: Long,
-        title: String,
-    ): Long {
-        val start = Instant.parse("2024-07-01T18:00:00Z")
-        val end = Instant.parse("2024-07-02T02:00:00Z")
-        return transaction(database) {
-            EventsTable.insert {
-                it[EventsTable.clubId] = clubId
-                it[EventsTable.title] = title
-                it[startAt] = start.atOffset(ZoneOffset.UTC)
-                it[endAt] = end.atOffset(ZoneOffset.UTC)
-            } get EventsTable.id
-        }
-    }
-
-    fun createDomainUser(username: String): Long {
-        return transaction(database) {
-            GLDomainUsersTable.insert {
-                it[telegramUserId] = null
-                it[GLDomainUsersTable.username] = username
-                it[displayName] = username
-                it[phone] = null
-            } get GLDomainUsersTable.id
-        }
-    }
-
-    fun registerRbacUser(
-        telegramId: Long,
-        roles: Set<Role>,
-        clubs: Set<Long>,
-    ): Long {
-        return transaction(database) {
-            roles.forEach { role ->
-                val exists =
-                    GLRolesTable
-                        .selectAll()
-                        .where { GLRolesTable.code eq role.name }
-                        .limit(1)
-                        .any()
-                if (!exists) {
-                    GLRolesTable.insert { it[code] = role.name }
-                }
-            }
-            val userId =
-                GLDomainUsersTable.insert {
-                    it[telegramUserId] = telegramId
-                    it[username] = "user$telegramId"
-                    it[displayName] = "user$telegramId"
-                    it[phone] = null
-                } get GLDomainUsersTable.id
-            roles.forEach { role ->
-                if (clubs.isEmpty()) {
-                    GLUserRolesTable.insert {
-                        it[GLUserRolesTable.userId] = userId
-                        it[roleCode] = role.name
-                        it[scopeType] = "GLOBAL"
-                        it[scopeClubId] = null
-                    }
-                } else {
-                    clubs.forEach { clubId ->
-                        GLUserRolesTable.insert {
-                            it[GLUserRolesTable.userId] = userId
-                            it[roleCode] = role.name
-                            it[scopeType] = "CLUB"
-                            it[scopeClubId] = clubId
+                // ВАЖНО: не ставим InitDataAuthPlugin глобально — его поставит guestListRoutes по initDataAuth.
+                install(RbacPlugin) {
+                    userRepository = get()
+                    userRoleRepository = get()
+                    auditLogRepository = get()
+                    principalExtractor = { call ->
+                        val initDataPrincipal =
+                            if (call.attributes.contains(InitDataPrincipalKey)) {
+                                call.attributes[InitDataPrincipalKey]
+                            } else {
+                                null
+                            }
+                        if (initDataPrincipal != null) {
+                            TelegramPrincipal(initDataPrincipal.userId, initDataPrincipal.username)
+                        } else {
+                            call.request.header("X-Telegram-Id")?.toLongOrNull()?.let { id ->
+                                TelegramPrincipal(id, call.request.header("X-Telegram-Username"))
+                            }
                         }
                     }
                 }
+
+                // Сами маршруты списка гостей (+ InitDataAuthPlugin внутри)
+                guestListRoutes(
+                    repository = get(),
+                    parser = parser,
+                    initDataAuth = { botTokenProvider = { TEST_BOT_TOKEN } },
+                )
             }
-            userId
-        }
-    }
 
-    "import dry run returns json report" {
-        val clubId = createClub("Nebula")
-        val eventId = createEvent(clubId, "Launch")
-        val ownerId = createDomainUser("owner1")
-        val list =
-            repository.createList(
-                clubId = clubId,
-                eventId = eventId,
-                ownerType = GuestListOwnerType.MANAGER,
-                ownerUserId = ownerId,
-                title = "VIP",
-                capacity = 50,
-                arrivalWindowStart = null,
-                arrivalWindowEnd = null,
-                status = GuestListStatus.ACTIVE,
-            )
-        registerRbacUser(telegramId = 100L, roles = setOf(Role.MANAGER), clubs = setOf(clubId))
-
-        testApplication {
-            applicationDev { testModule() }
-            val authedClient = authenticatedClient(telegramId = 100L)
-            val response =
-                authedClient.post("/api/guest-lists/${list.id}/import?dry_run=true") {
-                    contentType(ContentType.Text.CSV)
-                    setBody("name,phone,guests_count,notes\nAlice,+123456789,2,VIP\n")
+            fun ApplicationTestBuilder.authenticatedClient(
+                telegramId: Long,
+                username: String = "user$telegramId",
+            ): HttpClient {
+                return defaultRequest {
+                    val initData = buildSignedInitData(telegramId, username)
+                    withInitData(initData)
+                    header("X-Telegram-Id", telegramId.toString())
+                    if (username.isNotBlank()) {
+                        header("X-Telegram-Username", username)
+                    }
                 }
-            // Диагностика
-            println("DBG guestlists dry-run: status=${response.status} body=${response.bodyAsText()}")
-            response.status shouldBe HttpStatusCode.OK
-            val jsonBody = Json.parseToJsonElement(response.bodyAsText()).jsonObject
-            jsonBody["accepted"]!!.jsonPrimitive.int shouldBe 1
-            jsonBody["rejected"]!!.jsonArray.size shouldBe 0
-            repository.listEntries(list.id, page = 0, size = 10) shouldHaveSize 0
-        }
-    }
+            }
 
-    "commit import persists and returns csv" {
-        val clubId = createClub("Orion")
-        val eventId = createEvent(clubId, "Opening")
-        val ownerId = createDomainUser("owner2")
-        val list =
-            repository.createList(
-                clubId = clubId,
-                eventId = eventId,
-                ownerType = GuestListOwnerType.MANAGER,
-                ownerUserId = ownerId,
-                title = "Friends",
-                capacity = 30,
-                arrivalWindowStart = null,
-                arrivalWindowEnd = null,
-                status = GuestListStatus.ACTIVE,
-            )
-        registerRbacUser(telegramId = 200L, roles = setOf(Role.MANAGER), clubs = setOf(clubId))
-
-        testApplication {
-            applicationDev { testModule() }
-            val authedClient = authenticatedClient(telegramId = 200L)
-            val response =
-                authedClient.post("/api/guest-lists/${list.id}/import") {
-                    header(HttpHeaders.Accept, ContentType.Text.CSV.toString())
-                    contentType(ContentType.Text.CSV)
-                    setBody("name,phone,guests_count,notes\nBob,+123456700,3,\n")
+            fun createClub(name: String): Long {
+                return transaction(database) {
+                    GLClubsTable.insert {
+                        it[GLClubsTable.name] = name
+                        it[timezone] = "Europe/Moscow"
+                        it[description] = null
+                        it[adminChannelId] = null
+                        it[bookingsTopicId] = null
+                        it[checkinTopicId] = null
+                        it[qaTopicId] = null
+                    } get GLClubsTable.id
                 }
-            // Диагностика
-            println("DBG guestlists: status=${response.status} body=${response.bodyAsText()}")
-            response.status shouldBe HttpStatusCode.OK
-            response.headers[HttpHeaders.ContentType]!!.startsWith("text/csv") shouldBe true
-            repository.listEntries(list.id, page = 0, size = 10) shouldHaveSize 1
-        }
-    }
+            }
 
-    "manager sees only own club" {
-        val clubA = createClub("Nova")
-        val clubB = createClub("Pulse")
-        val eventA = createEvent(clubA, "Night A")
-        val eventB = createEvent(clubB, "Night B")
-        val ownerA = createDomainUser("managerA")
-        val ownerB = createDomainUser("managerB")
-        val listA =
-            repository.createList(
-                clubId = clubA,
-                eventId = eventA,
-                ownerType = GuestListOwnerType.MANAGER,
-                ownerUserId = ownerA,
-                title = "List A",
-                capacity = 20,
-                arrivalWindowStart = null,
-                arrivalWindowEnd = null,
-                status = GuestListStatus.ACTIVE,
-            )
-        val listB =
-            repository.createList(
-                clubId = clubB,
-                eventId = eventB,
-                ownerType = GuestListOwnerType.MANAGER,
-                ownerUserId = ownerB,
-                title = "List B",
-                capacity = 20,
-                arrivalWindowStart = null,
-                arrivalWindowEnd = null,
-                status = GuestListStatus.ACTIVE,
-            )
-        repository.addEntry(listA.id, "Alice", "+100", 2, null)
-        repository.addEntry(listB.id, "Clare", "+200", 1, null)
-        registerRbacUser(telegramId = 300L, roles = setOf(Role.MANAGER), clubs = setOf(clubA))
+            fun createEvent(
+                clubId: Long,
+                title: String,
+            ): Long {
+                val start = Instant.parse("2024-07-01T18:00:00Z")
+                val end = Instant.parse("2024-07-02T02:00:00Z")
+                return transaction(database) {
+                    EventsTable.insert {
+                        it[EventsTable.clubId] = clubId
+                        it[EventsTable.title] = title
+                        it[startAt] = start.atOffset(ZoneOffset.UTC)
+                        it[endAt] = end.atOffset(ZoneOffset.UTC)
+                    } get EventsTable.id
+                }
+            }
 
-        testApplication {
-            applicationDev { testModule() }
-            val authedClient = authenticatedClient(telegramId = 300L)
-            val response = authedClient.get("/api/guest-lists")
-            // Диагностика
-            println("DBG guestlists manager: status=${response.status} body=${response.bodyAsText()}")
-            response.status shouldBe HttpStatusCode.OK
-            val items = Json.parseToJsonElement(response.bodyAsText()).jsonObject["items"]!!.jsonArray
-            items.shouldHaveSize(1)
-            items.first().jsonObject["clubId"].toString() shouldBe clubA.toString()
+            fun createDomainUser(username: String): Long {
+                return transaction(database) {
+                    GLDomainUsersTable.insert {
+                        it[telegramUserId] = null
+                        it[GLDomainUsersTable.username] = username
+                        it[displayName] = username
+                        it[phone] = null
+                    } get GLDomainUsersTable.id
+                }
+            }
 
-            val forbidden = authedClient.get("/api/guest-lists?club=$clubB")
-            println("DBG guestlists manager forbidden: status=${forbidden.status} body=${forbidden.bodyAsText()}")
-            forbidden.status shouldBe HttpStatusCode.Forbidden
-        }
-    }
+            fun registerRbacUser(
+                telegramId: Long,
+                roles: Set<Role>,
+                clubs: Set<Long>,
+            ): Long {
+                return transaction(database) {
+                    roles.forEach { role ->
+                        val exists =
+                            GLRolesTable
+                                .selectAll()
+                                .where { GLRolesTable.code eq role.name }
+                                .limit(1)
+                                .any()
+                        if (!exists) {
+                            GLRolesTable.insert { it[code] = role.name }
+                        }
+                    }
+                    val userId =
+                        GLDomainUsersTable.insert {
+                            it[telegramUserId] = telegramId
+                            it[username] = "user$telegramId"
+                            it[displayName] = "user$telegramId"
+                            it[phone] = null
+                        } get GLDomainUsersTable.id
+                    roles.forEach { role ->
+                        if (clubs.isEmpty()) {
+                            GLUserRolesTable.insert {
+                                it[GLUserRolesTable.userId] = userId
+                                it[roleCode] = role.name
+                                it[scopeType] = "GLOBAL"
+                                it[scopeClubId] = null
+                            }
+                        } else {
+                            clubs.forEach { clubId ->
+                                GLUserRolesTable.insert {
+                                    it[GLUserRolesTable.userId] = userId
+                                    it[roleCode] = role.name
+                                    it[scopeType] = "CLUB"
+                                    it[scopeClubId] = clubId
+                                }
+                            }
+                        }
+                    }
+                    userId
+                }
+            }
 
-    "promoter filtered by owner" {
-        val club = createClub("Pulse")
-        val event = createEvent(club, "Promo")
-        val promoterUserId =
-            registerRbacUser(telegramId = 400L, roles = setOf(Role.PROMOTER), clubs = setOf(club))
-        val managerOwner = createDomainUser("manager")
-        val promoterList =
-            repository.createList(
-                clubId = club,
-                eventId = event,
-                ownerType = GuestListOwnerType.PROMOTER,
-                ownerUserId = promoterUserId,
-                title = "Promo",
-                capacity = 15,
-                arrivalWindowStart = null,
-                arrivalWindowEnd = null,
-                status = GuestListStatus.ACTIVE,
-            )
-        val managerList =
-            repository.createList(
-                clubId = club,
-                eventId = event,
-                ownerType = GuestListOwnerType.MANAGER,
-                ownerUserId = managerOwner,
-                title = "Manager",
-                capacity = 15,
-                arrivalWindowStart = null,
-                arrivalWindowEnd = null,
-                status = GuestListStatus.ACTIVE,
-            )
-        repository.addEntry(promoterList.id, "Promo Guest", "+111", 1, null)
-        repository.addEntry(managerList.id, "Club Guest", "+222", 1, null)
+            "import dry run returns json report" {
+                val clubId = createClub("Nebula")
+                val eventId = createEvent(clubId, "Launch")
+                val ownerId = createDomainUser("owner1")
+                val list =
+                    repository.createList(
+                        clubId = clubId,
+                        eventId = eventId,
+                        ownerType = GuestListOwnerType.MANAGER,
+                        ownerUserId = ownerId,
+                        title = "VIP",
+                        capacity = 50,
+                        arrivalWindowStart = null,
+                        arrivalWindowEnd = null,
+                        status = GuestListStatus.ACTIVE,
+                    )
+                registerRbacUser(telegramId = 100L, roles = setOf(Role.MANAGER), clubs = setOf(clubId))
 
-        testApplication {
-            applicationDev { testModule() }
-            val authedClient = authenticatedClient(telegramId = 400L)
-            val response = authedClient.get("/api/guest-lists")
-            // Диагностика
-            println("DBG guestlists promoter: status=${response.status} body=${response.bodyAsText()}")
-            response.status shouldBe HttpStatusCode.OK
-            val items = Json.parseToJsonElement(response.bodyAsText()).jsonObject["items"]!!.jsonArray
-            items.shouldHaveSize(1)
-            items.first().jsonObject["listId"].toString() shouldBe promoterList.id.toString()
-        }
-    }
+                testApplication {
+                    applicationDev { testModule() }
+                    val authedClient = authenticatedClient(telegramId = 100L)
+                    val response =
+                        authedClient.post("/api/guest-lists/${list.id}/import?dry_run=true") {
+                            contentType(ContentType.Text.CSV)
+                            setBody("name,phone,guests_count,notes\nAlice,+123456789,2,VIP\n")
+                        }
+                    // Диагностика
+                    println(
+                        "DBG guestlists dry-run: status=${response.status} " +
+                            "body=${response.bodyAsText()}",
+                    )
+                    response.status shouldBe HttpStatusCode.OK
+                    val jsonBody = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+                    jsonBody["accepted"]!!.jsonPrimitive.int shouldBe 1
+                    jsonBody["rejected"]!!.jsonArray.size shouldBe 0
+                    repository.listEntries(list.id, page = 0, size = 10) shouldHaveSize 0
+                }
+            }
 
-    "head manager export returns csv" {
-        val club = createClub("Zenith")
-        val event = createEvent(club, "Gala")
-        val owner = createDomainUser("head")
-        val list =
-            repository.createList(
-                clubId = club,
-                eventId = event,
-                ownerType = GuestListOwnerType.MANAGER,
-                ownerUserId = owner,
-                title = "Gala",
-                capacity = 40,
-                arrivalWindowStart = null,
-                arrivalWindowEnd = null,
-                status = GuestListStatus.ACTIVE,
-            )
-        repository.addEntry(list.id, "Guest One", "+500", 2, "VIP")
-        registerRbacUser(telegramId = 500L, roles = setOf(Role.HEAD_MANAGER), clubs = emptySet())
+            "commit import persists and returns csv" {
+                val clubId = createClub("Orion")
+                val eventId = createEvent(clubId, "Opening")
+                val ownerId = createDomainUser("owner2")
+                val list =
+                    repository.createList(
+                        clubId = clubId,
+                        eventId = eventId,
+                        ownerType = GuestListOwnerType.MANAGER,
+                        ownerUserId = ownerId,
+                        title = "Friends",
+                        capacity = 30,
+                        arrivalWindowStart = null,
+                        arrivalWindowEnd = null,
+                        status = GuestListStatus.ACTIVE,
+                    )
+                registerRbacUser(telegramId = 200L, roles = setOf(Role.MANAGER), clubs = setOf(clubId))
 
-        testApplication {
-            applicationDev { testModule() }
-            val authedClient = authenticatedClient(telegramId = 500L)
-            val response = authedClient.get("/api/guest-lists/export")
-            // Диагностика
-            println("DBG guestlists export: status=${response.status} body=${response.bodyAsText()}")
-            response.status shouldBe HttpStatusCode.OK
-            response.headers[HttpHeaders.ContentType]!!.startsWith("text/csv") shouldBe true
-            response.bodyAsText().contains("Guest One") shouldBe true
-        }
-    }
-})
+                testApplication {
+                    applicationDev { testModule() }
+                    val authedClient = authenticatedClient(telegramId = 200L)
+                    val response =
+                        authedClient.post("/api/guest-lists/${list.id}/import") {
+                            header(HttpHeaders.Accept, ContentType.Text.CSV.toString())
+                            contentType(ContentType.Text.CSV)
+                            setBody("name,phone,guests_count,notes\nBob,+123456700,3,\n")
+                        }
+                    // Диагностика
+                    println(
+                        "DBG guestlists: status=${response.status} " +
+                            "body=${response.bodyAsText()}",
+                    )
+                    response.status shouldBe HttpStatusCode.OK
+                    response.headers[HttpHeaders.ContentType]!!.startsWith("text/csv") shouldBe true
+                    repository.listEntries(list.id, page = 0, size = 10) shouldHaveSize 1
+                }
+            }
 
-/* ===== Локальная БД/таблицы для этого файла ===== */
+            "manager sees only own club" {
+                val clubA = createClub("Nova")
+                val clubB = createClub("Pulse")
+                val eventA = createEvent(clubA, "Night A")
+                val eventB = createEvent(clubB, "Night B")
+                val ownerA = createDomainUser("managerA")
+                val ownerB = createDomainUser("managerB")
+                val listA =
+                    repository.createList(
+                        clubId = clubA,
+                        eventId = eventA,
+                        ownerType = GuestListOwnerType.MANAGER,
+                        ownerUserId = ownerA,
+                        title = "List A",
+                        capacity = 20,
+                        arrivalWindowStart = null,
+                        arrivalWindowEnd = null,
+                        status = GuestListStatus.ACTIVE,
+                    )
+                val listB =
+                    repository.createList(
+                        clubId = clubB,
+                        eventId = eventB,
+                        ownerType = GuestListOwnerType.MANAGER,
+                        ownerUserId = ownerB,
+                        title = "List B",
+                        capacity = 20,
+                        arrivalWindowStart = null,
+                        arrivalWindowEnd = null,
+                        status = GuestListStatus.ACTIVE,
+                    )
+                repository.addEntry(listA.id, "Alice", "+100", 2, null)
+                repository.addEntry(listB.id, "Clare", "+200", 1, null)
+                registerRbacUser(telegramId = 300L, roles = setOf(Role.MANAGER), clubs = setOf(clubA))
+
+                testApplication {
+                    applicationDev { testModule() }
+                    val authedClient = authenticatedClient(telegramId = 300L)
+                    val response = authedClient.get("/api/guest-lists")
+                    // Диагностика
+                    println(
+                        "DBG guestlists manager: status=${response.status} " +
+                            "body=${response.bodyAsText()}",
+                    )
+                    response.status shouldBe HttpStatusCode.OK
+                    val items = Json.parseToJsonElement(response.bodyAsText()).jsonObject["items"]!!.jsonArray
+                    items.shouldHaveSize(1)
+                    items.first().jsonObject["clubId"].toString() shouldBe clubA.toString()
+
+                    val forbidden = authedClient.get("/api/guest-lists?club=$clubB")
+                    println(
+                        "DBG guestlists manager forbidden: " +
+                            "status=${forbidden.status} body=${forbidden.bodyAsText()}",
+                    )
+                    forbidden.status shouldBe HttpStatusCode.Forbidden
+                }
+            }
+
+            "promoter filtered by owner" {
+                val club = createClub("Pulse")
+                val event = createEvent(club, "Promo")
+                val promoterUserId =
+                    registerRbacUser(telegramId = 400L, roles = setOf(Role.PROMOTER), clubs = setOf(club))
+                val managerOwner = createDomainUser("manager")
+                val promoterList =
+                    repository.createList(
+                        clubId = club,
+                        eventId = event,
+                        ownerType = GuestListOwnerType.PROMOTER,
+                        ownerUserId = promoterUserId,
+                        title = "Promo",
+                        capacity = 15,
+                        arrivalWindowStart = null,
+                        arrivalWindowEnd = null,
+                        status = GuestListStatus.ACTIVE,
+                    )
+                val managerList =
+                    repository.createList(
+                        clubId = club,
+                        eventId = event,
+                        ownerType = GuestListOwnerType.MANAGER,
+                        ownerUserId = managerOwner,
+                        title = "Manager",
+                        capacity = 15,
+                        arrivalWindowStart = null,
+                        arrivalWindowEnd = null,
+                        status = GuestListStatus.ACTIVE,
+                    )
+                repository.addEntry(promoterList.id, "Promo Guest", "+111", 1, null)
+                repository.addEntry(managerList.id, "Club Guest", "+222", 1, null)
+
+                testApplication {
+                    applicationDev { testModule() }
+                    val authedClient = authenticatedClient(telegramId = 400L)
+                    val response = authedClient.get("/api/guest-lists")
+                    // Диагностика
+                    println(
+                        "DBG guestlists promoter: status=${response.status} " +
+                            "body=${response.bodyAsText()}",
+                    )
+                    response.status shouldBe HttpStatusCode.OK
+                    val items = Json.parseToJsonElement(response.bodyAsText()).jsonObject["items"]!!.jsonArray
+                    items.shouldHaveSize(1)
+                    items.first().jsonObject["listId"].toString() shouldBe promoterList.id.toString()
+                }
+            }
+
+            "head manager export returns csv" {
+                val club = createClub("Zenith")
+                val event = createEvent(club, "Gala")
+                val owner = createDomainUser("head")
+                val list =
+                    repository.createList(
+                        clubId = club,
+                        eventId = event,
+                        ownerType = GuestListOwnerType.MANAGER,
+                        ownerUserId = owner,
+                        title = "Gala",
+                        capacity = 40,
+                        arrivalWindowStart = null,
+                        arrivalWindowEnd = null,
+                        status = GuestListStatus.ACTIVE,
+                    )
+                repository.addEntry(list.id, "Guest One", "+500", 2, "VIP")
+                registerRbacUser(telegramId = 500L, roles = setOf(Role.HEAD_MANAGER), clubs = emptySet())
+
+                testApplication {
+                    applicationDev { testModule() }
+                    val authedClient = authenticatedClient(telegramId = 500L)
+                    val response = authedClient.get("/api/guest-lists/export")
+                    // Диагностика
+                    println(
+                        "DBG guestlists export: status=${response.status} " +
+                            "body=${response.bodyAsText()}",
+                    )
+                    response.status shouldBe HttpStatusCode.OK
+                    response.headers[HttpHeaders.ContentType]!!.startsWith("text/csv") shouldBe true
+                    response.bodyAsText().contains("Guest One") shouldBe true
+                }
+            }
+        },
+    )
+
+// ===== Локальная БД/таблицы для этого файла =====
 
 private data class GLDbSetup(
     val dataSource: JdbcDataSource,
@@ -505,7 +529,7 @@ private object GLUserRolesTable : Table("user_roles") {
     override val primaryKey = PrimaryKey(id)
 }
 
-/* ===== Тестовые реализации RBAC на таблицах этого файла ===== */
+// ===== Тестовые реализации RBAC на таблицах этого файла =====
 
 private class GLUserRepositoryStub(
     private val db: Database,

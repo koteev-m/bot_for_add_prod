@@ -8,8 +8,6 @@ import com.example.bot.webapp.InitDataAuthPlugin
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
-import io.ktor.server.application.call
-import io.ktor.server.application.install
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
@@ -53,12 +51,14 @@ fun Application.checkinCompatRoutes(
                 post("/qr") {
                     UiCheckinMetrics.incTotal()
                     UiCheckinMetrics.timeScan {
-                        val payload = runCatching { call.receive<QrPayload>() }.getOrNull()
-                            ?: run {
-                                UiCheckinMetrics.incError()
-                                call.respond(HttpStatusCode.BadRequest, "Invalid JSON")
-                                return@timeScan
-                            }
+                        val payload =
+                            runCatching { call.receive<QrPayload>() }
+                                .getOrNull()
+                                ?: run {
+                                    UiCheckinMetrics.incError()
+                                    call.respond(HttpStatusCode.BadRequest, "Invalid JSON")
+                                    return@timeScan
+                                }
 
                         val qr = payload.qr.trim()
                         if (qr.isEmpty()) {
@@ -67,12 +67,13 @@ fun Application.checkinCompatRoutes(
                             return@timeScan
                         }
 
-                        val clubId = payload.clubId
-                            ?: run {
-                                UiCheckinMetrics.incError()
-                                call.respond(HttpStatusCode.BadRequest, "clubId is required")
-                                return@timeScan
-                            }
+                        val clubId =
+                            payload.clubId
+                                ?: run {
+                                    UiCheckinMetrics.incError()
+                                    call.respond(HttpStatusCode.BadRequest, "clubId is required")
+                                    return@timeScan
+                                }
 
                         val location = "/api/clubs/$clubId/checkin/scan"
                         call.response.headers.append(HttpHeaders.Location, location)

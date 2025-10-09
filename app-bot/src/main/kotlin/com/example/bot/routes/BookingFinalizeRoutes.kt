@@ -7,15 +7,14 @@ import com.example.bot.webapp.InitDataPrincipalKey
 import com.example.bot.webapp.TelegramPrincipal
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
-import io.ktor.server.application.call
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
-import java.util.UUID
 import kotlinx.serialization.Serializable
 import org.slf4j.MDC
+import java.util.UUID
 
 fun Application.bookingFinalizeRoutes(
     bookingService: BookingService,
@@ -36,11 +35,15 @@ fun Application.bookingFinalizeRoutes(
                 val principal: TelegramPrincipal = call.attributes[InitDataPrincipalKey]
                 val telegramUserId = principal.userId
 
-                val payload = runCatching { call.receive<FinalizePayload>() }.getOrNull()
-                    ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid JSON")
+                val payload =
+                    runCatching { call.receive<FinalizePayload>() }
+                        .getOrNull()
+                        ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid JSON")
 
-                val bookingId = runCatching { UUID.fromString(payload.bookingId) }.getOrNull()
-                    ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid bookingId")
+                val bookingId =
+                    runCatching { UUID.fromString(payload.bookingId) }
+                        .getOrNull()
+                        ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid bookingId")
 
                 val idem = call.request.headers["Idempotency-Key"] ?: "finalize:$bookingId"
                 MDC.put("Idempotency-Key", idem)
@@ -52,9 +55,13 @@ fun Application.bookingFinalizeRoutes(
                         is BookingCmdResult.Booked -> {
                             call.respond(
                                 HttpStatusCode.OK,
-                                mapOf("status" to "booked", "bookingId" to result.bookingId.toString()),
+                                mapOf(
+                                    "status" to "booked",
+                                    "bookingId" to result.bookingId.toString(),
+                                ),
                             )
                         }
+
                         else -> {
                             call.respond(
                                 HttpStatusCode.Conflict,

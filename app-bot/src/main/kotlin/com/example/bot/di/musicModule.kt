@@ -1,4 +1,4 @@
-@file:Suppress("Filename")
+@file:Suppress("ktlint:standard:filename")
 
 package com.example.bot.di
 
@@ -9,8 +9,15 @@ import com.example.bot.music.MusicPlaylistRepository
 import com.example.bot.music.MusicService
 import org.koin.dsl.module
 
-val musicModule = module {
-    single<MusicItemRepository> { MusicItemRepositoryImpl(get()) }
-    single<MusicPlaylistRepository> { MusicPlaylistRepositoryImpl(get()) }
-    single { MusicService(get(), get(), get()) }
-}
+val musicModule =
+    module {
+        single<MusicItemRepository> { MusicItemRepositoryImpl(get()) }
+        single<MusicPlaylistRepository> { MusicPlaylistRepositoryImpl(get()) }
+        single {
+            MusicService(
+                get(),
+                get(),
+                get(),
+            )
+        }
+    }

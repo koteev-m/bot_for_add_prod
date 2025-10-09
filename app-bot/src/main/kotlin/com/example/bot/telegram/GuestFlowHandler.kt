@@ -37,7 +37,7 @@ class GuestFlowHandler(
                         when (result) {
                             PromoStartResult.Stored -> "Промо отмечена ✅"
                             PromoStartResult.Invalid -> "Некорректная промо-ссылка"
-                    }
+                        }
                     send(SendMessage(chatId, ack))
                 }
             }

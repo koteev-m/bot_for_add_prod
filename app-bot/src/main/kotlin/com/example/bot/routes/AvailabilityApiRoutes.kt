@@ -5,7 +5,6 @@ import com.example.bot.availability.NightDto
 import com.example.bot.availability.TableAvailabilityDto
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
-import io.ktor.server.application.call
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
@@ -38,27 +37,35 @@ data class ApiFreeTableDto(
 fun Application.availabilityApiRoutes(service: AvailabilityService) {
     routing {
         get("/api/clubs/{clubId}/nights") {
-            val clubId = call.parameters["clubId"]?.toLongOrNull()
-                ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid clubId")
+            val clubId =
+                call.parameters["clubId"]?.toLongOrNull()
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid clubId")
 
             val limitParam = call.request.queryParameters["limit"]
-            val limit = when {
-                limitParam == null -> DEFAULT_LIMIT
-                else -> limitParam.toIntOrNull()?.takeIf { it in 1..MAX_LIMIT }
-            } ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid limit")
+            val limit =
+                when {
+                    limitParam == null -> DEFAULT_LIMIT
+                    else -> limitParam.toIntOrNull()?.takeIf { it in 1..MAX_LIMIT }
+                }
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid limit")
 
             val nights = withContext(Dispatchers.IO) { service.listOpenNights(clubId, limit) }
             call.respond(nights.map { it.toApiDto() })
         }
 
         get("/api/clubs/{clubId}/nights/{startUtc}/tables/free") {
-            val clubId = call.parameters["clubId"]?.toLongOrNull()
-                ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid clubId")
+            val clubId =
+                call.parameters["clubId"]?.toLongOrNull()
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid clubId")
 
-            val startUtcRaw = call.parameters["startUtc"]
-                ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid startUtc")
-            val startUtc = runCatching { Instant.parse(startUtcRaw) }.getOrNull()
-                ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid startUtc")
+            val startUtcRaw =
+                call.parameters["startUtc"]
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid startUtc")
+
+            val startUtc =
+                runCatching { Instant.parse(startUtcRaw) }
+                    .getOrNull()
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid startUtc")
 
             val tables = withContext(Dispatchers.IO) { service.listFreeTables(clubId, startUtc) }
             call.respond(tables.map { it.toApiDto() })
@@ -89,8 +96,7 @@ private fun TableAvailabilityDto.toApiDto(): ApiFreeTableDto =
         status = status.name,
     )
 
-private fun String.toZoneId(): ZoneId =
-    runCatching { ZoneId.of(this) }.getOrElse { ZoneOffset.UTC }
+private fun String.toZoneId(): ZoneId = runCatching { ZoneId.of(this) }.getOrElse { ZoneOffset.UTC }
 
 private val NIGHT_DAY_FORMATTER: DateTimeFormatter =
     DateTimeFormatter.ofPattern("EEE, dd MMM", Locale.ENGLISH)

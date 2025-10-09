@@ -1,11 +1,10 @@
 package com.example.bot.routes
 
-import com.pengrad.telegrambot.utility.BotUtils
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.Update
+import com.pengrad.telegrambot.utility.BotUtils
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
-import io.ktor.server.application.call
 import io.ktor.server.request.header
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
@@ -16,7 +15,7 @@ import org.slf4j.LoggerFactory
 private const val SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
 
 fun Application.telegramWebhookRoutes(
-    _bot: TelegramBot,
+    bot: TelegramBot,
     expectedSecret: String?,
     onUpdate: (Update) -> Unit,
 ) {

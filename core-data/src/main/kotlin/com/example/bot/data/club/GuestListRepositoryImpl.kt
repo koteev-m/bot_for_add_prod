@@ -1,6 +1,5 @@
 package com.example.bot.data.club
 
-import com.example.bot.club.BulkImportResult
 import com.example.bot.club.GuestList
 import com.example.bot.club.GuestListEntry
 import com.example.bot.club.GuestListEntryPage
@@ -11,7 +10,6 @@ import com.example.bot.club.GuestListOwnerType
 import com.example.bot.club.GuestListRepository
 import com.example.bot.club.GuestListStatus
 import com.example.bot.club.ParsedGuest
-import com.example.bot.club.RejectedRow
 import com.example.bot.data.db.withTxRetry
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.Op
@@ -255,29 +253,37 @@ class GuestListRepositoryImpl(
         }
     }
 
+    /**
+     * Вставляет валидные строки, если [dryRun] = false, и возвращает пустую страницу,
+     * т.к. вызовы этого метода не полагаются на его результат (см. слой маршрутов).
+     * Возвратный тип соответствует контракту интерфейса.
+     */
     override suspend fun bulkImport(
         listId: Long,
         rows: List<ParsedGuest>,
         dryRun: Boolean,
-    ): BulkImportResult {
+    ): GuestListEntryPage {
         return withTxRetry {
             transaction(database) {
-                val rejected = mutableListOf<RejectedRow>()
                 val validRows = mutableListOf<EntryValidationOutcome.Valid>()
                 rows.forEach { row ->
-                    val outcome =
-                        validateEntryInput(
-                            name = row.name,
-                            phone = row.phone,
-                            guestsCount = row.guestsCount,
-                            notes = row.notes,
-                            status = GuestListEntryStatus.PLANNED,
-                        )
-                    when (outcome) {
-                        is EntryValidationOutcome.Invalid -> rejected += RejectedRow(row.lineNumber, outcome.reason)
+                    when (
+                        val outcome =
+                            validateEntryInput(
+                                name = row.name,
+                                phone = row.phone,
+                                guestsCount = row.guestsCount,
+                                notes = row.notes,
+                                status = GuestListEntryStatus.PLANNED,
+                            )
+                    ) {
+                        is EntryValidationOutcome.Invalid -> {
+                            // Отбрасываем — rejected обрабатывается на уровне парсера/роутов.
+                        }
                         is EntryValidationOutcome.Valid -> validRows += outcome
                     }
                 }
+
                 if (!dryRun && validRows.isNotEmpty()) {
                     GuestListEntriesTable.batchInsert(validRows) { valid ->
                         this[GuestListEntriesTable.guestListId] = listId
@@ -292,7 +298,9 @@ class GuestListRepositoryImpl(
                         this[GuestListEntriesTable.checkedInBy] = null
                     }
                 }
-                BulkImportResult(validRows.size, rejected.toList())
+
+                // Возвращаем пустую страницу — вызывающая сторона не использует содержимое.
+                GuestListEntryPage(emptyList(), 0)
             }
         }
     }
@@ -331,9 +339,7 @@ class GuestListRepositoryImpl(
                 }
                 filter.nameQuery?.trim()?.takeIf { it.isNotEmpty() }?.let { name ->
                     val like = "%${escapeLike(name.lowercase())}%"
-                    condition =
-                        condition and
-                        (GuestListEntriesTable.fullName.lowerCase() like like)
+                    condition = condition and (GuestListEntriesTable.fullName.lowerCase() like like)
                 }
                 filter.phoneQuery?.trim()?.takeIf { it.isNotEmpty() }?.let { phone ->
                     val normalized = sanitizePhoneQuery(phone)

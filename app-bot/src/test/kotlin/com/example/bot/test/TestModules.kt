@@ -6,9 +6,10 @@ import org.koin.core.module.Module
 import org.koin.dsl.module
 
 object TestModules {
-    val clubs: Module = module {
-        single<ClubRepository> { FakeClubRepository() }
-    }
+    val clubs: Module =
+        module {
+            single<ClubRepository> { FakeClubRepository() }
+        }
 }
 
 private class FakeClubRepository : ClubRepository {

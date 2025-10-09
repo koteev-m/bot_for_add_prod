@@ -61,7 +61,7 @@ interface GuestListRepository {
         listId: Long,
         rows: List<ParsedGuest>,
         dryRun: Boolean,
-    ): BulkImportResult
+    ): GuestListEntryPage
 
     suspend fun searchEntries(
         filter: GuestListEntrySearch,

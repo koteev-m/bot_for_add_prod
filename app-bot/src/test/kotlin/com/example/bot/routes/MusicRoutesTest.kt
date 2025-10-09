@@ -90,82 +90,86 @@ class MusicRoutesTest {
         )
 
     @Test
-    fun `items endpoint returns list and respects etag`() = testApplication {
-        // TELEGRAM_BOT_TOKEN отдаём через Gradle Test.environment(...)
-        applicationDev {
-            install(ContentNegotiation) { json() }
-            musicRoutes(service)
+    fun `items endpoint returns list and respects etag`() =
+        testApplication {
+            // TELEGRAM_BOT_TOKEN отдаём через Gradle Test.environment(...)
+            applicationDev {
+                install(ContentNegotiation) { json() }
+                musicRoutes(service)
+            }
+
+            val initData = createInitData()
+
+            val firstResponse =
+                client.get("/api/music/items") {
+                    withInitData(initData)
+                }
+            println("DBG music items-first: status=${firstResponse.status} body=${firstResponse.bodyAsText()}")
+            assertEquals(HttpStatusCode.OK, firstResponse.status)
+
+            val etag = firstResponse.headers[HttpHeaders.ETag]
+            assertNotNull(etag)
+            val body = json.parseToJsonElement(firstResponse.bodyAsText())
+            assertEquals(2, body.jsonArray.size)
+
+            val cachedResponse =
+                client.get("/api/music/items") {
+                    withInitData(initData)
+                    header(HttpHeaders.IfNoneMatch, etag)
+                }
+            println("DBG music items-cached: status=${cachedResponse.status} body=${cachedResponse.bodyAsText()}")
+            assertEquals(HttpStatusCode.NotModified, cachedResponse.status)
         }
-
-        val initData = createInitData()
-
-        val firstResponse =
-            client.get("/api/music/items") {
-                withInitData(initData)
-            }
-        println("DBG music items-first: status=${firstResponse.status} body=${firstResponse.bodyAsText()}")
-        assertEquals(HttpStatusCode.OK, firstResponse.status)
-
-        val etag = firstResponse.headers[HttpHeaders.ETag]
-        assertNotNull(etag)
-        val body = json.parseToJsonElement(firstResponse.bodyAsText())
-        assertEquals(2, body.jsonArray.size)
-
-        val cachedResponse =
-            client.get("/api/music/items") {
-                withInitData(initData)
-                header(HttpHeaders.IfNoneMatch, etag)
-            }
-        println("DBG music items-cached: status=${cachedResponse.status} body=${cachedResponse.bodyAsText()}")
-        assertEquals(HttpStatusCode.NotModified, cachedResponse.status)
-    }
 
     @Test
-    fun `playlists endpoint returns list`() = testApplication {
-        applicationDev {
-            install(ContentNegotiation) { json() }
-            musicRoutes(service)
-        }
-
-        val response =
-            client.get("/api/music/playlists") {
-                withInitData(createInitData())
+    fun `playlists endpoint returns list`() =
+        testApplication {
+            applicationDev {
+                install(ContentNegotiation) { json() }
+                musicRoutes(service)
             }
-        println("DBG music playlists: status=${response.status} body=${response.bodyAsText()}")
-        assertEquals(HttpStatusCode.OK, response.status)
-        val payload = json.parseToJsonElement(response.bodyAsText())
-        assertEquals(1, payload.jsonArray.size)
-    }
+
+            val response =
+                client.get("/api/music/playlists") {
+                    withInitData(createInitData())
+                }
+            println("DBG music playlists: status=${response.status} body=${response.bodyAsText()}")
+            assertEquals(HttpStatusCode.OK, response.status)
+            val payload = json.parseToJsonElement(response.bodyAsText())
+            assertEquals(1, payload.jsonArray.size)
+        }
 
     @Test
-    fun `playlist details return 200 and 404`() = testApplication {
-        applicationDev {
-            install(ContentNegotiation) { json() }
-            musicRoutes(service)
+    fun `playlist details return 200 and 404`() =
+        testApplication {
+            applicationDev {
+                install(ContentNegotiation) { json() }
+                musicRoutes(service)
+            }
+
+            val okResponse =
+                client.get("/api/music/playlists/10") {
+                    withInitData(createInitData())
+                }
+            println("DBG music playlist-ok: status=${okResponse.status} body=${okResponse.bodyAsText()}")
+            assertEquals(HttpStatusCode.OK, okResponse.status)
+            val details = json.parseToJsonElement(okResponse.bodyAsText())
+            assertEquals("Top Hits", details.jsonObject["name"]?.jsonPrimitive?.content)
+
+            val notFound =
+                client.get("/api/music/playlists/999") {
+                    withInitData(createInitData())
+                }
+            println("DBG music playlist-404: status=${notFound.status} body=${notFound.bodyAsText()}")
+            assertEquals(HttpStatusCode.NotFound, notFound.status)
         }
-
-        val okResponse =
-            client.get("/api/music/playlists/10") {
-                withInitData(createInitData())
-            }
-        println("DBG music playlist-ok: status=${okResponse.status} body=${okResponse.bodyAsText()}")
-        assertEquals(HttpStatusCode.OK, okResponse.status)
-        val details = json.parseToJsonElement(okResponse.bodyAsText())
-        assertEquals("Top Hits", details.jsonObject["name"]?.jsonPrimitive?.content)
-
-        val notFound =
-            client.get("/api/music/playlists/999") {
-                withInitData(createInitData())
-            }
-        println("DBG music playlist-404: status=${notFound.status} body=${notFound.bodyAsText()}")
-        assertEquals(HttpStatusCode.NotFound, notFound.status)
-    }
 
     private fun createInitData(): String {
         val params =
             linkedMapOf(
                 "user" to WebAppInitDataTestHelper.encodeUser(id = 777, username = "tester"),
-                "auth_date" to Instant.now().epochSecond.toString(), // важно — «свежее» время
+                // важно: используем "свежее" время
+                "auth_date" to Instant.now().epochSecond.toString(),
             )
         return WebAppInitDataTestHelper.createInitData(TEST_BOT_TOKEN, params)
     }

@@ -2,7 +2,6 @@ package com.example.bot.routes
 
 import io.ktor.http.ContentType
 import io.ktor.server.application.Application
-import io.ktor.server.application.call
 import io.ktor.server.application.install
 import io.ktor.server.http.content.staticResources
 import io.ktor.server.plugins.compression.Compression
@@ -26,7 +25,7 @@ fun Application.webAppRoutes() {
                     "img-src 'self' data: https:; " +
                     "connect-src 'self' https://api.telegram.org https://*.t.me https://*.telegram.org; " +
                     "frame-ancestors https://web.telegram.org https://*.telegram.org https://*.t.me; " +
-                    "base-uri 'self'; form-action 'self';"
+                    "base-uri 'self'; form-action 'self';",
         )
     }
 
