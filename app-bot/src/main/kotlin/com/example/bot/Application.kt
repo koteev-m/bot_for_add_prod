@@ -11,6 +11,7 @@ import com.example.bot.data.repo.ClubRepository
 import com.example.bot.data.repo.ExposedClubRepository
 import com.example.bot.di.availabilityModule
 import com.example.bot.di.bookingModule
+import com.example.bot.di.healthModule
 import com.example.bot.di.musicModule
 import com.example.bot.di.securityModule
 import com.example.bot.di.webAppModule
@@ -35,9 +36,8 @@ import com.example.bot.routes.clubsPublicRoutes
 import com.example.bot.routes.guestFlowRoutes
 import com.example.bot.routes.guestListRoutes
 import com.example.bot.routes.hallImageRoute
-import com.example.bot.routes.healthRoute
+import com.example.bot.routes.healthRoutes
 import com.example.bot.routes.musicRoutes
-import com.example.bot.routes.readinessRoute
 import com.example.bot.routes.securedRoutes
 import com.example.bot.routes.telegramWebhookRoutes
 import com.example.bot.routes.webAppRoutes
@@ -201,8 +201,11 @@ fun Application.module() {
             telegramModule,
             musicModule,
             schedulerModule,
+            healthModule,
         )
     }
+
+    healthRoutes(get())
 
     launchCampaignSchedulerOnStart()
 
@@ -234,10 +237,6 @@ fun Application.module() {
     // 5) Routes
     val renderer = DefaultHallRenderer()
     routing {
-        // /health, /ready — публичные
-        healthRoute()
-        readinessRoute()
-
         get("/ping") {
             call.respondText("OK", ContentType.Text.Plain)
         }

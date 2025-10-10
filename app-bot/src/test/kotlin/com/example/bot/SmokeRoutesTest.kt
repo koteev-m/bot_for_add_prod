@@ -6,13 +6,13 @@ import com.example.bot.data.security.Role
 import com.example.bot.data.security.UserRepository
 import com.example.bot.data.security.UserRoleRepository
 import com.example.bot.guestlists.GuestListRepository
+import com.example.bot.observability.DefaultHealthService
 import com.example.bot.plugins.DataSourceHolder
 import com.example.bot.plugins.MigrationState
 import com.example.bot.routes.checkinCompatRoutes
 import com.example.bot.routes.clubsPublicRoutes
-import com.example.bot.routes.healthRoute
+import com.example.bot.routes.healthRoutes
 import com.example.bot.routes.pingRoute
-import com.example.bot.routes.readinessRoute
 import com.example.bot.security.rbac.RbacPlugin
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -22,7 +22,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import io.mockk.every
 import io.mockk.mockk
@@ -79,10 +78,7 @@ class SmokeRoutesTest {
                     principalExtractor = { null }
                 }
 
-                routing {
-                    healthRoute()
-                    readinessRoute()
-                }
+                healthRoutes(DefaultHealthService())
                 pingRoute()
 
                 clubsPublicRoutes(
