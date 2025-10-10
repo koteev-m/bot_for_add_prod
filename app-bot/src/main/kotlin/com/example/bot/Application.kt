@@ -53,7 +53,10 @@ import com.example.bot.telegram.ui.ChatUiSessionStore
 import com.example.bot.telegram.ui.InMemoryChatUiSessionStore
 import com.example.bot.text.BotTexts
 import com.example.bot.webapp.InitDataAuthConfig
+import com.example.bot.workers.CampaignScheduler
 import com.example.bot.workers.OutboxWorker
+import com.example.bot.workers.launchCampaignSchedulerOnStart
+import com.example.bot.workers.schedulerModule
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.UpdatesListener
 import com.pengrad.telegrambot.model.Update
@@ -84,6 +87,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.koin.dsl.module
 import org.koin.ktor.ext.get
+import org.koin.ktor.ext.getKoin
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
@@ -196,8 +200,11 @@ fun Application.module() {
             availabilityModule,
             telegramModule,
             musicModule,
+            schedulerModule,
         )
     }
+
+    launchCampaignSchedulerOnStart()
 
     configureSecurity()
 
@@ -218,6 +225,7 @@ fun Application.module() {
     // Подписка на события жизненного цикла
     monitor.subscribe(ApplicationStarted) {
         workerJob = launch { outboxWorker.run() }
+        getKoin().get<CampaignScheduler>().start()
     }
     monitor.subscribe(ApplicationStopped) {
         workerJob?.cancel()
