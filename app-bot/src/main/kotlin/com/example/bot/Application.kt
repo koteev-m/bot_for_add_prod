@@ -225,7 +225,6 @@ fun Application.module() {
     // Подписка на события жизненного цикла
     monitor.subscribe(ApplicationStarted) {
         workerJob = launch { outboxWorker.run() }
-        getKoin().get<CampaignScheduler>().start()
     }
     monitor.subscribe(ApplicationStopped) {
         workerJob?.cancel()
