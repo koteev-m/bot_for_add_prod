@@ -24,6 +24,7 @@ interface HealthService {
 
 class DefaultHealthService(
     private val dataSource: DataSource? = null,
+    private val dataSourceProvider: (() -> DataSource)? = null,
     private val dbTimeoutMs: Long = 150,
     private val migrationsApplied: () -> Boolean = { true },
     private val outboxLagSeconds: () -> Long = { 0L },
@@ -72,7 +73,25 @@ class DefaultHealthService(
     }
 
     private suspend fun dbCheck(): HealthCheck? {
-        val ds = dataSource ?: return null
+        val dsResult =
+            when {
+                dataSource != null -> Result.success(dataSource)
+                dataSourceProvider != null -> {
+                    val provider = dataSourceProvider
+                    runCatching { provider.invoke() }
+                }
+                else -> return null
+            }
+
+        val ds =
+            dsResult.getOrElse { cause ->
+                return HealthCheck(
+                    name = "db",
+                    status = CheckStatus.DOWN,
+                    details = mapOf("error" to (cause.message ?: cause::class.simpleName ?: "unavailable")),
+                )
+            }
+
         return try {
             withTimeout(dbTimeoutMs) {
                 ds.connection.use { conn ->
