@@ -3,20 +3,25 @@ package com.example.bot.routes
 import com.example.bot.data.security.Role
 import com.example.bot.notifications.NotifyMessage
 import com.example.bot.notifications.ParseMode
+import com.example.bot.security.rbac.RbacPlugin
 import com.example.bot.security.rbac.authorize
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
+import io.ktor.server.application.pluginOrNull
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
+import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.server.util.getOrFail
+import io.ktor.util.AttributeKey
 import kotlinx.serialization.Serializable
+import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -129,77 +134,95 @@ fun Application.notifyRoutes(
     tx: TxNotifyService,
     campaigns: CampaignService,
 ) {
+    if (attributes.contains(notifyRoutesInstalledKey)) {
+        notifyRoutesLogger.info("notifyRoutes already registered")
+        return
+    }
+    attributes.put(notifyRoutesInstalledKey, Unit)
+
     routing {
-        post("/api/notify/tx") {
-            val msg = call.receive<NotifyMessage>()
-            tx.enqueue(msg)
-            call.respond(HttpStatusCode.Accepted, mapOf("status" to "queued"))
+        route("/api") {
+            post("/notify/tx") {
+                val msg = call.receive<NotifyMessage>()
+                tx.enqueue(msg)
+                call.respond(HttpStatusCode.Accepted, mapOf("status" to "queued"))
+            }
+
+            if (this@notifyRoutes.pluginOrNull(RbacPlugin) != null) {
+                authorize(Role.OWNER, Role.GLOBAL_ADMIN, Role.CLUB_ADMIN, Role.MANAGER) {
+                    campaignRoutes(campaigns)
+                }
+            } else {
+                notifyRoutesLogger.warn("RbacPlugin not installed: /api/campaigns routes are disabled")
+            }
+        }
+    }
+    notifyRoutesLogger.info("notifyRoutes registered under /api")
+}
+
+private val notifyRoutesInstalledKey = AttributeKey<Unit>("notifyRoutesInstalled")
+
+private val notifyRoutesLogger = LoggerFactory.getLogger("NotifyRoutes")
+
+private fun Route.campaignRoutes(campaigns: CampaignService) {
+    route("/campaigns") {
+        post {
+            val req = call.receive<CampaignCreateRequest>()
+            val dto = campaigns.create(req)
+            call.respond(dto)
         }
 
-        authorize(Role.OWNER, Role.GLOBAL_ADMIN, Role.CLUB_ADMIN, Role.MANAGER) {
-            route("/api/campaigns") {
-                post {
-                    val req = call.receive<CampaignCreateRequest>()
-                    val dto = campaigns.create(req)
-                    call.respond(dto)
-                }
-
-                get {
-                    call.respond(campaigns.list())
-                }
-
-                route("/{id}") {
-                    get {
-                        val id = call.parameters.getOrFail("id").toLong()
-                        val dto = campaigns.find(id) ?: throw BadRequestException("not found")
-                        call.respond(dto)
-                    }
-
-                    put {
-                        val id = call.parameters.getOrFail("id").toLong()
-                        val req = call.receive<CampaignUpdateRequest>()
-                        val dto = campaigns.update(id, req) ?: throw BadRequestException("not found")
-                        call.respond(dto)
-                    }
-
-                    post(":preview") {
-                        val id = call.parameters.getOrFail("id").toLong()
-                        if (call.request.queryParameters["user_id"].isNullOrBlank()) {
-                            throw BadRequestException("user_id required")
-                        }
-                        campaigns.find(id) ?: throw BadRequestException("not found")
-                        call.respond(HttpStatusCode.Accepted, mapOf("status" to "preview"))
-                    }
-
-                    post(":schedule") {
-                        val id = call.parameters.getOrFail("id").toLong()
-                        val req = call.receive<ScheduleRequest>()
-                        val dto = campaigns.schedule(id, req) ?: throw BadRequestException("not found")
-                        call.respond(dto)
-                    }
-
-                    post(":send-now") {
-                        val id = call.parameters.getOrFail("id").toLong()
-                        val dto =
-                            campaigns.setStatus(id, CampaignStatus.SENDING) ?: throw BadRequestException("not found")
-                        call.respond(dto)
-                    }
-
-                    post(":pause") {
-                        val id = call.parameters.getOrFail("id").toLong()
-                        val dto =
-                            campaigns.setStatus(id, CampaignStatus.PAUSED) ?: throw BadRequestException("not found")
-                        call.respond(dto)
-                    }
-
-                    post(":resume") {
-                        val id = call.parameters.getOrFail("id").toLong()
-                        val dto =
-                            campaigns.setStatus(id, CampaignStatus.SENDING) ?: throw BadRequestException("not found")
-                        call.respond(dto)
-                    }
-                } // end route("/{id}")
-            } // end route("/api/campaigns")
+        get {
+            call.respond(campaigns.list())
         }
-    } // end routing
+
+        route("/{id}") {
+            get {
+                val id = call.parameters.getOrFail("id").toLong()
+                val dto = campaigns.find(id) ?: throw BadRequestException("not found")
+                call.respond(dto)
+            }
+
+            put {
+                val id = call.parameters.getOrFail("id").toLong()
+                val req = call.receive<CampaignUpdateRequest>()
+                val dto = campaigns.update(id, req) ?: throw BadRequestException("not found")
+                call.respond(dto)
+            }
+
+            post(":preview") {
+                val id = call.parameters.getOrFail("id").toLong()
+                if (call.request.queryParameters["user_id"].isNullOrBlank()) {
+                    throw BadRequestException("user_id required")
+                }
+                campaigns.find(id) ?: throw BadRequestException("not found")
+                call.respond(HttpStatusCode.Accepted, mapOf("status" to "preview"))
+            }
+
+            post(":schedule") {
+                val id = call.parameters.getOrFail("id").toLong()
+                val req = call.receive<ScheduleRequest>()
+                val dto = campaigns.schedule(id, req) ?: throw BadRequestException("not found")
+                call.respond(dto)
+            }
+
+            post(":send-now") {
+                val id = call.parameters.getOrFail("id").toLong()
+                val dto = campaigns.setStatus(id, CampaignStatus.SENDING) ?: throw BadRequestException("not found")
+                call.respond(dto)
+            }
+
+            post(":pause") {
+                val id = call.parameters.getOrFail("id").toLong()
+                val dto = campaigns.setStatus(id, CampaignStatus.PAUSED) ?: throw BadRequestException("not found")
+                call.respond(dto)
+            }
+
+            post(":resume") {
+                val id = call.parameters.getOrFail("id").toLong()
+                val dto = campaigns.setStatus(id, CampaignStatus.SENDING) ?: throw BadRequestException("not found")
+                call.respond(dto)
+            }
+        }
+    }
 }
