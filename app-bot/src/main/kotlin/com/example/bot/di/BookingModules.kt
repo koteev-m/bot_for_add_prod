@@ -24,12 +24,17 @@ import com.example.bot.promo.PromoAttributionRepository
 import com.example.bot.promo.PromoAttributionService
 import com.example.bot.promo.PromoAttributionStore
 import com.example.bot.promo.PromoLinkRepository
+import com.example.bot.telegram.NotifyAdapterMetrics
+import com.example.bot.telegram.NotifySenderSendPort
 import com.example.bot.workers.OutboxWorker
 import com.example.bot.workers.SendOutcome
 import com.example.bot.workers.SendPort
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.sql.Database
 import org.koin.dsl.module
+import org.slf4j.LoggerFactory
+import kotlin.math.ceil
 
 val bookingModule =
     module {
@@ -84,8 +89,41 @@ val bookingModule =
             )
         }
 
-        // Outbound port stub
-        single<SendPort> { DummySendPort }
+        // Outbound port wiring (NotifySender via feature flag)
+        single<SendPort> {
+            val useNotify =
+                System.getProperty("USE_NOTIFY_SENDER")?.equals("true", ignoreCase = true) == true ||
+                    System.getenv("USE_NOTIFY_SENDER")?.equals("true", ignoreCase = true) == true
+            if (useNotify) {
+                notifySendPortLogger.info("Using NotifySenderSendPort (USE_NOTIFY_SENDER=true)")
+                val metrics =
+                    runCatching { get<MeterRegistry>() }
+                        .map { registry ->
+                            val attempts = registry.counter("notify.adapter.attempts")
+                            val ok = registry.counter("notify.adapter.ok")
+                            val retryable = registry.counter("notify.adapter.retryable")
+                            val permanent = registry.counter("notify.adapter.permanent")
+                            NotifyAdapterMetrics(
+                                onAttempt = { attempts.increment() },
+                                onOk = { ok.increment() },
+                                onRetryAfter = { delayMs ->
+                                    val seconds = ceil(delayMs / 1000.0).toLong().coerceAtLeast(0)
+                                    registry
+                                        .counter(
+                                            "notify.adapter.retry_after",
+                                            "seconds",
+                                            seconds.toString(),
+                                        ).increment()
+                                },
+                                onRetryable = { retryable.increment() },
+                                onPermanent = { permanent.increment() },
+                            )
+                        }.getOrNull()
+                NotifySenderSendPort(get(), metrics)
+            } else {
+                DummySendPort
+            }
+        }
 
         // High-level services/workers
         single {
@@ -108,3 +146,5 @@ private object DummySendPort : SendPort {
         return SendOutcome.Ok
     }
 }
+
+private val notifySendPortLogger = LoggerFactory.getLogger("NotifySenderWiring")
