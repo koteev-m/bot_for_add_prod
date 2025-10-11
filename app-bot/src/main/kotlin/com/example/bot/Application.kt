@@ -21,11 +21,13 @@ import com.example.bot.music.MusicService
 import com.example.bot.plugins.appConfig
 import com.example.bot.plugins.configureSecurity
 import com.example.bot.plugins.installAppConfig
+import com.example.bot.plugins.installHotPathLimiterDefaults
 import com.example.bot.plugins.installMetrics
 import com.example.bot.plugins.installMigrationsAndDatabase
 import com.example.bot.plugins.installRateLimitPluginDefaults
 import com.example.bot.plugins.installRequestLogging
 import com.example.bot.plugins.meterRegistry
+import com.example.bot.plugins.resolveFlag
 import com.example.bot.render.DefaultHallRenderer
 import com.example.bot.routes.availabilityApiRoutes
 import com.example.bot.routes.availabilityRoutes
@@ -131,6 +133,12 @@ fun Application.module() {
         return
     }
 
+    val bootstrapLogger = LoggerFactory.getLogger("ApplicationBootstrap")
+    val rateLimitEnabled = resolveFlag("RATE_LIMIT_ENABLED", default = true)
+    val hotPathEnabled = resolveFlag("HOT_PATH_ENABLED", default = true)
+    bootstrapLogger.info("feature.rateLimit.enabled={}", rateLimitEnabled)
+    bootstrapLogger.info("feature.hotPath.enabled={}", hotPathEnabled)
+
     // demo constants
     val demoStateKey = BotLimits.Demo.STATE_KEY
     val demoClubId = BotLimits.Demo.CLUB_ID
@@ -139,7 +147,16 @@ fun Application.module() {
 
     // 1) Тюнинг сервера и наблюдаемость
     installServerTuning()
-    installRateLimitPluginDefaults()
+    if (rateLimitEnabled) {
+        installRateLimitPluginDefaults()
+    } else {
+        bootstrapLogger.info("RateLimitPlugin skipped by flag")
+    }
+    if (hotPathEnabled) {
+        installHotPathLimiterDefaults()
+    } else {
+        bootstrapLogger.info("HotPathLimiter skipped by flag")
+    }
     installMetrics()
     AppMetricsBinder.bindAll(meterRegistry())
     installMigrationsAndDatabase()

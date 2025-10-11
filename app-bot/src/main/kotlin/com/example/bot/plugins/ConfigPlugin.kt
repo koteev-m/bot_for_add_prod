@@ -6,6 +6,7 @@ import io.ktor.server.application.ApplicationStopped
 import io.ktor.server.application.createApplicationPlugin
 import io.ktor.server.application.hooks.MonitoringEvent
 import io.ktor.server.application.install
+import io.ktor.server.application.pluginOrNull
 import io.ktor.util.AttributeKey
 import org.slf4j.LoggerFactory
 
@@ -43,5 +44,7 @@ val Application.appConfig: AppConfig
     get() = attributes[AppConfigAttributeKey]
 
 fun Application.installAppConfig() {
-    install(AppConfigPlugin)
+    if (pluginOrNull(AppConfigPlugin) == null) {
+        install(AppConfigPlugin)
+    }
 }
