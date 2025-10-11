@@ -10,7 +10,10 @@ internal fun Application.resolveEnv(name: String): String? {
     }
 }
 
-internal fun Application.resolveFlag(name: String, default: Boolean): Boolean {
+internal fun Application.resolveFlag(
+    name: String,
+    default: Boolean,
+): Boolean {
     val fromConfig = environment.config.propertyOrNull("app.flags.$name")?.getString()
     val configValue = fromConfig?.toBooleanStrictOrNull()
     val envValue = System.getenv(name)?.toBooleanStrictOrNull()

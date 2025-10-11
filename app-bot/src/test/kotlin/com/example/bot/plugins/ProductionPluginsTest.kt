@@ -59,12 +59,14 @@ class ProductionPluginsTest :
                     }
                 }
 
-                val first = client.get("/ping")
+                val first =
+                    client.get("/ping")
                 first.status shouldBe HttpStatusCode.OK
 
-                val second = client.get("/ping") {
-                    header(HttpHeaders.XRequestId, "req-123")
-                }
+                val second =
+                    client.get("/ping") {
+                        header(HttpHeaders.XRequestId, "req-123")
+                    }
 
                 second.status shouldBe HttpStatusCode.TooManyRequests
                 second.headers[HttpHeaders.RetryAfter] shouldBe "5"

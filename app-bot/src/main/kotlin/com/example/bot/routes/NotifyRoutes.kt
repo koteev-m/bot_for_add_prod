@@ -164,6 +164,7 @@ private val notifyRoutesInstalledKey = AttributeKey<Unit>("notifyRoutesInstalled
 
 private val notifyRoutesLogger = LoggerFactory.getLogger("NotifyRoutes")
 
+@Suppress("ThrowsCount")
 private fun Route.campaignRoutes(campaigns: CampaignService) {
     route("/campaigns") {
         post {

@@ -17,11 +17,11 @@ import io.ktor.server.request.path
 import io.ktor.server.request.port
 import io.ktor.server.response.header
 import io.ktor.server.response.respondText
+import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
-import org.slf4j.LoggerFactory
 
 /**
  * Конфиг для rate-limiting.
