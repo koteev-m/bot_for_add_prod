@@ -3,20 +3,28 @@ package com.example.bot.workers
 import com.example.bot.notifications.SchedulerApi
 import com.example.bot.telemetry.Telemetry
 import io.micrometer.core.instrument.Tag
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 import java.time.Duration
 import java.time.OffsetDateTime
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.isActive
+import kotlin.coroutines.coroutineContext
+import org.slf4j.LoggerFactory
 
 private const val CRON_PARTS = 5
 private val FULL_MINUTE_RANGE = 0..59
 private const val DAYS_IN_WEEK = 7
-private val DEFAULT_TICK_INTERVAL: Duration = Duration.ofSeconds(10)
-private const val DEFAULT_BATCH_SIZE = 1_000
+internal val DEFAULT_TICK_INTERVAL: Duration = Duration.ofSeconds(10)
+internal const val DEFAULT_BATCH_SIZE = 1_000
 private const val MIN_INDEX = 0
 private const val HOUR_INDEX = 1
 private const val DOM_INDEX = 2
@@ -30,24 +38,61 @@ private const val DOW_INDEX = 4
 class CampaignScheduler(
     private val scope: CoroutineScope,
     private val api: SchedulerApi,
-    private val tickInterval: Duration = DEFAULT_TICK_INTERVAL,
-    private val batchSize: Int = DEFAULT_BATCH_SIZE,
+    private val config: SchedulerConfig = SchedulerConfig(),
+    private val metrics: WorkerMetrics = WorkerMetrics(),
 ) {
+    @Volatile
+    private var job: Job? = null
     private val remaining = ConcurrentHashMap<Long, AtomicLong>()
+    private val logger = LoggerFactory.getLogger(CampaignScheduler::class.java)
 
     /** Starts background scheduling loop. */
     fun start() {
-        scope.launch { loop() }
+        if (job?.isActive == true) {
+            logger.debug("CampaignScheduler already running, skip start")
+            return
+        }
+        logger.info("CampaignScheduler starting")
+        job = scope.launch(CoroutineName("campaign-scheduler")) {
+            metrics.markStarted()
+            try {
+                loop()
+            } finally {
+                metrics.markStopped()
+                logger.info("CampaignScheduler stopped")
+            }
+        }
+    }
+
+    suspend fun stop() {
+        val current = job ?: return
+        logger.info("CampaignScheduler stopping")
+        current.cancelAndJoin()
+        scope.coroutineContext[Job]?.cancelChildren()
+        job = null
     }
 
     private suspend fun loop() {
-        while (scope.isActive) {
-            val now = OffsetDateTime.now()
-            val campaigns = api.listActive()
-            for (c in campaigns) {
-                handleCampaign(c, now)
+        val delayMillis = config.tickInterval.toMillis().coerceAtLeast(1)
+        while (coroutineContext.isActive) {
+            try {
+                val now = OffsetDateTime.now()
+                val campaigns = api.listActive()
+                for (c in campaigns) {
+                    handleCampaign(c, now)
+                    yield()
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (t: Throwable) {
+                metrics.markError()
+                if (logger.isDebugEnabled) {
+                    logger.debug("CampaignScheduler tick failed", t)
+                } else {
+                    logger.warn("CampaignScheduler tick failed: {}", t.message)
+                }
             }
-            delay(tickInterval.toMillis())
+            delay(delayMillis)
         }
     }
 
@@ -62,7 +107,8 @@ class CampaignScheduler(
             if (c.status == SchedulerApi.Status.SCHEDULED) {
                 api.markSending(c.id)
             }
-            val added = api.enqueueBatch(c.id, batchSize)
+            val added = api.enqueueBatch(c.id, config.batchSize)
+            metrics.markEnqueued(added)
             if (added > 0) {
                 Telemetry.registry
                     .counter("notify_campaign_enqueued_total", "campaign", c.id.toString())
