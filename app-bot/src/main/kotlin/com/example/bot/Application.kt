@@ -60,7 +60,6 @@ import com.example.bot.telegram.ui.InMemoryChatUiSessionStore
 import com.example.bot.text.BotTexts
 import com.example.bot.webapp.InitDataAuthConfig
 import com.example.bot.webapp.webAppRoutes
-import com.example.bot.workers.CampaignScheduler
 import com.example.bot.workers.OutboxWorker
 import com.example.bot.workers.launchCampaignSchedulerOnStart
 import com.example.bot.workers.schedulerModule
@@ -253,7 +252,6 @@ fun Application.module() {
     // Подписка на события жизненного цикла
     monitor.subscribe(ApplicationStarted) {
         workerJob = launch { outboxWorker.run() }
-        getKoin().get<CampaignScheduler>().start()
     }
     monitor.subscribe(ApplicationStopped) {
         workerJob?.cancel()
