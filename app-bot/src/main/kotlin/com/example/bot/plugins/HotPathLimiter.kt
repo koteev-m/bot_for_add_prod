@@ -6,6 +6,7 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.call
 import io.ktor.server.application.createApplicationPlugin
 import io.ktor.server.application.install
+import io.ktor.server.application.pluginOrNull
 import io.ktor.server.request.path
 import io.ktor.server.response.ApplicationSendPipeline
 import io.ktor.server.response.header
@@ -96,20 +97,23 @@ val HotPathLimiter =
  * Утилита для регистрации плагина с ENV/дефолтами.
  */
 fun Application.installHotPathLimiterDefaults() {
+    if (pluginOrNull(HotPathLimiter) != null) return
+
     val defaults =
         listOf(
             "/webhook",
             "/api/clubs/",
             "/api/guest-lists/import",
         )
+    val app = this
     install(HotPathLimiter) {
         pathPrefixes = defaults
-        maxConcurrent = System.getenv("HOT_PATH_MAX_CONCURRENT")?.toIntOrNull()
-            ?: Runtime.getRuntime()
-                .availableProcessors()
-                .coerceAtLeast(BotLimits.RateLimit.HOT_PATH_MIN_ENV_PARALLELISM)
+        maxConcurrent =
+            app.resolveInt("HOT_PATH_MAX_CONCURRENT")
+                ?.coerceAtLeast(1)
+                ?: maxOf(2, Runtime.getRuntime().availableProcessors())
         retryAfter =
-            System.getenv("HOT_PATH_RETRY_AFTER_SEC")?.toLongOrNull()?.let(Duration::ofSeconds)
+            app.resolveLong("HOT_PATH_RETRY_AFTER_SEC")?.let(Duration::ofSeconds)
                 ?: BotLimits.RateLimit.HOT_PATH_DEFAULT_RETRY_AFTER
     }
 }

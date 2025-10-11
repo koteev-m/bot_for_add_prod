@@ -10,6 +10,7 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.call
 import io.ktor.server.application.createApplicationPlugin
 import io.ktor.server.application.install
+import io.ktor.server.application.pluginOrNull
 import io.ktor.server.request.header
 import io.ktor.server.request.host
 import io.ktor.server.request.path
@@ -19,6 +20,8 @@ import io.ktor.server.response.respondText
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
+import org.slf4j.LoggerFactory
 
 /**
  * Конфиг для rate-limiting.
@@ -64,6 +67,7 @@ object RateLimitMetrics {
     val ipBlocked = AtomicLong(0)
     val subjectBlocked = AtomicLong(0)
     val subjectStoreSize = AtomicLong(0)
+    val lastBlockedRequestId = AtomicReference<String?>(null)
 }
 
 private fun String?.toBooleanStrictOrNull(): Boolean? =
@@ -76,6 +80,7 @@ private fun String?.toBooleanStrictOrNull(): Boolean? =
 val RateLimitPlugin =
     createApplicationPlugin(name = "RateLimitPlugin", createConfiguration = ::RateLimitConfig) {
         val cfg = pluginConfig
+        val logger = LoggerFactory.getLogger("RateLimit")
 
         val ipBuckets = ConcurrentHashMap<String, TokenBucket>()
 
@@ -88,6 +93,7 @@ val RateLimitPlugin =
 
         onCall { call ->
             val path = call.request.path()
+            val requestId = call.request.header(HttpHeaders.XRequestId)
 
             // 1) IP limiting
             if (cfg.ipEnabled) {
@@ -98,7 +104,16 @@ val RateLimitPlugin =
                     }
                 if (!bucket.tryAcquire()) {
                     RateLimitMetrics.ipBlocked.incrementAndGet()
+                    RateLimitMetrics.lastBlockedRequestId.set(requestId)
                     call.response.header(HttpHeaders.RetryAfter, cfg.retryAfter.seconds.toString())
+                    logger.warn(
+                        "ratelimit.blocked type=ip ip={} path={} requestId={} host={}:{}",
+                        ip,
+                        path,
+                        requestId,
+                        call.request.host(),
+                        call.request.port(),
+                    )
                     call.respondText("Too Many Requests (IP limit)", status = HttpStatusCode.TooManyRequests)
                     return@onCall
                 }
@@ -112,7 +127,16 @@ val RateLimitPlugin =
                     RateLimitMetrics.subjectStoreSize.set(subjectStore.size())
                     if (!ok) {
                         RateLimitMetrics.subjectBlocked.incrementAndGet()
+                        RateLimitMetrics.lastBlockedRequestId.set(requestId)
                         call.response.header(HttpHeaders.RetryAfter, cfg.retryAfter.seconds.toString())
+                        logger.warn(
+                            "ratelimit.blocked type=subject subject={} path={} requestId={} host={}:{}",
+                            key,
+                            path,
+                            requestId,
+                            call.request.host(),
+                            call.request.port(),
+                        )
                         call.respondText("Too Many Requests (subject limit)", status = HttpStatusCode.TooManyRequests)
                         return@onCall
                     }
@@ -134,7 +158,22 @@ private fun clientIp(call: io.ktor.server.application.ApplicationCall): String {
 }
 
 fun Application.installRateLimitPluginDefaults() {
+    if (pluginOrNull(RateLimitPlugin) != null) return
+
+    val app = this
     install(RateLimitPlugin) {
+        app.resolveDouble("RL_IP_RPS")?.let { ipRps = it }
+        app.resolveDouble("RL_IP_BURST")?.let { ipBurst = it }
+        app.resolveDouble("RL_SUBJECT_RPS")?.let { subjectRps = it }
+        app.resolveDouble("RL_SUBJECT_BURST")?.let { subjectBurst = it }
+        app.resolveLong("RL_SUBJECT_TTL_SECONDS")?.let { subjectTtl = Duration.ofSeconds(it) }
+        app.resolveLong("RL_RETRY_AFTER_SECONDS")?.let { retryAfter = Duration.ofSeconds(it) }
+        app.resolveEnv("RL_SUBJECT_PATH_PREFIXES")?.split(',')?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.let { subjectPathPrefixes = it }
+        ipEnabled = app.resolveFlag("RL_IP_ENABLED", ipEnabled)
+        subjectEnabled = app.resolveFlag("RL_SUBJECT_ENABLED", subjectEnabled)
+
         subjectKeyExtractor = { call ->
             val initDataPrincipal =
                 if (call.attributes.contains(InitDataPrincipalKey)) {
