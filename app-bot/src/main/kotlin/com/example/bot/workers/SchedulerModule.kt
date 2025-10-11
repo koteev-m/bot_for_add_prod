@@ -5,9 +5,10 @@ import io.ktor.server.application.ApplicationStarted
 import org.koin.dsl.module
 import org.koin.ktor.ext.getKoin
 
-val schedulerModule = module {
-    single { CampaignScheduler(scope = get(), api = get()) }
-}
+val schedulerModule =
+    module {
+        single { CampaignScheduler(scope = get(), api = get()) }
+    }
 
 fun Application.launchCampaignSchedulerOnStart() {
     environment.monitor.subscribe(ApplicationStarted) {

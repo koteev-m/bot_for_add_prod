@@ -6,7 +6,6 @@ import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.ktor.server.application.ApplicationStarted
 import io.ktor.server.application.install
 import io.ktor.server.testing.testApplication
-import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -16,6 +15,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.koin.dsl.module
 import org.koin.ktor.plugin.Koin
+import java.util.concurrent.atomic.AtomicInteger
 
 class CampaignSchedulerWiringTest :
     StringSpec({

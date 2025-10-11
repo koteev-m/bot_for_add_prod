@@ -19,6 +19,7 @@ import com.example.bot.di.webAppModule
 import com.example.bot.guestlists.GuestListRepository
 import com.example.bot.metrics.AppMetricsBinder
 import com.example.bot.music.MusicService
+import com.example.bot.plugins.InitDataAuth.installInitDataAuth
 import com.example.bot.plugins.appConfig
 import com.example.bot.plugins.configureSecurity
 import com.example.bot.plugins.installAppConfig
@@ -26,8 +27,10 @@ import com.example.bot.plugins.installHotPathLimiterDefaults
 import com.example.bot.plugins.installMetrics
 import com.example.bot.plugins.installMigrationsAndDatabase
 import com.example.bot.plugins.installRateLimitPluginDefaults
+import com.example.bot.plugins.installRbacIfEnabled
 import com.example.bot.plugins.installRequestLogging
 import com.example.bot.plugins.meterRegistry
+import com.example.bot.plugins.rbacSampleRoute
 import com.example.bot.plugins.resolveFlag
 import com.example.bot.render.DefaultHallRenderer
 import com.example.bot.routes.availabilityApiRoutes
@@ -44,7 +47,6 @@ import com.example.bot.routes.musicRoutes
 import com.example.bot.routes.notifyRoutes
 import com.example.bot.routes.securedRoutes
 import com.example.bot.routes.telegramWebhookRoutes
-import com.example.bot.routes.webAppRoutes
 import com.example.bot.server.installServerTuning
 import com.example.bot.telegram.GuestFlowHandler
 import com.example.bot.telegram.Keyboards
@@ -57,6 +59,7 @@ import com.example.bot.telegram.ui.ChatUiSessionStore
 import com.example.bot.telegram.ui.InMemoryChatUiSessionStore
 import com.example.bot.text.BotTexts
 import com.example.bot.webapp.InitDataAuthConfig
+import com.example.bot.webapp.webAppRoutes
 import com.example.bot.workers.CampaignScheduler
 import com.example.bot.workers.OutboxWorker
 import com.example.bot.workers.launchCampaignSchedulerOnStart
@@ -165,6 +168,7 @@ fun Application.module() {
     installAppConfig()
     installRequestLogging()
     install(ContentNegotiation) { json() }
+    installInitDataAuth()
 
     val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN") ?: BotLimits.Demo.FALLBACK_TOKEN
     val initDataAuthConfig: InitDataAuthConfig.() -> Unit = { botTokenProvider = { telegramToken } }
@@ -230,6 +234,7 @@ fun Application.module() {
     launchCampaignSchedulerOnStart()
 
     configureSecurity()
+    installRbacIfEnabled()
 
     val outboxWorker by inject<OutboxWorker>()
     val bot by inject<TelegramBot>()
@@ -280,6 +285,7 @@ fun Application.module() {
 
     // Mini App статика, CSP, gzip
     webAppRoutes()
+    rbacSampleRoute()
 
     // Чек-ин верификатор (WebApp → POST /api/clubs/{clubId}/checkin/scan)
     checkinRoutes(repository = guestListRepository, initDataAuth = initDataAuthConfig)
