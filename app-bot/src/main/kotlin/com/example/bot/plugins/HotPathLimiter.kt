@@ -15,6 +15,7 @@ import java.time.Duration
 import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import org.slf4j.LoggerFactory
 
 /**
  * Конфигурация плагина лимитирования «горячих» путей.
@@ -106,6 +107,7 @@ fun Application.installHotPathLimiterDefaults() {
             "/api/guest-lists/import",
         )
     val app = this
+    val log = LoggerFactory.getLogger("HotPathLimiter")
     install(HotPathLimiter) {
         pathPrefixes = defaults
         maxConcurrent =
@@ -115,5 +117,7 @@ fun Application.installHotPathLimiterDefaults() {
         retryAfter =
             app.resolveLong("HOT_PATH_RETRY_AFTER_SEC")?.let(Duration::ofSeconds)
                 ?: BotLimits.RateLimit.HOT_PATH_DEFAULT_RETRY_AFTER
+
+        log.info("[plugin] HotPathLimiter enabled (paths={})", pathPrefixes)
     }
 }

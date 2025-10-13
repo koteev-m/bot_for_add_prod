@@ -11,6 +11,7 @@ import io.ktor.server.application.call
 import io.ktor.server.application.createApplicationPlugin
 import io.ktor.server.application.install
 import io.ktor.server.application.pluginOrNull
+import io.ktor.server.plugins.callid.callId
 import io.ktor.server.request.header
 import io.ktor.server.request.host
 import io.ktor.server.request.path
@@ -93,7 +94,9 @@ val RateLimitPlugin =
 
         onCall { call ->
             val path = call.request.path()
-            val requestId = call.request.header(HttpHeaders.XRequestId)
+            val requestId =
+                call.request.header(HttpHeaders.XRequestId)
+                    ?: call.callId
 
             // 1) IP limiting
             if (cfg.ipEnabled) {
@@ -160,6 +163,7 @@ private fun clientIp(call: io.ktor.server.application.ApplicationCall): String {
 fun Application.installRateLimitPluginDefaults() {
     if (pluginOrNull(RateLimitPlugin) != null) return
 
+    val log = LoggerFactory.getLogger("RateLimitPlugin")
     val app = this
     install(RateLimitPlugin) {
         app.resolveDouble("RL_IP_RPS")?.let { ipRps = it }
@@ -186,5 +190,7 @@ fun Application.installRateLimitPluginDefaults() {
                 ?: call.request.header("X-Telegram-Chat-Id")
                 ?: call.request.queryParameters["chatId"]
         }
+
+        log.info("[plugin] RateLimit enabled (maxConcurrent={}, retryAfter={})", subjectBurst, retryAfter)
     }
 }
