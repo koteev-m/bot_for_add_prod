@@ -102,6 +102,7 @@ dependencies {
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.testcontainers.junit)
     testImplementation(projects.coreTesting)
+    testImplementation(libs.opentelemetry.sdk.testing)
 }
 
 // =========================

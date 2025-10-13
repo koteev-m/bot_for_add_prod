@@ -4,12 +4,14 @@ import io.micrometer.tracing.Span
 import io.micrometer.tracing.Tracer
 import java.io.Closeable
 import java.util.UUID
+import org.slf4j.MDC
 
 data class PaymentsTraceMetadata(
     val httpRoute: String? = null,
     val paymentsPath: String? = null,
     val idempotencyKeyPresent: Boolean? = null,
     val bookingIdMasked: String? = null,
+    val requestId: String? = null,
 )
 
 interface PaymentsSpanScope {
@@ -66,6 +68,11 @@ fun PaymentsSpanScope.setRefundAmount(amountMinor: Long) {
 
 private fun Tracer.startPaymentsSpan(name: String): RealPaymentsSpanScope {
     val span = nextSpan().name(name).start()
+    val requestId = MDC.get("requestId") ?: MDC.get("callId")
+    if (!requestId.isNullOrBlank()) {
+        span.tag("request.id", requestId)
+    }
+    MDC.get("callId")?.takeIf { it.isNotBlank() }?.let { span.tag("call.id", it) }
     val scope = withSpan(span)
     return RealPaymentsSpanScope(span, scope)
 }
@@ -75,6 +82,10 @@ private fun PaymentsTraceMetadata.applyToScope(scope: PaymentsSpanScope) {
     paymentsPath?.let { scope.setAttribute("payments.path", it) }
     idempotencyKeyPresent?.let { scope.setAttribute("idempotency.key-present", it) }
     bookingIdMasked?.let { scope.setAttribute("booking.id", it) }
+    requestId?.let {
+        scope.setAttribute("request.id", it)
+        scope.setAttribute("call.id", it)
+    }
 }
 
 private object NoopPaymentsSpanScope : PaymentsSpanScope {

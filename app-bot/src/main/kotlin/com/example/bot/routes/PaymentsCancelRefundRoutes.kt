@@ -164,6 +164,7 @@ private fun io.ktor.server.routing.Route.registerCancelRefundHandlers(
                     paymentsPath = Path.Cancel.tag,
                     idempotencyKeyPresent = true,
                     bookingIdMasked = bookingLabel,
+                    requestId = callId,
                 )
 
             tracer.spanSuspending("payments.cancel.handler", metadata) {
@@ -262,6 +263,7 @@ private fun io.ktor.server.routing.Route.registerCancelRefundHandlers(
                     paymentsPath = Path.Refund.tag,
                     idempotencyKeyPresent = true,
                     bookingIdMasked = bookingLabel,
+                    requestId = callId,
                 )
 
             tracer.spanSuspending("payments.refund.handler", metadata) {

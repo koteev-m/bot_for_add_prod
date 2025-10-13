@@ -4,11 +4,13 @@ import com.example.bot.config.BotLimits
 import com.example.bot.data.booking.core.BookingCoreResult
 import com.example.bot.data.booking.core.OutboxMessage
 import com.example.bot.data.booking.core.OutboxRepository
+import io.micrometer.tracing.Tracer
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.JsonObject
 import org.slf4j.LoggerFactory
+import org.slf4j.MDC
 import java.time.Clock
 import java.time.Duration
 import kotlin.math.max
@@ -37,6 +39,7 @@ class OutboxWorker(
     private val idleDelay: Duration = Duration.ofSeconds(1),
     private val clock: Clock = Clock.systemUTC(),
     private val random: Random = Random.Default,
+    private val tracer: Tracer? = null,
 ) {
     private val logger = LoggerFactory.getLogger(OutboxWorker::class.java)
 
@@ -60,6 +63,26 @@ class OutboxWorker(
     }
 
     private suspend fun processMessage(message: OutboxMessage) {
+        val tracer = tracer
+        if (tracer == null) {
+            processMessageInternal(message)
+            return
+        }
+        val span = tracer.nextSpan().name("outbox.process").start()
+        span.tag("outbox.topic", message.topic)
+        span.tag("outbox.message_id", message.id.toString())
+        span.tag("outbox.attempt", (message.attempts + 1).toString())
+        currentRequestId()?.let { span.tag("request.id", it) }
+        val scope = tracer.withSpan(span)
+        try {
+            processMessageInternal(message)
+        } finally {
+            scope.close()
+            span.end()
+        }
+    }
+
+    private suspend fun processMessageInternal(message: OutboxMessage) {
         val outcome =
             try {
                 sendPort.send(message.topic, message.payload)
@@ -150,6 +173,8 @@ class OutboxWorker(
             random = random,
         )
 }
+
+private fun currentRequestId(): String? = MDC.get("requestId") ?: MDC.get("callId")
 
 internal fun computeBackoffDelay(
     attempts: Int,

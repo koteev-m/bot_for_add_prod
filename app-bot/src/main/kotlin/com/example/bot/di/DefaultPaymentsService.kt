@@ -18,6 +18,7 @@ import com.example.bot.telemetry.setRefundAmount
 import com.example.bot.telemetry.setResult
 import com.example.bot.telemetry.spanSuspending
 import io.micrometer.tracing.Tracer
+import org.slf4j.MDC
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -36,6 +37,8 @@ class DefaultPaymentsService(
     )
 
     private val ledgers = ConcurrentHashMap<Pair<Long, UUID>, BookingLedger>()
+
+    private fun currentRequestId(): String? = MDC.get("requestId") ?: MDC.get("callId")
 
     private sealed interface RefundOutcome {
         data class Success(val amount: Long, val remainderAfter: Long) : RefundOutcome
@@ -60,6 +63,7 @@ class DefaultPaymentsService(
                 paymentsPath = PaymentsMetrics.Path.Finalize.tag,
                 idempotencyKeyPresent = idemKey.isNotBlank(),
                 bookingIdMasked = maskBookingId(bookingId),
+                requestId = currentRequestId(),
             )
         return tracer.spanSuspending("payments.finalize", traceMetadata) {
             try {
@@ -110,6 +114,7 @@ class DefaultPaymentsService(
                 paymentsPath = PaymentsMetrics.Path.Cancel.tag,
                 idempotencyKeyPresent = idemKey.isNotBlank(),
                 bookingIdMasked = maskBookingId(bookingId),
+                requestId = currentRequestId(),
             )
         return tracer.spanSuspending("payments.cancel", traceMetadata) {
             try {
@@ -214,6 +219,7 @@ class DefaultPaymentsService(
                 paymentsPath = PaymentsMetrics.Path.Refund.tag,
                 idempotencyKeyPresent = idemKey.isNotBlank(),
                 bookingIdMasked = maskBookingId(bookingId),
+                requestId = currentRequestId(),
             )
         return tracer.spanSuspending("payments.refund", traceMetadata) {
             try {

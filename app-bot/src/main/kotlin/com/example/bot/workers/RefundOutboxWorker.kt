@@ -7,6 +7,7 @@ import com.example.bot.observability.MetricsProvider
 import com.example.bot.payments.provider.ProviderRefundClient
 import com.example.bot.payments.provider.ProviderRefundCommand
 import com.example.bot.payments.provider.ProviderRefundResult
+import com.example.bot.telemetry.spanSuspending
 import io.micrometer.core.instrument.Timer
 import io.micrometer.tracing.Tracer
 import kotlinx.coroutines.currentCoroutineContext
@@ -14,8 +15,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
-import com.example.bot.telemetry.spanSuspending
 import org.slf4j.LoggerFactory
+import org.slf4j.MDC
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -81,6 +82,9 @@ class RefundOutboxWorker(
         val startNanos = System.nanoTime()
         val result =
             tracer.spanSuspending("provider.refund") {
+                currentRequestId()?.let { setAttribute("request.id", it) }
+                setAttribute("outbox.topic", message.topic)
+                setAttribute("outbox.message_id", message.id)
                 bookingId?.let { setAttribute("booking.id", it) }
                 setAttribute("attempt", attempt.toLong())
                 val command =
@@ -206,6 +210,8 @@ class RefundOutboxWorker(
         backlogGaugeValue.set(pending)
     }
 }
+
+private fun currentRequestId(): String? = MDC.get("requestId") ?: MDC.get("callId")
 
 private fun envBool(name: String, default: Boolean): Boolean {
     val raw = System.getenv(name) ?: return default
