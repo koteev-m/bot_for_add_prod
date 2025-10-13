@@ -12,6 +12,7 @@ import com.example.bot.data.repo.ExposedClubRepository
 import com.example.bot.di.availabilityModule
 import com.example.bot.di.bookingModule
 import com.example.bot.di.healthModule
+import com.example.bot.di.paymentsModule
 import com.example.bot.di.musicModule
 import com.example.bot.di.notifyModule
 import com.example.bot.di.securityModule
@@ -46,6 +47,7 @@ import com.example.bot.routes.hallImageRoute
 import com.example.bot.routes.healthRoutes
 import com.example.bot.routes.musicRoutes
 import com.example.bot.routes.notifyRoutes
+import com.example.bot.routes.paymentsFinalizeRoutes
 import com.example.bot.routes.securedRoutes
 import com.example.bot.routes.telegramWebhookRoutes
 import com.example.bot.server.installServerTuning
@@ -230,6 +232,7 @@ fun Application.module() {
             schedulerModule,
             healthModule,
             notifyModule,
+            paymentsModule,
         )
     }
 
@@ -304,6 +307,7 @@ fun Application.module() {
     checkinCompatRoutes(repository = guestListRepository)
 
     bookingFinalizeRoutes(bookingService) { telegramToken }
+    paymentsFinalizeRoutes { telegramToken }
 
     // RBAC-защищённые брони: /api/clubs/{clubId}/bookings/hold|confirm
     securedRoutes(bookingService, initDataAuth = initDataAuthConfig)

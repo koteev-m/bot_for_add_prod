@@ -3,6 +3,7 @@ package com.example.bot.promo
 import com.example.bot.data.security.Role
 import com.example.bot.data.security.UserRepository
 import com.example.bot.data.security.UserRoleRepository
+import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.time.Clock
 import java.time.Duration
@@ -205,6 +206,28 @@ class PromoAttributionService(
         return result
     }
 
+    suspend fun attachDeepLink(
+        bookingId: UUID,
+        deepLink: String,
+    ): Boolean {
+        val decoded = extractTokenFromDeepLink(deepLink) ?: return false
+        val promoLink = promoLinkRepository.get(decoded.promoLinkId) ?: return false
+        if (decoded.clubId != null && promoLink.clubId != decoded.clubId) {
+            return false
+        }
+        val attributionResult =
+            promoAttributionRepository.attachUnique(
+                bookingId = bookingId,
+                promoLinkId = promoLink.id,
+                promoterUserId = promoLink.promoterUserId,
+                utmSource = promoLink.utmSource,
+                utmMedium = promoLink.utmMedium,
+                utmCampaign = promoLink.utmCampaign,
+                utmContent = promoLink.utmContent,
+            )
+        return attributionResult is PromoAttributionResult.Success
+    }
+
     override suspend fun attachPending(
         bookingId: UUID,
         telegramUserId: Long?,
@@ -225,5 +248,38 @@ class PromoAttributionService(
             is PromoAttributionResult.Success -> Unit
             is PromoAttributionResult.Failure -> Unit
         }
+    }
+
+    private fun extractTokenFromDeepLink(value: String): PromoLinkToken? {
+        val trimmed = value.trim()
+        if (trimmed.isEmpty()) return null
+
+        PromoLinkTokenCodec.decode(trimmed)?.let { return it }
+
+        val uri = runCatching { URI(trimmed) }.getOrNull()
+        val candidates =
+            buildList {
+                uri?.let { parsed ->
+                    parsed.query?.split('&')?.mapNotNull { param ->
+                        val parts = param.split('=', limit = 2)
+                        if (parts.size == 2) parts[1] else null
+                    }?.let { addAll(it) }
+                    parsed.fragment?.takeIf { it.isNotBlank() }?.let(::add)
+                    parsed.path?.substringAfterLast('/')?.takeIf { it.isNotBlank() }?.let(::add)
+                }
+                add(trimmed.substringAfterLast('/'))
+                add(trimmed.substringAfterLast('='))
+            }
+                .asSequence()
+                .map { candidate -> candidate.substringBefore('&').substringBefore('?').trim() }
+                .filter { it.isNotEmpty() }
+
+        for (candidate in candidates) {
+            val decoded = PromoLinkTokenCodec.decode(candidate)
+            if (decoded != null) {
+                return decoded
+            }
+        }
+        return null
     }
 }

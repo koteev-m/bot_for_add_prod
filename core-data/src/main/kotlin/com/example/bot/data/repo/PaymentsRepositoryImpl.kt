@@ -57,45 +57,27 @@ class PaymentsRepositoryImpl(private val db: Database) : PaymentsRepository {
         }
     }
 
-    override suspend fun markPending(id: UUID) = updateStatus(id, "PENDING")
+    override suspend fun markPending(id: UUID) = updateStatus(id, "PENDING", null)
 
     override suspend fun markCaptured(
         id: UUID,
         externalId: String?,
     ) {
-        return newSuspendedTransaction(db = db) {
-            PaymentsTable.update({ PaymentsTable.id eq id }) {
-                it[status] = "CAPTURED"
-                it[PaymentsTable.externalId] = externalId
-            }
-            Unit
-        }
+        updateStatus(id, "CAPTURED", externalId)
     }
 
     override suspend fun markDeclined(
         id: UUID,
         reason: String,
     ) {
-        return newSuspendedTransaction(db = db) {
-            PaymentsTable.update({ PaymentsTable.id eq id }) {
-                it[status] = "DECLINED"
-                it[externalId] = reason
-            }
-            Unit
-        }
+        updateStatus(id, "DECLINED", reason)
     }
 
     override suspend fun markRefunded(
         id: UUID,
         externalId: String?,
     ) {
-        return newSuspendedTransaction(db = db) {
-            PaymentsTable.update({ PaymentsTable.id eq id }) {
-                it[status] = "REFUNDED"
-                it[PaymentsTable.externalId] = externalId
-            }
-            Unit
-        }
+        updateStatus(id, "REFUNDED", externalId)
     }
 
     override suspend fun findByPayload(payload: String): PaymentRecord? {
@@ -108,13 +90,25 @@ class PaymentsRepositoryImpl(private val db: Database) : PaymentsRepository {
         }
     }
 
-    private suspend fun updateStatus(
+    override suspend fun findByIdempotencyKey(idempotencyKey: String): PaymentRecord? {
+        return newSuspendedTransaction(db = db) {
+            PaymentsTable
+                .selectAll()
+                .where { PaymentsTable.idempotencyKey eq idempotencyKey }
+                .firstOrNull()
+                ?.toRecord()
+        }
+    }
+
+    override suspend fun updateStatus(
         id: UUID,
         status: String,
+        externalId: String?,
     ) {
         return newSuspendedTransaction(db = db) {
             PaymentsTable.update({ PaymentsTable.id eq id }) {
                 it[PaymentsTable.status] = status
+                it[PaymentsTable.externalId] = externalId
             }
             Unit
         }
