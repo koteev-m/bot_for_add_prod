@@ -118,6 +118,7 @@ fun Application.paymentsFinalizeRoutes(miniAppBotTokenProvider: () -> String) {
                         paymentsPath = Path.Finalize.tag,
                         idempotencyKeyPresent = true,
                         bookingIdMasked = bookingLabel,
+                        requestId = callId,
                     )
 
                 logger.info { "[payments] finalize start club=$clubId booking=$bookingLabel requestId=$callId" }

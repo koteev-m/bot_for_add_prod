@@ -33,6 +33,7 @@ import com.example.bot.plugins.installMigrationsAndDatabase
 import com.example.bot.plugins.installRateLimitPluginDefaults
 import com.example.bot.plugins.installRbacIfEnabled
 import com.example.bot.plugins.installRequestLogging
+import com.example.bot.plugins.installTracingFromEnv
 import com.example.bot.plugins.MiniAppUserKey
 import com.example.bot.plugins.meterRegistry
 import com.example.bot.plugins.rbacSampleRoute
@@ -106,6 +107,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.koin.core.module.Module
 import org.koin.dsl.module
 import org.koin.ktor.ext.get
 import org.koin.ktor.ext.getKoin
@@ -181,6 +183,7 @@ fun Application.module() {
     installMigrationsAndDatabase()
     installAppConfig()
     installRequestLogging()
+    val tracingSetup = installTracingFromEnv()
     install(ContentNegotiation) { json() }
 
     val miniAppBotTokenProvider = { System.getenv("BOT_TOKEN") ?: "" }
@@ -232,9 +235,18 @@ fun Application.module() {
             single { CallbackQueryHandler(get(), get(), get()) }
         }
 
+    val tracingModule: Module? =
+        tracingSetup?.let { tracing ->
+            module {
+                single<Tracer> { tracing.tracer }
+            }
+        }
+
     install(Koin) {
         slf4jLogger()
-        modules(
+        val moduleList = mutableListOf<Module>()
+        tracingModule?.let { moduleList += it }
+        moduleList += listOf(
             bookingModule,
             securityModule,
             webAppModule,
@@ -248,6 +260,7 @@ fun Application.module() {
             refundWorkerModule,
             outboxAdminModule,
         )
+        modules(*moduleList.toTypedArray())
     }
 
     healthRoutes(get())

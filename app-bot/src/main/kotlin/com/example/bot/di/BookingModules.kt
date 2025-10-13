@@ -34,6 +34,7 @@ import com.example.bot.workers.OutboxWorker
 import com.example.bot.workers.SendOutcome
 import com.example.bot.workers.SendPort
 import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.tracing.Tracer
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.sql.Database
 import org.koin.dsl.module
@@ -151,7 +152,10 @@ val bookingModule =
                 get(),
             )
         }
-        single { OutboxWorker(get(), get()) }
+        single {
+            val tracer = runCatching { get<Tracer>() }.getOrNull()
+            OutboxWorker(get(), get(), tracer = tracer)
+        }
     }
 
 private object DummySendPort : SendPort {
