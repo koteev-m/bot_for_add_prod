@@ -5,6 +5,14 @@ import com.example.bot.payments.finalize.PaymentsFinalizeService
 import com.example.bot.plugins.MiniAppUserKey
 import com.example.bot.plugins.withMiniAppAuth
 import com.example.bot.promo.PromoAttributionService
+import com.example.bot.telemetry.PaymentsMetrics
+import com.example.bot.telemetry.PaymentsMetrics.Path
+import com.example.bot.telemetry.PaymentsMetrics.Result
+import com.example.bot.telemetry.PaymentsMetrics.Source
+import com.example.bot.telemetry.PaymentsTraceMetadata
+import com.example.bot.telemetry.maskBookingId
+import com.example.bot.telemetry.setResult
+import com.example.bot.telemetry.spanSuspending
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
@@ -14,14 +22,14 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
+import io.micrometer.tracing.Tracer
 import kotlinx.serialization.Serializable
-import org.slf4j.LoggerFactory
+import mu.KotlinLogging
 import org.koin.ktor.ext.getKoin
 import org.koin.ktor.ext.inject
 import java.util.UUID
-import kotlin.time.TimeSource
 
-private val logger = LoggerFactory.getLogger("PaymentsFinalizeRoute")
+private val logger = KotlinLogging.logger("PaymentsFinalizeRoute")
 
 @Serializable
 data class FinalizeRequest(
@@ -56,143 +64,123 @@ fun Application.paymentsFinalizeRoutes(miniAppBotTokenProvider: () -> String) {
             post("/finalize") {
                 val callId = call.callId ?: "unknown"
                 val metricsProvider = koin.getOrNull<MetricsProvider>()
-                val started = TimeSource.Monotonic.markNow()
-
-                fun recordDuration() {
-                    metricsProvider?.timer("payments.finalize.duration")?.record(
-                        started.elapsedNow().inWholeMilliseconds,
-                        java.util.concurrent.TimeUnit.MILLISECONDS,
-                    )
-                }
-                fun markOk(reason: String) {
-                    metricsProvider?.counter("payments.finalize.ok", "reason", reason)?.increment()
-                }
-                fun markFail(reason: String) {
-                    metricsProvider?.counter("payments.finalize.fail", "reason", reason)?.increment()
-                }
+                val tracer = koin.getOrNull<Tracer>()
 
                 val user = call.attributes[MiniAppUserKey]
                 val clubId = call.parameters["clubId"]?.toLongOrNull()
                 if (clubId == null) {
-                    markFail("invalid_club")
-                    recordDuration()
+                    PaymentsMetrics
+                        .timer(metricsProvider, Path.Finalize, Source.MiniApp)
+                        .record(Result.Validation)
+                    logger.warn { "[payments] finalize result=validation club=unknown booking=unknown requestId=$callId" }
                     call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid club id"))
                     return@post
                 }
 
                 val idempotencyKey = call.request.headers["Idempotency-Key"]?.trim()
                 if (idempotencyKey.isNullOrEmpty()) {
-                    markFail("missing_idem")
-                    recordDuration()
+                    PaymentsMetrics
+                        .timer(metricsProvider, Path.Finalize, Source.MiniApp)
+                        .record(Result.Validation)
+                    logger.warn { "[payments] finalize result=validation club=$clubId booking=unknown requestId=$callId" }
                     call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Idempotency-Key required"))
                     return@post
                 }
 
-                val request = runCatching { call.receive<FinalizeRequest>() }.getOrElse { throwable ->
-                    logger.warn(
-                        "payments.finalize.invalid_payload callId={} clubId={} bookingId={}",
-                        callId,
-                        clubId,
-                        call.request.queryParameters["bookingId"],
-                        throwable,
-                    )
-                    markFail("invalid_payload")
-                    recordDuration()
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid payload"))
-                    return@post
-                }
+                val request =
+                    runCatching { call.receive<FinalizeRequest>() }
+                        .getOrElse { throwable ->
+                            PaymentsMetrics
+                                .timer(metricsProvider, Path.Finalize, Source.MiniApp)
+                                .record(Result.Validation)
+                            logger.warn(throwable) {
+                                "[payments] finalize result=validation club=$clubId booking=unknown requestId=$callId"
+                            }
+                            call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid payload"))
+                            return@post
+                        }
 
                 val bookingId = runCatching { UUID.fromString(request.bookingId) }.getOrNull()
                 if (bookingId == null) {
-                    markFail("invalid_booking")
-                    recordDuration()
+                    PaymentsMetrics
+                        .timer(metricsProvider, Path.Finalize, Source.MiniApp)
+                        .record(Result.Validation)
+                    logger.warn { "[payments] finalize result=validation club=$clubId booking=unknown requestId=$callId" }
                     call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid bookingId"))
                     return@post
                 }
 
-                logger.info(
-                    "payments.finalize.start callId={} clubId={} bookingId={} userId={}",
-                    callId,
-                    clubId,
-                    bookingId,
-                    user.id,
-                )
+                val bookingLabel = maskBookingId(bookingId)
+                val timer = PaymentsMetrics.timer(metricsProvider, Path.Finalize, Source.MiniApp)
+                val metadata =
+                    PaymentsTraceMetadata(
+                        httpRoute = "/api/clubs/{clubId}/bookings/finalize",
+                        paymentsPath = Path.Finalize.tag,
+                        idempotencyKeyPresent = true,
+                        bookingIdMasked = bookingLabel,
+                    )
+
+                logger.info { "[payments] finalize start club=$clubId booking=$bookingLabel requestId=$callId" }
 
                 val promoService = koin.getOrNull<PromoAttributionService>()
-                try {
-                    val result = paymentsService.finalize(
-                        clubId = clubId,
-                        bookingId = bookingId,
-                        paymentToken = request.paymentToken,
-                        idemKey = idempotencyKey,
-                        actorUserId = user.id,
-                    )
+                tracer.spanSuspending("payments.finalize.handler", metadata) {
+                    try {
+                        val result =
+                            paymentsService.finalize(
+                                clubId = clubId,
+                                bookingId = bookingId,
+                                paymentToken = request.paymentToken,
+                                idemKey = idempotencyKey,
+                                actorUserId = user.id,
+                            )
 
-                    val promoAttached = if (!request.promoDeepLink.isNullOrBlank() && promoService != null) {
-                        runCatching { promoService.attachDeepLink(bookingId, request.promoDeepLink) }
-                            .onFailure { throwable ->
-                                logger.warn(
-                                    "payments.finalize.promo_attach_failed callId={} bookingId={}",
-                                    callId,
-                                    bookingId,
-                                    throwable,
-                                )
-                            }.getOrDefault(false)
-                    } else {
-                        false
+                        val promoAttached = if (!request.promoDeepLink.isNullOrBlank() && promoService != null) {
+                            runCatching { promoService.attachDeepLink(bookingId, request.promoDeepLink) }
+                                .onFailure { throwable ->
+                                    logger.warn(throwable) {
+                                        "[payments] finalize promo-attach-failed club=$clubId booking=$bookingLabel requestId=$callId"
+                                    }
+                                }.getOrDefault(false)
+                        } else {
+                            false
+                        }
+
+                        timer.record(Result.Ok)
+                        setResult(Result.Ok)
+                        logger.info {
+                            "[payments] finalize result=ok club=$clubId booking=$bookingLabel requestId=$callId status=${result.paymentStatus}"
+                        }
+                        call.respond(
+                            HttpStatusCode.OK,
+                            FinalizeResponse(
+                                status = "OK",
+                                bookingId = bookingId.toString(),
+                                paymentStatus = result.paymentStatus,
+                                promoAttached = promoAttached,
+                            ),
+                        )
+                    } catch (conflict: PaymentsFinalizeService.ConflictException) {
+                        timer.record(Result.Conflict)
+                        setResult(Result.Conflict)
+                        logger.warn(conflict) {
+                            "[payments] finalize result=conflict club=$clubId booking=$bookingLabel requestId=$callId"
+                        }
+                        call.respond(HttpStatusCode.Conflict, mapOf("error" to conflict.message))
+                    } catch (validation: PaymentsFinalizeService.ValidationException) {
+                        timer.record(Result.Validation)
+                        setResult(Result.Validation)
+                        logger.warn(validation) {
+                            "[payments] finalize result=validation club=$clubId booking=$bookingLabel requestId=$callId"
+                        }
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to validation.message))
+                    } catch (unexpected: Throwable) {
+                        timer.record(Result.Unexpected)
+                        setResult(Result.Unexpected)
+                        logger.error(unexpected) {
+                            "[payments] finalize result=unexpected club=$clubId booking=$bookingLabel requestId=$callId"
+                        }
+                        call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "internal"))
                     }
-
-                    markOk("ok")
-                    recordDuration()
-                    logger.info(
-                        "payments.finalize.success callId={} clubId={} bookingId={} status={}",
-                        callId,
-                        clubId,
-                        bookingId,
-                        result.paymentStatus,
-                    )
-                    call.respond(
-                        HttpStatusCode.OK,
-                        FinalizeResponse(
-                            status = "OK",
-                            bookingId = bookingId.toString(),
-                            paymentStatus = result.paymentStatus,
-                            promoAttached = promoAttached,
-                        ),
-                    )
-                } catch (conflict: PaymentsFinalizeService.ConflictException) {
-                    markFail("conflict")
-                    recordDuration()
-                    logger.warn(
-                        "payments.finalize.conflict callId={} clubId={} bookingId={}",
-                        callId,
-                        clubId,
-                        bookingId,
-                        conflict,
-                    )
-                    call.respond(HttpStatusCode.Conflict, mapOf("error" to conflict.message))
-                } catch (validation: PaymentsFinalizeService.ValidationException) {
-                    markFail("validation")
-                    recordDuration()
-                    logger.warn(
-                        "payments.finalize.validation callId={} clubId={} bookingId={}",
-                        callId,
-                        clubId,
-                        bookingId,
-                        validation,
-                    )
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to validation.message))
-                } catch (unexpected: Throwable) {
-                    markFail("unexpected")
-                    recordDuration()
-                    logger.error(
-                        "payments.finalize.error callId={} clubId={} bookingId={}",
-                        callId,
-                        clubId,
-                        bookingId,
-                        unexpected,
-                    )
-                    call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "internal"))
                 }
             }
         }

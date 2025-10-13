@@ -10,6 +10,14 @@ import com.example.bot.data.security.Role
 import com.example.bot.security.rbac.RbacPlugin
 import com.example.bot.security.rbac.authorize
 import com.example.bot.security.rbac.clubScoped
+import com.example.bot.telemetry.PaymentsMetrics
+import com.example.bot.telemetry.PaymentsMetrics.Path
+import com.example.bot.telemetry.PaymentsMetrics.Result
+import com.example.bot.telemetry.PaymentsMetrics.Source
+import com.example.bot.telemetry.PaymentsTraceMetadata
+import com.example.bot.telemetry.maskBookingId
+import com.example.bot.telemetry.setResult
+import com.example.bot.telemetry.spanSuspending
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
@@ -24,9 +32,8 @@ import kotlinx.serialization.Serializable
 import mu.KotlinLogging
 import org.koin.core.Koin
 import org.koin.ktor.ext.getKoin
+import io.micrometer.tracing.Tracer
 import java.util.UUID
-import java.util.concurrent.TimeUnit
-import kotlin.time.TimeSource
 
 private val logger = KotlinLogging.logger("PaymentsCancelRefundRoutes")
 
@@ -90,104 +97,93 @@ private fun io.ktor.server.routing.Route.registerCancelRefundHandlers(
     koin: Koin,
 ) {
     val metricsProvider = koin.getOrNull<MetricsProvider>()
+    val tracer = koin.getOrNull<Tracer>()
     val paymentsService = koin.get<PaymentsService>()
 
     if (cancelEnabled) {
         post("/{bookingId}/cancel") {
             val callId = call.callId ?: "unknown"
-            val started = TimeSource.Monotonic.markNow()
-            val timer = metricsProvider?.timer("booking.cancel.duration")
-
-            fun recordDuration() {
-                timer?.record(started.elapsedNow().inWholeMilliseconds, TimeUnit.MILLISECONDS)
-            }
-
-            fun markOk() {
-                metricsProvider?.counter("booking.cancel.ok", "reason", "ok")?.increment()
-            }
-
-            fun markFail(reason: String) {
-                metricsProvider?.counter("booking.cancel.fail", "reason", reason)?.increment()
-            }
-
             val user = call.attributes[MiniAppUserKey]
             val clubId = call.parameters["clubId"]?.toLongOrNull()
             if (clubId == null) {
-                markFail("validation")
-                recordDuration()
+                PaymentsMetrics
+                    .timer(metricsProvider, Path.Cancel, Source.MiniApp)
+                    .record(Result.Validation)
+                logger.warn { "[payments] cancel result=validation club=unknown booking=unknown requestId=$callId" }
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid_club"))
                 return@post
             }
 
             val bookingId = call.parameters["bookingId"]?.let { raw -> runCatching { UUID.fromString(raw) }.getOrNull() }
             if (bookingId == null) {
-                markFail("validation")
-                recordDuration()
+                PaymentsMetrics
+                    .timer(metricsProvider, Path.Cancel, Source.MiniApp)
+                    .record(Result.Validation)
+                logger.warn { "[payments] cancel result=validation club=$clubId booking=unknown requestId=$callId" }
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid_booking"))
                 return@post
             }
 
             val idempotencyKey = call.request.headers["Idempotency-Key"]?.trim()
             if (idempotencyKey.isNullOrEmpty()) {
-                markFail("validation")
-                recordDuration()
+                PaymentsMetrics
+                    .timer(metricsProvider, Path.Cancel, Source.MiniApp)
+                    .record(Result.Validation)
+                logger.warn { "[payments] cancel result=validation club=$clubId booking=${maskBookingId(bookingId)} requestId=$callId" }
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Idempotency-Key required"))
                 return@post
             }
 
+            val bookingLabel = maskBookingId(bookingId)
+            val timer = PaymentsMetrics.timer(metricsProvider, Path.Cancel, Source.MiniApp)
+
             val payload =
                 runCatching { call.receive<CancelRequest>() }
                     .getOrElse { throwable ->
+                        timer.record(Result.Validation)
                         logger.warn(throwable) {
-                            "[payments] cancel invalid payload callId=$callId clubId=$clubId bookingId=$bookingId"
+                            "[payments] cancel result=validation club=$clubId booking=$bookingLabel requestId=$callId"
                         }
-                        markFail("validation")
-                        recordDuration()
                         call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid_payload"))
                         return@post
                     }
 
-            runCatching {
-                paymentsService.cancel(
-                    clubId = clubId,
-                    bookingId = bookingId,
-                    reason = payload.reason,
-                    idemKey = idempotencyKey,
-                    actorUserId = user.id,
+            val metadata =
+                PaymentsTraceMetadata(
+                    httpRoute = "/api/clubs/{clubId}/bookings/{bookingId}/cancel",
+                    paymentsPath = Path.Cancel.tag,
+                    idempotencyKeyPresent = true,
+                    bookingIdMasked = bookingLabel,
                 )
-            }.onSuccess {
-                markOk()
-                recordDuration()
-                logger.info {
-                    "[payments] cancel success callId=$callId clubId=$clubId bookingId=$bookingId"
-                }
-                call.respond(CancelResponse(status = "CANCELLED", bookingId = bookingId.toString()))
-            }.onFailure { throwable ->
-                when (throwable) {
-                    is PaymentsService.ValidationException -> {
-                        markFail("validation")
-                        recordDuration()
-                        logger.warn(throwable) {
-                            "[payments] cancel validation callId=$callId clubId=$clubId bookingId=$bookingId"
-                        }
-                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to throwable.message))
-                    }
-                    is PaymentsService.ConflictException -> {
-                        markFail("conflict")
-                        recordDuration()
-                        logger.info(throwable) {
-                            "[payments] cancel conflict callId=$callId clubId=$clubId bookingId=$bookingId"
-                        }
-                        call.respond(HttpStatusCode.Conflict, mapOf("error" to throwable.message))
-                    }
-                    else -> {
-                        markFail("unexpected")
-                        recordDuration()
-                        logger.error(throwable) {
-                            "[payments] cancel unexpected callId=$callId clubId=$clubId bookingId=$bookingId"
-                        }
-                        call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "internal"))
-                    }
+
+            tracer.spanSuspending("payments.cancel.handler", metadata) {
+                try {
+                    paymentsService.cancel(
+                        clubId = clubId,
+                        bookingId = bookingId,
+                        reason = payload.reason,
+                        idemKey = idempotencyKey,
+                        actorUserId = user.id,
+                    )
+                    timer.record(Result.Ok)
+                    setResult(Result.Ok)
+                    logger.info { "[payments] cancel result=ok club=$clubId booking=$bookingLabel requestId=$callId" }
+                    call.respond(CancelResponse(status = "CANCELLED", bookingId = bookingId.toString()))
+                } catch (validation: PaymentsService.ValidationException) {
+                    timer.record(Result.Validation)
+                    setResult(Result.Validation)
+                    logger.warn(validation) { "[payments] cancel result=validation club=$clubId booking=$bookingLabel requestId=$callId" }
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to validation.message))
+                } catch (conflict: PaymentsService.ConflictException) {
+                    timer.record(Result.Conflict)
+                    setResult(Result.Conflict)
+                    logger.warn(conflict) { "[payments] cancel result=conflict club=$clubId booking=$bookingLabel requestId=$callId" }
+                    call.respond(HttpStatusCode.Conflict, mapOf("error" to conflict.message))
+                } catch (unexpected: Throwable) {
+                    timer.record(Result.Unexpected)
+                    setResult(Result.Unexpected)
+                    logger.error(unexpected) { "[payments] cancel result=unexpected club=$clubId booking=$bookingLabel requestId=$callId" }
+                    call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "internal"))
                 }
             }
         }
@@ -196,113 +192,99 @@ private fun io.ktor.server.routing.Route.registerCancelRefundHandlers(
     if (refundEnabled) {
         post("/{bookingId}/refund") {
             val callId = call.callId ?: "unknown"
-            val started = TimeSource.Monotonic.markNow()
-            val timer = metricsProvider?.timer("payments.refund.duration")
-
-            fun recordDuration() {
-                timer?.record(started.elapsedNow().inWholeMilliseconds, TimeUnit.MILLISECONDS)
-            }
-
-            fun markOk() {
-                metricsProvider?.counter("payments.refund.ok", "reason", "ok")?.increment()
-            }
-
-            fun markFail(reason: String) {
-                metricsProvider?.counter("payments.refund.fail", "reason", reason)?.increment()
-            }
-
             val user = call.attributes[MiniAppUserKey]
             val clubId = call.parameters["clubId"]?.toLongOrNull()
             if (clubId == null) {
-                markFail("validation")
-                recordDuration()
+                PaymentsMetrics
+                    .timer(metricsProvider, Path.Refund, Source.MiniApp)
+                    .record(Result.Validation)
+                logger.warn { "[payments] refund result=validation club=unknown booking=unknown requestId=$callId" }
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid_club"))
                 return@post
             }
 
             val bookingId = call.parameters["bookingId"]?.let { raw -> runCatching { UUID.fromString(raw) }.getOrNull() }
             if (bookingId == null) {
-                markFail("validation")
-                recordDuration()
+                PaymentsMetrics
+                    .timer(metricsProvider, Path.Refund, Source.MiniApp)
+                    .record(Result.Validation)
+                logger.warn { "[payments] refund result=validation club=$clubId booking=unknown requestId=$callId" }
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid_booking"))
                 return@post
             }
 
             val idempotencyKey = call.request.headers["Idempotency-Key"]?.trim()
             if (idempotencyKey.isNullOrEmpty()) {
-                markFail("validation")
-                recordDuration()
+                PaymentsMetrics
+                    .timer(metricsProvider, Path.Refund, Source.MiniApp)
+                    .record(Result.Validation)
+                logger.warn { "[payments] refund result=validation club=$clubId booking=${maskBookingId(bookingId)} requestId=$callId" }
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Idempotency-Key required"))
                 return@post
             }
 
+            val bookingLabel = maskBookingId(bookingId)
+            val timer = PaymentsMetrics.timer(metricsProvider, Path.Refund, Source.MiniApp)
+
             val payload =
                 runCatching { call.receive<RefundRequest>() }
                     .getOrElse { throwable ->
+                        timer.record(Result.Validation)
                         logger.warn(throwable) {
-                            "[payments] refund invalid payload callId=$callId clubId=$clubId bookingId=$bookingId"
+                            "[payments] refund result=validation club=$clubId booking=$bookingLabel requestId=$callId"
                         }
-                        markFail("validation")
-                        recordDuration()
                         call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid_payload"))
                         return@post
                     }
 
-            runCatching {
-                paymentsService.refund(
-                    clubId = clubId,
-                    bookingId = bookingId,
-                    amountMinor = payload.amountMinor,
-                    idemKey = idempotencyKey,
-                    actorUserId = user.id,
+            val metadata =
+                PaymentsTraceMetadata(
+                    httpRoute = "/api/clubs/{clubId}/bookings/{bookingId}/refund",
+                    paymentsPath = Path.Refund.tag,
+                    idempotencyKeyPresent = true,
+                    bookingIdMasked = bookingLabel,
                 )
-            }.onSuccess { result ->
-                markOk()
-                recordDuration()
-                logger.info {
-                    "[payments] refund success callId=$callId clubId=$clubId bookingId=$bookingId"
-                }
-                call.respond(
-                    RefundResponse(
-                        status = "REFUNDED",
-                        bookingId = bookingId.toString(),
-                        refundAmountMinor = result.refundAmountMinor,
-                    ),
-                )
-            }.onFailure { throwable ->
-                when (throwable) {
-                    is PaymentsService.ValidationException -> {
-                        markFail("validation")
-                        recordDuration()
-                        logger.warn(throwable) {
-                            "[payments] refund validation callId=$callId clubId=$clubId bookingId=$bookingId"
-                        }
-                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to throwable.message))
-                    }
-                    is PaymentsService.ConflictException -> {
-                        markFail("conflict")
-                        recordDuration()
-                        logger.info(throwable) {
-                            "[payments] refund conflict callId=$callId clubId=$clubId bookingId=$bookingId"
-                        }
-                        call.respond(HttpStatusCode.Conflict, mapOf("error" to throwable.message))
-                    }
-                    is PaymentsService.UnprocessableException -> {
-                        markFail("unprocessable")
-                        recordDuration()
-                        logger.info(throwable) {
-                            "[payments] refund unprocessable callId=$callId clubId=$clubId bookingId=$bookingId"
-                        }
-                        call.respond(HttpStatusCode.UnprocessableEntity, mapOf("error" to throwable.message))
-                    }
-                    else -> {
-                        markFail("unexpected")
-                        recordDuration()
-                        logger.error(throwable) {
-                            "[payments] refund unexpected callId=$callId clubId=$clubId bookingId=$bookingId"
-                        }
-                        call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "internal"))
-                    }
+
+            tracer.spanSuspending("payments.refund.handler", metadata) {
+                try {
+                    val result =
+                        paymentsService.refund(
+                            clubId = clubId,
+                            bookingId = bookingId,
+                            amountMinor = payload.amountMinor,
+                            idemKey = idempotencyKey,
+                            actorUserId = user.id,
+                        )
+                    timer.record(Result.Ok)
+                    setResult(Result.Ok)
+                    logger.info { "[payments] refund result=ok club=$clubId booking=$bookingLabel requestId=$callId" }
+                    call.respond(
+                        RefundResponse(
+                            status = "REFUNDED",
+                            bookingId = bookingId.toString(),
+                            refundAmountMinor = result.refundAmountMinor,
+                        ),
+                    )
+                } catch (validation: PaymentsService.ValidationException) {
+                    timer.record(Result.Validation)
+                    setResult(Result.Validation)
+                    logger.warn(validation) { "[payments] refund result=validation club=$clubId booking=$bookingLabel requestId=$callId" }
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to validation.message))
+                } catch (conflict: PaymentsService.ConflictException) {
+                    timer.record(Result.Conflict)
+                    setResult(Result.Conflict)
+                    logger.warn(conflict) { "[payments] refund result=conflict club=$clubId booking=$bookingLabel requestId=$callId" }
+                    call.respond(HttpStatusCode.Conflict, mapOf("error" to conflict.message))
+                } catch (unprocessable: PaymentsService.UnprocessableException) {
+                    timer.record(Result.Unprocessable)
+                    setResult(Result.Unprocessable)
+                    logger.warn(unprocessable) { "[payments] refund result=unprocessable club=$clubId booking=$bookingLabel requestId=$callId" }
+                    call.respond(HttpStatusCode.UnprocessableEntity, mapOf("error" to unprocessable.message))
+                } catch (unexpected: Throwable) {
+                    timer.record(Result.Unexpected)
+                    setResult(Result.Unexpected)
+                    logger.error(unexpected) { "[payments] refund result=unexpected club=$clubId booking=$bookingLabel requestId=$callId" }
+                    call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "internal"))
                 }
             }
         }

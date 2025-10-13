@@ -241,6 +241,21 @@ def build_report() -> str:
     sections.append(ktlint_summary.as_markdown())
     sections.append(detekt_summary.as_markdown())
 
+    sections.append("## Observability snapshot")
+    sections.append(
+        textwrap.dedent(
+            """
+            ### Payments Metrics
+            * payments.finalize.duration
+            * payments.cancel.duration
+            * payments.refund.duration
+            * payments.idempotent.hit
+            * payments.outbox.enqueued
+            * payments.errors
+            """
+        ).strip(),
+    )
+
     additional_sections: List[Tuple[str, str]] = []
     if wireup_tables:
         additional_sections.append(("Wireup Scan", wireup_tables))
