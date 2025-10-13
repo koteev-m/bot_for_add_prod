@@ -1,7 +1,11 @@
 package com.example.bot.data.repo
 
 import com.example.bot.payments.PaymentsRepository
+import com.example.bot.payments.PaymentsRepository.Action
 import com.example.bot.payments.PaymentsRepository.PaymentRecord
+import com.example.bot.payments.PaymentsRepository.Result
+import com.example.bot.payments.PaymentsRepository.Result.Status
+import com.example.bot.payments.PaymentsRepository.SavedAction
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.Table
@@ -30,6 +34,21 @@ class PaymentsRepositoryImpl(private val db: Database) : PaymentsRepository {
         val createdAt = timestamp("created_at").defaultExpression(CurrentTimestamp())
         val updatedAt = timestamp("updated_at").defaultExpression(CurrentTimestamp())
         override val primaryKey = PrimaryKey(id)
+    }
+
+    object PaymentActionsTable : Table("payment_actions") {
+        val id = long("id").autoIncrement()
+        val bookingId = uuid("booking_id")
+        val idempotencyKey = text("idempotency_key").uniqueIndex()
+        val action = text("action")
+        val status = text("status")
+        val reason = text("reason").nullable()
+        val createdAt = timestamp("created_at").defaultExpression(CurrentTimestamp())
+        override val primaryKey = PrimaryKey(id)
+
+        init {
+            index(isUnique = false, columns = arrayOf(bookingId))
+        }
     }
 
     override suspend fun createInitiated(
@@ -100,6 +119,37 @@ class PaymentsRepositoryImpl(private val db: Database) : PaymentsRepository {
         }
     }
 
+    override suspend fun recordAction(
+        bookingId: UUID,
+        key: String,
+        action: Action,
+        result: Result,
+    ): SavedAction {
+        return newSuspendedTransaction(db = db) {
+            PaymentActionsTable
+                .insert {
+                    it[PaymentActionsTable.bookingId] = bookingId
+                    it[PaymentActionsTable.idempotencyKey] = key
+                    it[PaymentActionsTable.action] = action.name
+                    it[PaymentActionsTable.status] = result.status.name
+                    it[PaymentActionsTable.reason] = result.reason
+                }.resultedValues!!
+                .first()
+                .toSavedAction()
+        }
+    }
+
+    override suspend fun findActionByIdempotencyKey(key: String): SavedAction? {
+        return newSuspendedTransaction(db = db) {
+            PaymentActionsTable
+                .selectAll()
+                .where { PaymentActionsTable.idempotencyKey eq key }
+                .limit(1)
+                .firstOrNull()
+                ?.toSavedAction()
+        }
+    }
+
     override suspend fun updateStatus(
         id: UUID,
         status: String,
@@ -127,6 +177,20 @@ class PaymentsRepositoryImpl(private val db: Database) : PaymentsRepository {
             idempotencyKey = this[PaymentsTable.idempotencyKey],
             createdAt = this[PaymentsTable.createdAt],
             updatedAt = this[PaymentsTable.updatedAt],
+        )
+    }
+
+    private fun ResultRow.toSavedAction(): SavedAction {
+        return SavedAction(
+            id = this[PaymentActionsTable.id],
+            bookingId = this[PaymentActionsTable.bookingId],
+            idempotencyKey = this[PaymentActionsTable.idempotencyKey],
+            action = Action.valueOf(this[PaymentActionsTable.action]),
+            result = Result(
+                status = Status.valueOf(this[PaymentActionsTable.status]),
+                reason = this[PaymentActionsTable.reason],
+            ),
+            createdAt = this[PaymentActionsTable.createdAt],
         )
     }
 }

@@ -22,6 +22,29 @@ interface PaymentsRepository {
         val updatedAt: Instant,
     )
 
+    enum class Action { CANCEL, REFUND }
+
+    data class Result(
+        val status: Status,
+        val reason: String?,
+    ) {
+        enum class Status {
+            OK,
+            ALREADY,
+            CONFLICT,
+            ERROR,
+        }
+    }
+
+    data class SavedAction(
+        val id: Long,
+        val bookingId: UUID,
+        val idempotencyKey: String,
+        val action: Action,
+        val result: Result,
+        val createdAt: Instant,
+    )
+
     @Suppress("LongParameterList")
     suspend fun createInitiated(
         bookingId: UUID?,
@@ -52,6 +75,15 @@ interface PaymentsRepository {
     suspend fun findByPayload(payload: String): PaymentRecord?
 
     suspend fun findByIdempotencyKey(idempotencyKey: String): PaymentRecord?
+
+    suspend fun recordAction(
+        bookingId: UUID,
+        key: String,
+        action: Action,
+        result: Result,
+    ): SavedAction
+
+    suspend fun findActionByIdempotencyKey(key: String): SavedAction?
 
     suspend fun updateStatus(
         id: UUID,

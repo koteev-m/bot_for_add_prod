@@ -6,6 +6,7 @@ import com.example.bot.data.booking.core.AuditLogRepository
 import com.example.bot.data.booking.core.BookingHoldRepository
 import com.example.bot.data.booking.core.BookingRepository
 import com.example.bot.data.booking.core.OutboxRepository
+import com.example.bot.data.booking.core.PaymentsBookingRepository
 import com.example.bot.data.club.GuestListRepositoryImpl
 import com.example.bot.data.notifications.NotificationsOutboxRepository
 import com.example.bot.data.promo.BookingTemplateRepositoryImpl
@@ -49,6 +50,7 @@ val bookingModule =
 
         // Core repos
         single { BookingRepository(get()) }
+        single<PaymentsBookingRepository> { get<BookingRepository>() }
         single { BookingHoldRepository(get()) }
         single { OutboxRepository(get()) }
         single { NotificationsOutboxRepository(get()) }

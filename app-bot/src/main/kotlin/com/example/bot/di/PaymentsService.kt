@@ -4,7 +4,16 @@ import java.util.UUID
 
 interface PaymentsService {
     data class FinalizeResult(val paymentStatus: String)
-    data class RefundResult(val refundAmountMinor: Long)
+    data class CancelResult(
+        val bookingId: UUID,
+        val idempotent: Boolean,
+        val alreadyCancelled: Boolean,
+    )
+
+    data class RefundResult(
+        val refundAmountMinor: Long,
+        val idempotent: Boolean,
+    )
 
     class ValidationException(message: String) : RuntimeException(message)
     class ConflictException(message: String) : RuntimeException(message)
@@ -24,7 +33,7 @@ interface PaymentsService {
         reason: String?,
         idemKey: String,
         actorUserId: Long,
-    )
+    ): CancelResult
 
     suspend fun refund(
         clubId: Long,
