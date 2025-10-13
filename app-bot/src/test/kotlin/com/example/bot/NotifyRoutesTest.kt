@@ -1,5 +1,6 @@
 package com.example.bot
 
+import com.example.bot.di.notifyModule
 import com.example.bot.plugins.DataSourceHolder
 import com.example.bot.plugins.configureSecurity
 import com.example.bot.routes.CampaignDto
@@ -24,6 +25,8 @@ import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
+import org.koin.ktor.ext.get
+import org.koin.ktor.plugin.Koin
 import org.flywaydb.core.Flyway
 import org.h2.jdbcx.JdbcDataSource
 import org.jetbrains.exposed.sql.Database
@@ -56,8 +59,12 @@ class NotifyRoutesTest :
             val dataSource = prepareSecurityData()
             DataSourceHolder.dataSource = dataSource
             install(ContentNegotiation) { json() }
+            install(Koin) { modules(notifyModule) }
             configureSecurity()
-            notifyRoutes(TxNotifyService(), CampaignService())
+            notifyRoutes(
+                tx = get<TxNotifyService>(),
+                campaigns = get<CampaignService>(),
+            )
         }
 
         "enqueue tx" {

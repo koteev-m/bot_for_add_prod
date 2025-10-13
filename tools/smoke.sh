@@ -51,6 +51,35 @@ run_optional_test() {
   warn "Targeted tests for pattern ${pattern} failed (continuing)"
 }
 
+has_test() {
+  local module_path="$1"
+  local pattern="$2"
+  local test_dir="${REPO_ROOT}/${module_path}/src/test/kotlin"
+
+  if [[ ! -d "${test_dir}" ]]; then
+    return 1
+  fi
+
+  grep -R -n --include='*Test.kt' "${pattern}" "${test_dir}" >/dev/null 2>&1
+}
+
+run_targeted_smoke() {
+  local pattern="$1"
+  local hint="$2"
+  local module="app-bot"
+
+  if has_test "${module}" "${pattern//\*/}"; then
+    log "Running targeted ${hint} (${pattern})"
+    if ./gradlew -q :${module}:test --tests "${pattern}"; then
+      log "Targeted ${hint} (${pattern}) succeeded"
+    else
+      warn "Targeted ${hint} (${pattern}) failed (continuing)"
+    fi
+  else
+    echo "[smoke] skip targeted ${hint} (${pattern}) — no match found"
+  fi
+}
+
 clean_test_results() {
   rm -rf "${APP_BOT_TEST_RESULTS}"
 }
@@ -102,8 +131,9 @@ main() {
   prepare_dirs
   run_gradle_build
 
-  run_optional_test '*SmokeRoutesTest'
-  run_optional_test '*HealthRoutesTest'
+  run_targeted_smoke '*SmokeRoutesTest' 'routes smoke'
+  run_targeted_smoke '*HealthRoutesTest' 'health/ready smoke'
+  run_targeted_smoke '*NotifyRoutesWiringTest' 'notify routes smoke'
 
   run_app_bot_tests "default" "${DEFAULT_RESULTS_DIR}" "false"
   run_app_bot_tests "notify" "${NOTIFY_RESULTS_DIR}" "true"
