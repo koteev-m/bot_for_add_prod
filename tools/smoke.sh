@@ -134,6 +134,7 @@ main() {
   run_targeted_smoke '*SmokeRoutesTest' 'routes smoke'
   run_targeted_smoke '*HealthRoutesTest' 'health/ready smoke'
   run_targeted_smoke '*NotifyRoutesWiringTest' 'notify routes smoke'
+  run_targeted_smoke '*PaymentsObservabilitySmokeTest' 'payments observability'
 
   run_app_bot_tests "default" "${DEFAULT_RESULTS_DIR}" "false"
   run_app_bot_tests "notify" "${NOTIFY_RESULTS_DIR}" "true"
