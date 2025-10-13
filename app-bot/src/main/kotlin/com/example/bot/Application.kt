@@ -18,9 +18,12 @@ import com.example.bot.di.securityModule
 import com.example.bot.di.webAppModule
 import com.example.bot.di.paymentsModule
 import com.example.bot.di.refundWorkerModule
+import com.example.bot.di.outboxAdminModule
+import com.example.bot.data.repo.OutboxAdminRepository
 import com.example.bot.guestlists.GuestListRepository
 import com.example.bot.metrics.AppMetricsBinder
 import com.example.bot.music.MusicService
+import com.example.bot.observability.MetricsProvider
 import com.example.bot.plugins.appConfig
 import com.example.bot.plugins.configureSecurity
 import com.example.bot.plugins.installAppConfig
@@ -48,6 +51,7 @@ import com.example.bot.routes.hallImageRoute
 import com.example.bot.routes.healthRoutes
 import com.example.bot.routes.musicRoutes
 import com.example.bot.routes.notifyRoutes
+import com.example.bot.routes.outboxAdminRoutes
 import com.example.bot.routes.paymentsCancelRefundRoutes
 import com.example.bot.routes.paymentsFinalizeRoutes
 import com.example.bot.routes.securedRoutes
@@ -95,6 +99,7 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
+import io.micrometer.tracing.Tracer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -238,6 +243,7 @@ fun Application.module() {
             notifyModule,
             paymentsModule,
             refundWorkerModule,
+            outboxAdminModule,
         )
     }
 
@@ -257,6 +263,7 @@ fun Application.module() {
     val bookingService by inject<BookingService>()
     val guestListRepository: GuestListRepository = get()
     val availability: AvailabilityService = get()
+    val outboxAdminRepository: OutboxAdminRepository = get()
     val guestFlowHandler by inject<GuestFlowHandler>()
     val clubRepository by inject<ClubRepository>()
     val startMenuLogger = LoggerFactory.getLogger("TelegramStartMenu")
@@ -315,6 +322,11 @@ fun Application.module() {
     // Mini App статика, CSP, gzip
     webAppRoutes()
     rbacSampleRoute()
+
+    val koin = getKoin()
+    val metricsProvider = runCatching { koin.get<MetricsProvider>() }.getOrNull()
+    val tracer = runCatching { koin.get<Tracer>() }.getOrNull()
+    outboxAdminRoutes(outboxAdminRepository, metricsProvider, tracer)
 
     // Чек-ин верификатор (WebApp → POST /api/clubs/{clubId}/checkin/scan)
     checkinRoutes(repository = guestListRepository, initDataAuth = initDataAuthConfig)

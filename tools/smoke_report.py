@@ -19,6 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SMOKE_DIR = REPO_ROOT / "build" / "reports" / "smoke"
 DEFAULT_RESULTS_DIR = SMOKE_DIR / "test-default"
 NOTIFY_RESULTS_DIR = SMOKE_DIR / "test-notify"
+ADMIN_RESULTS_DIR = SMOKE_DIR / "test-admin"
 KTLINT_REPORT_DIR = REPO_ROOT / "app-bot" / "build" / "reports" / "ktlint"
 DETEKT_REPORT_DIR = REPO_ROOT / "app-bot" / "build" / "reports" / "detekt"
 WIREUP_REPORT = REPO_ROOT / "build" / "reports" / "wireup" / "README.md"
@@ -209,6 +210,7 @@ def extract_tables(report_path: Path) -> str:
 def build_report() -> str:
     default_totals = parse_junit_directory(DEFAULT_RESULTS_DIR)
     notify_totals = parse_junit_directory(NOTIFY_RESULTS_DIR)
+    admin_totals = parse_junit_directory(ADMIN_RESULTS_DIR)
 
     ktlint_summary = parse_lint_reports(KTLINT_REPORT_DIR, "ktlint")
     detekt_summary = parse_lint_reports(DETEKT_REPORT_DIR, "detekt")
@@ -236,6 +238,10 @@ def build_report() -> str:
     sections.append("## Test Results")
     sections.append(default_totals.as_markdown(":app-bot:test (default)"))
     sections.append(notify_totals.as_markdown(":app-bot:test (USE_NOTIFY_SENDER=true)"))
+    sections.append(admin_totals.as_markdown(":app-bot:test --tests \"*OutboxAdmin*\" (OUTBOX_ADMIN_ENABLED=true)"))
+
+    sections.append("## Admin endpoints")
+    sections.append(admin_totals.as_markdown("Outbox admin tests"))
 
     sections.append("## Lint & Static Analysis")
     sections.append(ktlint_summary.as_markdown())

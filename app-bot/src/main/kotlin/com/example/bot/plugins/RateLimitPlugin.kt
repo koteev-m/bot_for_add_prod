@@ -46,6 +46,7 @@ class RateLimitConfig {
             "/api/bookings/confirm",
             "/api/guest-lists/import",
             "/api/clubs/",
+            "/api/admin/outbox",
         )
 
     /**
