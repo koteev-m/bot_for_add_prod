@@ -12,11 +12,12 @@ import com.example.bot.data.repo.ExposedClubRepository
 import com.example.bot.di.availabilityModule
 import com.example.bot.di.bookingModule
 import com.example.bot.di.healthModule
-import com.example.bot.di.paymentsModule
 import com.example.bot.di.musicModule
 import com.example.bot.di.notifyModule
 import com.example.bot.di.securityModule
 import com.example.bot.di.webAppModule
+import com.example.bot.di.paymentsModule
+import com.example.bot.di.refundWorkerModule
 import com.example.bot.guestlists.GuestListRepository
 import com.example.bot.metrics.AppMetricsBinder
 import com.example.bot.music.MusicService
@@ -65,6 +66,8 @@ import com.example.bot.text.BotTexts
 import com.example.bot.webapp.InitDataAuthConfig
 import com.example.bot.webapp.webAppRoutes
 import com.example.bot.workers.OutboxWorker
+import com.example.bot.workers.RefundOutboxWorker
+import com.example.bot.workers.RefundWorkerConfig
 import com.example.bot.workers.launchCampaignSchedulerOnStart
 import com.example.bot.workers.schedulerModule
 import com.pengrad.telegrambot.TelegramBot
@@ -234,6 +237,7 @@ fun Application.module() {
             healthModule,
             notifyModule,
             paymentsModule,
+            refundWorkerModule,
         )
     }
 
@@ -245,6 +249,8 @@ fun Application.module() {
     installRbacIfEnabled()
 
     val outboxWorker by inject<OutboxWorker>()
+    val refundWorker by inject<RefundOutboxWorker>()
+    val refundWorkerConfig by inject<RefundWorkerConfig>()
     val bot by inject<TelegramBot>()
     val ottService by inject<CallbackTokenService>()
     val callbackHandler by inject<CallbackQueryHandler>()
@@ -256,14 +262,22 @@ fun Application.module() {
     val startMenuLogger = LoggerFactory.getLogger("TelegramStartMenu")
     val webAppBaseUrl = resolveWebAppBaseUrl()
     val musicService: MusicService = get()
+    val refundWorkerLogger = LoggerFactory.getLogger("RefundOutboxWorker")
 
     var workerJob: Job? = null
+    var refundWorkerJob: Job? = null
     // Подписка на события жизненного цикла
     monitor.subscribe(ApplicationStarted) {
         workerJob = launch { outboxWorker.run() }
+        if (refundWorkerConfig.enabled) {
+            refundWorkerJob = launch { refundWorker.runLoop() }
+        } else {
+            refundWorkerLogger.info("Refund outbox worker disabled via REFUND_WORKER_ENABLED")
+        }
     }
     monitor.subscribe(ApplicationStopped) {
         workerJob?.cancel()
+        refundWorkerJob?.cancel()
     }
 
     // 5) Routes
