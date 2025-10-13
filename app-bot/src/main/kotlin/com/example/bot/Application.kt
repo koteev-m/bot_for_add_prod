@@ -19,7 +19,6 @@ import com.example.bot.di.webAppModule
 import com.example.bot.guestlists.GuestListRepository
 import com.example.bot.metrics.AppMetricsBinder
 import com.example.bot.music.MusicService
-import com.example.bot.plugins.InitDataAuth.installInitDataAuth
 import com.example.bot.plugins.appConfig
 import com.example.bot.plugins.configureSecurity
 import com.example.bot.plugins.installAppConfig
@@ -29,9 +28,11 @@ import com.example.bot.plugins.installMigrationsAndDatabase
 import com.example.bot.plugins.installRateLimitPluginDefaults
 import com.example.bot.plugins.installRbacIfEnabled
 import com.example.bot.plugins.installRequestLogging
+import com.example.bot.plugins.MiniAppUserKey
 import com.example.bot.plugins.meterRegistry
 import com.example.bot.plugins.rbacSampleRoute
 import com.example.bot.plugins.resolveFlag
+import com.example.bot.plugins.withMiniAppAuth
 import com.example.bot.render.DefaultHallRenderer
 import com.example.bot.routes.availabilityApiRoutes
 import com.example.bot.routes.availabilityRoutes
@@ -83,8 +84,10 @@ import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
+import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -167,7 +170,9 @@ fun Application.module() {
     installAppConfig()
     installRequestLogging()
     install(ContentNegotiation) { json() }
-    installInitDataAuth()
+
+    val miniAppBotTokenProvider = { System.getenv("BOT_TOKEN") ?: "" }
+    environment.log.info("InitDataAuth wired on /api/miniapp/*")
 
     val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN") ?: BotLimits.Demo.FALLBACK_TOKEN
     val initDataAuthConfig: InitDataAuthConfig.() -> Unit = { botTokenProvider = { telegramToken } }
@@ -272,6 +277,14 @@ fun Application.module() {
 
         // Публичный API доступности: ночи и свободные столы
         availabilityRoutes(availability)
+
+        route("/api/miniapp") {
+            withMiniAppAuth(miniAppBotTokenProvider)
+            get("/me") {
+                val user = call.attributes[MiniAppUserKey]
+                call.respond(user)
+            }
+        }
 
         this@module.musicRoutes(musicService)
     }
