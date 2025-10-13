@@ -10,6 +10,8 @@ import com.example.bot.booking.HoldRequest
 import com.example.bot.data.repo.ClubDto
 import com.example.bot.data.repo.ClubRepository
 import com.example.bot.metrics.UiBookingMetrics
+import com.example.bot.telegram.bookings.MyBookingsMetrics
+import com.example.bot.telegram.bookings.MyBookingsService
 import com.example.bot.telegram.tokens.ClubTokenCodec
 import com.example.bot.telegram.tokens.DecodedGuests
 import com.example.bot.telegram.tokens.GuestsSelectCodec
@@ -49,6 +51,8 @@ class MenuCallbacksHandler(
     private val bookingService: BookingService,
     private val chatUiSession: ChatUiSessionStore,
     private val uiScope: CoroutineScope,
+    private val myBookingsService: MyBookingsService,
+    private val myBookingsMetrics: MyBookingsMetrics,
 ) {
     private val logger = LoggerFactory.getLogger(MenuCallbacksHandler::class.java)
 
@@ -66,6 +70,8 @@ class MenuCallbacksHandler(
         val routeTag =
             when {
                 data == MENU_CLUBS -> MENU_CLUBS
+                data == MENU_BOOKINGS -> MENU_BOOKINGS
+                data.startsWith(BOOKINGS_PREFIX) -> BOOKINGS_PREFIX
                 data.startsWith(CLUB_PREFIX) -> CLUB_PREFIX
                 data.startsWith(NIGHT_PREFIX) -> NIGHT_PREFIX
                 data.startsWith(PAGE_PREFIX) -> PAGE_PREFIX
@@ -87,6 +93,42 @@ class MenuCallbacksHandler(
                     val markup = keyboards.clubsKeyboard(clubButtons)
                     send(chatId, threadId, text, markup)
                     UiBookingMetrics.incNightsRendered()
+                }
+
+            data == MENU_BOOKINGS && chatId != null ->
+                uiScope.launch { handleMyBookingsMenu(callbackQuery, chatId, threadId, lang) }
+
+            data.startsWith(BOOKINGS_LIST_PREFIX) && chatId != null ->
+                uiScope.launch {
+                    val pageNumber = data.removePrefix(BOOKINGS_LIST_PREFIX).toIntOrNull()
+                    if (pageNumber == null) {
+                        logger.warn("ui.menu.malformed tokenType=bk:list")
+                        send(chatId, threadId, texts.sessionExpired(lang), keyboards.startMenu(lang))
+                        return@launch
+                    }
+                    handleMyBookingsPage(callbackQuery, chatId, threadId, lang, pageNumber)
+                }
+
+            data.startsWith(BOOKINGS_SHOW_PREFIX) && chatId != null ->
+                uiScope.launch {
+                    val parsed = parsePageAndId(data, BOOKINGS_SHOW_PREFIX)
+                    if (parsed == null) {
+                        logger.warn("ui.menu.malformed tokenType=bk:show")
+                        send(chatId, threadId, texts.sessionExpired(lang), keyboards.startMenu(lang))
+                        return@launch
+                    }
+                    handleMyBookingsShow(callbackQuery, chatId, threadId, lang, parsed)
+                }
+
+            data.startsWith(BOOKINGS_CANCEL_PREFIX) && chatId != null ->
+                uiScope.launch {
+                    val parsed = parsePageAndId(data, BOOKINGS_CANCEL_PREFIX)
+                    if (parsed == null) {
+                        logger.warn("ui.menu.malformed tokenType=bk:cancel")
+                        send(chatId, threadId, texts.sessionExpired(lang), keyboards.startMenu(lang))
+                        return@launch
+                    }
+                    handleMyBookingsCancel(callbackQuery, chatId, threadId, lang, parsed)
                 }
 
             data.startsWith(CLUB_PREFIX) && chatId != null ->
@@ -216,6 +258,230 @@ class MenuCallbacksHandler(
 
             else -> Unit
         }
+    }
+
+    private suspend fun handleMyBookingsMenu(
+        callbackQuery: CallbackQuery,
+        chatId: Long,
+        threadId: Int?,
+        lang: String?,
+    ) {
+        val telegramUserId = callbackQuery.from()?.id()?.toLong()
+        if (telegramUserId == null) {
+            send(chatId, threadId, texts.sessionExpired(lang), keyboards.startMenu(lang))
+            return
+        }
+        myBookingsMetrics.incOpen()
+        renderMyBookingsPage(chatId, threadId, lang, telegramUserId, page = 1)
+    }
+
+    private suspend fun handleMyBookingsPage(
+        callbackQuery: CallbackQuery,
+        chatId: Long,
+        threadId: Int?,
+        lang: String?,
+        page: Int,
+    ) {
+        val telegramUserId = callbackQuery.from()?.id()?.toLong()
+        if (telegramUserId == null) {
+            send(chatId, threadId, texts.sessionExpired(lang), keyboards.startMenu(lang))
+            return
+        }
+        renderMyBookingsPage(chatId, threadId, lang, telegramUserId, page)
+    }
+
+    private suspend fun handleMyBookingsShow(
+        callbackQuery: CallbackQuery,
+        chatId: Long,
+        threadId: Int?,
+        lang: String?,
+        payload: Pair<Int, UUID>,
+    ) {
+        val telegramUserId = callbackQuery.from()?.id()?.toLong()
+        if (telegramUserId == null) {
+            send(chatId, threadId, texts.sessionExpired(lang), keyboards.startMenu(lang))
+            return
+        }
+        val (page, bookingId) = payload
+        val info =
+            try {
+                myBookingsService.loadBooking(telegramUserId, bookingId)
+            } catch (ex: Exception) {
+                logger.warn(
+                    "ui.mybookings.show.failed booking={} user={}",
+                    bookingId,
+                    telegramUserId,
+                    ex,
+                )
+                null
+            }
+        if (info == null) {
+            send(chatId, threadId, texts.myBookingsCancelNotFound(lang))
+            return
+        }
+        val text = buildBookingDetails(info, lang)
+        val markup =
+            keyboards.myBookingDetailsKeyboard(
+                lang = lang,
+                bookingId = info.id,
+                originatingPage = page,
+                encodeCancel = { id -> encodeCancelCallback(page, id) },
+            )
+        send(chatId, threadId, text, markup)
+    }
+
+    private suspend fun handleMyBookingsCancel(
+        callbackQuery: CallbackQuery,
+        chatId: Long,
+        threadId: Int?,
+        lang: String?,
+        payload: Pair<Int, UUID>,
+    ) {
+        val telegramUserId = callbackQuery.from()?.id()?.toLong()
+        if (telegramUserId == null) {
+            send(chatId, threadId, texts.sessionExpired(lang), keyboards.startMenu(lang))
+            return
+        }
+        val (page, bookingId) = payload
+        val result =
+            try {
+                myBookingsService.cancel(telegramUserId, bookingId, texts, lang)
+            } catch (ex: Exception) {
+                logger.warn(
+                    "ui.mybookings.cancel.failed booking={} user={}",
+                    bookingId,
+                    telegramUserId,
+                    ex,
+                )
+                null
+            }
+        when (result) {
+            is MyBookingsService.CancelResult.Ok ->
+                send(chatId, threadId, texts.myBookingsCancelOk(lang, result.info.shortId))
+
+            is MyBookingsService.CancelResult.Already ->
+                send(chatId, threadId, texts.myBookingsCancelAlready(lang))
+
+            MyBookingsService.CancelResult.NotFound ->
+                send(chatId, threadId, texts.myBookingsCancelNotFound(lang))
+
+            null -> send(chatId, threadId, texts.unknownError(lang))
+        }
+        if (result != null) {
+            renderMyBookingsPage(chatId, threadId, lang, telegramUserId, page)
+        }
+    }
+
+    private suspend fun renderMyBookingsPage(
+        chatId: Long,
+        threadId: Int?,
+        lang: String?,
+        telegramUserId: Long,
+        page: Int,
+    ) {
+        val safePage = page.coerceAtLeast(1)
+        val listing =
+            try {
+                myBookingsService.list(telegramUserId, safePage, MY_BOOKINGS_PAGE_SIZE)
+            } catch (ex: Exception) {
+                logger.warn(
+                    "ui.mybookings.list.failed user={} page={}",
+                    telegramUserId,
+                    safePage,
+                    ex,
+                )
+                null
+            }
+        if (listing == null) {
+            send(chatId, threadId, texts.unknownError(lang))
+            return
+        }
+        val text =
+            if (listing.bookings.isEmpty()) {
+                texts.myBookingsEmpty(lang)
+            } else {
+                val lines = listing.bookings.joinToString("\n") { booking -> formatBookingLine(booking, lang) }
+                buildString {
+                    append(texts.myBookingsTitle(lang))
+                    append("\n\n")
+                    append(lines)
+                }
+            }
+        val markup =
+            if (listing.bookings.isEmpty()) {
+                null
+            } else {
+                keyboards.myBookingsKeyboard(
+                    lang = lang,
+                    bookings = listing.bookings,
+                    page = listing.page,
+                    hasPrev = listing.hasPrev,
+                    hasNext = listing.hasNext,
+                    encodeShow = { id -> encodeShowCallback(listing.page, id) },
+                    encodeCancel = { id -> encodeCancelCallback(listing.page, id) },
+                )
+            }
+        send(chatId, threadId, text, markup)
+    }
+
+    private fun formatBookingLine(
+        booking: MyBookingsService.BookingInfo,
+        lang: String?,
+    ): String {
+        val locale = BotLocales.resolve(lang)
+        val date = BotLocales.dateDMmm(booking.slotStart, booking.timezone, locale)
+        val amount = BotLocales.money(booking.totalMinor, locale) + texts.receiptCurrencySuffix(lang)
+        val guests = guestsLabel(lang, booking.guests)
+        val tableLabel = "${texts.receiptTable(lang)} #${booking.tableNumber}"
+        return "#${booking.shortId} • $date • ${booking.clubName} • $tableLabel • $guests • $amount"
+    }
+
+    private fun buildBookingDetails(
+        booking: MyBookingsService.BookingInfo,
+        lang: String?,
+    ): String {
+        val locale = BotLocales.resolve(lang)
+        val zone = booking.timezone
+        val day = BotLocales.dayNameShort(booking.slotStart, zone, locale)
+        val date = BotLocales.dateDMmm(booking.slotStart, zone, locale)
+        val start = BotLocales.timeHHmm(booking.slotStart, zone, locale)
+        val end = BotLocales.timeHHmm(booking.slotEnd, zone, locale)
+        val amount = BotLocales.money(booking.totalMinor, locale) + texts.receiptCurrencySuffix(lang)
+        return listOf(
+            "#${booking.shortId} • ${booking.clubName}",
+            "${texts.receiptDate(lang)}: $day, $date · $start–$end",
+            "${texts.receiptTable(lang)}: #${booking.tableNumber}",
+            "${texts.receiptGuests(lang)}: ${booking.guests}",
+            "${texts.myBookingsCancelAmount(lang)}: $amount",
+        ).joinToString("\n")
+    }
+
+    private fun guestsLabel(
+        lang: String?,
+        guests: Int,
+    ): String = if (texts.isEn(lang)) "$guests guests" else "$guests гостей"
+
+    private fun encodeShowCallback(
+        page: Int,
+        id: UUID,
+    ): String = "$BOOKINGS_SHOW_PREFIX${page.coerceAtLeast(1)}:$id"
+
+    private fun encodeCancelCallback(
+        page: Int,
+        id: UUID,
+    ): String = "$BOOKINGS_CANCEL_PREFIX${page.coerceAtLeast(1)}:$id"
+
+    private fun parsePageAndId(
+        data: String,
+        prefix: String,
+    ): Pair<Int, UUID>? {
+        if (!data.startsWith(prefix)) return null
+        val payload = data.removePrefix(prefix)
+        val parts = payload.split(':', limit = 2)
+        if (parts.size != 2) return null
+        val page = parts[0].toIntOrNull() ?: return null
+        val id = runCatching { UUID.fromString(parts[1]) }.getOrNull() ?: return null
+        return page to id
     }
 
     private suspend fun attemptHold(
@@ -799,12 +1065,18 @@ class MenuCallbacksHandler(
 
     private companion object {
         private const val MENU_CLUBS = "menu:clubs"
+        private const val MENU_BOOKINGS = "menu:bookings"
         private const val CLUB_PREFIX = "club:"
         private const val NIGHT_PREFIX = "night:"
         private const val PAGE_PREFIX = "pg:"
         private const val TABLE_PREFIX = "tbl:"
         private const val GUEST_PREFIX = "g:"
+        private const val BOOKINGS_PREFIX = "bk:"
+        private const val BOOKINGS_LIST_PREFIX = "bk:list:"
+        private const val BOOKINGS_SHOW_PREFIX = "bk:show:"
+        private const val BOOKINGS_CANCEL_PREFIX = "bk:cancel:"
         private const val TABLES_PAGE_SIZE = 8
+        private const val MY_BOOKINGS_PAGE_SIZE = 8
         private const val NOOP_CALLBACK = "noop"
         private val HOLD_TTL: Duration = Duration.ofMinutes(7)
         private val DEFAULT_NIGHT_DURATION: Duration = Duration.ofHours(8)

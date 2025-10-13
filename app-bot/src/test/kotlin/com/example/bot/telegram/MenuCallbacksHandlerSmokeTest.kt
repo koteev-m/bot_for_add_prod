@@ -10,6 +10,8 @@ import com.example.bot.booking.BookingCmdResult
 import com.example.bot.booking.BookingService
 import com.example.bot.data.repo.ClubDto
 import com.example.bot.data.repo.ClubRepository
+import com.example.bot.telegram.bookings.MyBookingsMetrics
+import com.example.bot.telegram.bookings.MyBookingsService
 import com.example.bot.telegram.tokens.ClubTokenCodec
 import com.example.bot.telegram.tokens.GuestsSelectCodec
 import com.example.bot.telegram.tokens.NightTokenCodec
@@ -55,6 +57,8 @@ class MenuCallbacksHandlerSmokeTest {
             val availability = mockk<AvailabilityService>()
             val bookingService = mockk<BookingService>()
             val chatUiSession = InMemoryChatUiSessionStore()
+            val myBookingsService = mockk<MyBookingsService>(relaxed = true)
+            val myBookingsMetrics = mockk<MyBookingsMetrics>(relaxed = true)
 
             val chatId = 2024L
             val fromId = 77L
@@ -114,6 +118,8 @@ class MenuCallbacksHandlerSmokeTest {
                     bookingService = bookingService,
                     chatUiSession = chatUiSession,
                     uiScope = this,
+                    myBookingsService = myBookingsService,
+                    myBookingsMetrics = myBookingsMetrics,
                 )
 
             handler.handle(buildCallbackUpdate("menu:clubs", chatId, lang = "en", fromId = fromId))
@@ -162,6 +168,8 @@ class MenuCallbacksHandlerSmokeTest {
             val availability = mockk<AvailabilityService>(relaxed = true)
             val bookingService = mockk<BookingService>(relaxed = true)
             val chatUiSession = mockk<ChatUiSessionStore>(relaxed = true)
+            val myBookingsService = mockk<MyBookingsService>(relaxed = true)
+            val myBookingsMetrics = mockk<MyBookingsMetrics>(relaxed = true)
 
             val sendMessages = mutableListOf<SendMessage>()
             every { bot.execute(any<BaseRequest<*, *>>()) } answers {
@@ -177,14 +185,16 @@ class MenuCallbacksHandlerSmokeTest {
 
             val handler =
                 MenuCallbacksHandler(
-                    bot,
-                    keyboards,
-                    texts,
-                    clubRepository,
-                    availability,
-                    bookingService,
-                    chatUiSession,
-                    this,
+                    bot = bot,
+                    keyboards = keyboards,
+                    texts = texts,
+                    clubRepository = clubRepository,
+                    availability = availability,
+                    bookingService = bookingService,
+                    chatUiSession = chatUiSession,
+                    uiScope = this,
+                    myBookingsService = myBookingsService,
+                    myBookingsMetrics = myBookingsMetrics,
                 )
 
             handler.handle(buildCallbackUpdate("tbl:broken", 101L, lang = "en", fromId = 1L))
@@ -204,6 +214,8 @@ class MenuCallbacksHandlerSmokeTest {
             val availability = mockk<AvailabilityService>(relaxed = true)
             val bookingService = mockk<BookingService>(relaxed = true)
             val chatUiSession = mockk<ChatUiSessionStore>(relaxed = true)
+            val myBookingsService = mockk<MyBookingsService>(relaxed = true)
+            val myBookingsMetrics = mockk<MyBookingsMetrics>(relaxed = true)
 
             val sendMessages = mutableListOf<SendMessage>()
             every { bot.execute(any<BaseRequest<*, *>>()) } answers {
@@ -219,14 +231,16 @@ class MenuCallbacksHandlerSmokeTest {
 
             val handler =
                 MenuCallbacksHandler(
-                    bot,
-                    keyboards,
-                    texts,
-                    clubRepository,
-                    availability,
-                    bookingService,
-                    chatUiSession,
-                    this,
+                    bot = bot,
+                    keyboards = keyboards,
+                    texts = texts,
+                    clubRepository = clubRepository,
+                    availability = availability,
+                    bookingService = bookingService,
+                    chatUiSession = chatUiSession,
+                    uiScope = this,
+                    myBookingsService = myBookingsService,
+                    myBookingsMetrics = myBookingsMetrics,
                 )
 
             handler.handle(buildCallbackUpdate("g:/tbl:", 303L, lang = "en", fromId = 11L))
@@ -262,6 +276,9 @@ class MenuCallbacksHandlerSmokeTest {
                     status = TableStatus.FREE,
                 )
 
+            val myBookingsService = mockk<MyBookingsService>(relaxed = true)
+            val myBookingsMetrics = mockk<MyBookingsMetrics>(relaxed = true)
+
             val sendMessages = mutableListOf<SendMessage>()
             every { bot.execute(any<BaseRequest<*, *>>()) } answers {
                 when (val request = firstArg<BaseRequest<*, *>>()) {
@@ -277,14 +294,16 @@ class MenuCallbacksHandlerSmokeTest {
 
             val handler =
                 MenuCallbacksHandler(
-                    bot,
-                    keyboards,
-                    texts,
-                    clubRepository,
-                    availability,
-                    bookingService,
-                    chatUiSession,
-                    this,
+                    bot = bot,
+                    keyboards = keyboards,
+                    texts = texts,
+                    clubRepository = clubRepository,
+                    availability = availability,
+                    bookingService = bookingService,
+                    chatUiSession = chatUiSession,
+                    uiScope = this,
+                    myBookingsService = myBookingsService,
+                    myBookingsMetrics = myBookingsMetrics,
                 )
 
             val tableToken = TableSelectCodec.encode(clubId, start, end, tableId)
@@ -305,6 +324,8 @@ class MenuCallbacksHandlerSmokeTest {
             val availability = mockk<AvailabilityService>()
             val bookingService = mockk<BookingService>()
             val chatUiSession = mockk<ChatUiSessionStore>(relaxed = true)
+            val myBookingsService = mockk<MyBookingsService>(relaxed = true)
+            val myBookingsMetrics = mockk<MyBookingsMetrics>(relaxed = true)
 
             val chatId = 505L
             val fromId = 808L
@@ -352,14 +373,16 @@ class MenuCallbacksHandlerSmokeTest {
 
             val handler =
                 MenuCallbacksHandler(
-                    bot,
-                    keyboards,
-                    texts,
-                    clubRepository,
-                    availability,
-                    bookingService,
-                    chatUiSession,
-                    this,
+                    bot = bot,
+                    keyboards = keyboards,
+                    texts = texts,
+                    clubRepository = clubRepository,
+                    availability = availability,
+                    bookingService = bookingService,
+                    chatUiSession = chatUiSession,
+                    uiScope = this,
+                    myBookingsService = myBookingsService,
+                    myBookingsMetrics = myBookingsMetrics,
                 )
 
             val guestToken = GuestsSelectCodec.encode(clubId, start, end, tableId, guests)
@@ -382,6 +405,8 @@ class MenuCallbacksHandlerSmokeTest {
             val availability = mockk<AvailabilityService>()
             val bookingService = mockk<BookingService>()
             val chatUiSession = mockk<ChatUiSessionStore>(relaxed = true)
+            val myBookingsService = mockk<MyBookingsService>(relaxed = true)
+            val myBookingsMetrics = mockk<MyBookingsMetrics>(relaxed = true)
 
             val chatId = 606L
             val fromId = 909L
@@ -440,14 +465,16 @@ class MenuCallbacksHandlerSmokeTest {
 
             val handler =
                 MenuCallbacksHandler(
-                    bot,
-                    keyboards,
-                    texts,
-                    clubRepository,
-                    availability,
-                    bookingService,
-                    chatUiSession,
-                    this,
+                    bot = bot,
+                    keyboards = keyboards,
+                    texts = texts,
+                    clubRepository = clubRepository,
+                    availability = availability,
+                    bookingService = bookingService,
+                    chatUiSession = chatUiSession,
+                    uiScope = this,
+                    myBookingsService = myBookingsService,
+                    myBookingsMetrics = myBookingsMetrics,
                 )
 
             val guestToken = GuestsSelectCodec.encode(clubId, start, end, tableId, guests)

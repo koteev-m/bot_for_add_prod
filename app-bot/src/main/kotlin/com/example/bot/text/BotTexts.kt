@@ -109,6 +109,72 @@ class BotTexts {
             "Стол уже занят. Выберите другой, пожалуйста."
         }
 
+    fun myBookingsTitle(lang: String?): String =
+        if (isEn(lang)) {
+            "Your active bookings"
+        } else {
+            "Ваши активные бронирования"
+        }
+
+    fun myBookingsEmpty(lang: String?): String =
+        if (isEn(lang)) {
+            "You have no active bookings yet."
+        } else {
+            "У вас нет активных броней."
+        }
+
+    fun myBookingsMoreButton(lang: String?): String = if (isEn(lang)) "Details" else "Подробнее"
+
+    fun myBookingsCancelButton(lang: String?): String = if (isEn(lang)) "Cancel" else "Отменить"
+
+    fun myBookingsPrev(lang: String?): String = if (isEn(lang)) "⟵ Back" else "⟵ Назад"
+
+    fun myBookingsNext(lang: String?): String = if (isEn(lang)) "Next ⟶" else "Дальше ⟶"
+
+    fun myBookingsBack(lang: String?): String = if (isEn(lang)) "⟵ Back" else "⟵ Назад"
+
+    fun myBookingsCancelOk(lang: String?, shortId: String): String =
+        if (isEn(lang)) {
+            "Booking #$shortId was cancelled."
+        } else {
+            "Бронь #$shortId отменена."
+        }
+
+    fun myBookingsCancelAlready(lang: String?): String =
+        if (isEn(lang)) {
+            "This booking is already cancelled."
+        } else {
+            "Эта бронь уже отменена."
+        }
+
+    fun myBookingsCancelNotFound(lang: String?): String =
+        if (isEn(lang)) {
+            "Booking not found."
+        } else {
+            "Бронь не найдена."
+        }
+
+    fun myBookingsCancelTitle(lang: String?, shortId: String): String =
+        if (isEn(lang)) {
+            "Booking #$shortId cancelled"
+        } else {
+            "Бронь #$shortId отменена"
+        }
+
+    fun myBookingsCancelAmount(lang: String?): String =
+        if (isEn(lang)) {
+            "Amount"
+        } else {
+            "Сумма"
+        }
+
+    fun myBookingsCancelledBy(lang: String?): String =
+        if (isEn(lang)) {
+            "Cancelled by"
+        } else {
+            "Отменил"
+        }
+
     fun tooManyRequests(lang: String?): String =
         if (isEn(lang)) {
             "Too many requests. Please try again."

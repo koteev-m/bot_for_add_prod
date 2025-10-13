@@ -88,5 +88,6 @@ private val MENU_PREFIXES =
         "tbl:",
         "pg:",
         "g:",
+        "bk:",
         NOOP_CALLBACK,
     )

@@ -26,6 +26,8 @@ import com.example.bot.promo.PromoAttributionStore
 import com.example.bot.promo.PromoLinkRepository
 import com.example.bot.telegram.NotifyAdapterMetrics
 import com.example.bot.telegram.NotifySenderSendPort
+import com.example.bot.telegram.bookings.MyBookingsMetrics
+import com.example.bot.telegram.bookings.MyBookingsService
 import com.example.bot.workers.OutboxWorker
 import com.example.bot.workers.SendOutcome
 import com.example.bot.workers.SendPort
@@ -62,6 +64,9 @@ val bookingModule =
         // Security repos (interfaces -> impl)
         single<UserRepository> { ExposedUserRepository(get()) }
         single<UserRoleRepository> { ExposedUserRoleRepository(get()) }
+
+        single { MyBookingsMetrics(runCatching { get<MeterRegistry>() }.getOrNull()) }
+        single { MyBookingsService(get(), get(), get(), get()) }
 
         // Promo store/service
         single<PromoAttributionStore> { InMemoryPromoAttributionStore() }

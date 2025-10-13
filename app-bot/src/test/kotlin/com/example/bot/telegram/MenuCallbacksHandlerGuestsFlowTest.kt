@@ -11,6 +11,8 @@ import com.example.bot.booking.BookingService
 import com.example.bot.booking.HoldRequest
 import com.example.bot.data.repo.ClubDto
 import com.example.bot.data.repo.ClubRepository
+import com.example.bot.telegram.bookings.MyBookingsMetrics
+import com.example.bot.telegram.bookings.MyBookingsService
 import com.example.bot.telegram.tokens.GuestsSelectCodec
 import com.example.bot.telegram.ui.ChatUiSessionStore
 import com.example.bot.text.BotTexts
@@ -53,6 +55,8 @@ class MenuCallbacksHandlerGuestsFlowTest {
             val availability = mockk<AvailabilityService>()
             val bookingService = mockk<BookingService>()
             val chatUiSession = mockk<ChatUiSessionStore>(relaxed = true)
+            val myBookingsService = mockk<MyBookingsService>(relaxed = true)
+            val myBookingsMetrics = mockk<MyBookingsMetrics>(relaxed = true)
 
             val chatId = 1001L
             val fromId = 501L
@@ -120,6 +124,8 @@ class MenuCallbacksHandlerGuestsFlowTest {
                     bookingService = bookingService,
                     chatUiSession = chatUiSession,
                     uiScope = this,
+                    myBookingsService = myBookingsService,
+                    myBookingsMetrics = myBookingsMetrics,
                 )
 
             handler.handle(update)
@@ -158,6 +164,8 @@ class MenuCallbacksHandlerGuestsFlowTest {
             val availability = mockk<AvailabilityService>()
             val bookingService = mockk<BookingService>()
             val chatUiSession = mockk<ChatUiSessionStore>(relaxed = true)
+            val myBookingsService = mockk<MyBookingsService>(relaxed = true)
+            val myBookingsMetrics = mockk<MyBookingsMetrics>(relaxed = true)
 
             val chatId = 777L
             val fromId = 900L
@@ -213,6 +221,8 @@ class MenuCallbacksHandlerGuestsFlowTest {
                     bookingService = bookingService,
                     chatUiSession = chatUiSession,
                     uiScope = this,
+                    myBookingsService = myBookingsService,
+                    myBookingsMetrics = myBookingsMetrics,
                 )
 
             handler.handle(update)
@@ -238,6 +248,8 @@ class MenuCallbacksHandlerGuestsFlowTest {
             val availability = mockk<AvailabilityService>()
             val bookingService = mockk<BookingService>()
             val chatUiSession = mockk<ChatUiSessionStore>(relaxed = true)
+            val myBookingsService = mockk<MyBookingsService>(relaxed = true)
+            val myBookingsMetrics = mockk<MyBookingsMetrics>(relaxed = true)
 
             val chatId = 500L
             val clubId = 12L
@@ -284,7 +296,9 @@ class MenuCallbacksHandlerGuestsFlowTest {
                     availability = availability,
                     bookingService = bookingService,
                     chatUiSession = chatUiSession,
-                    this,
+                    uiScope = this,
+                    myBookingsService = myBookingsService,
+                    myBookingsMetrics = myBookingsMetrics,
                 )
 
             handler.handle(update)
