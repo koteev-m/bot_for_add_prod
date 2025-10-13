@@ -224,6 +224,8 @@ fun Application.module() {
                     get(),
                     get(),
                     get(),
+                    get(),
+                    get(),
                 )
             }
             single { CallbackQueryHandler(get(), get(), get()) }

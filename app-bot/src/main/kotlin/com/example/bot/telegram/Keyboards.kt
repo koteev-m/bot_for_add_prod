@@ -4,9 +4,11 @@ package com.example.bot.telegram
 
 import com.example.bot.availability.TableAvailabilityDto
 import com.example.bot.availability.minDepositMinor
+import com.example.bot.telegram.bookings.MyBookingsService
 import com.example.bot.text.BotTexts
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
+import java.util.UUID
 
 /**
  * Factory for inline keyboards used in the guest flow.
@@ -113,6 +115,52 @@ class Keyboards(private val texts: BotTexts) {
         }
         if (row.isNotEmpty()) rows += row.toTypedArray()
         return InlineKeyboardMarkup(*rows.toTypedArray())
+    }
+
+    fun myBookingsKeyboard(
+        lang: String?,
+        bookings: List<MyBookingsService.BookingInfo>,
+        page: Int,
+        hasPrev: Boolean,
+        hasNext: Boolean,
+        encodeShow: (UUID) -> String,
+        encodeCancel: (UUID) -> String,
+    ): InlineKeyboardMarkup {
+        val rows =
+            bookings
+                .map { booking ->
+                    arrayOf(
+                        InlineKeyboardButton(texts.myBookingsMoreButton(lang)).callbackData(encodeShow(booking.id)),
+                        InlineKeyboardButton(texts.myBookingsCancelButton(lang)).callbackData(encodeCancel(booking.id)),
+                    )
+                }
+                .toMutableList()
+        if (hasPrev || hasNext) {
+            val navButtons = mutableListOf<InlineKeyboardButton>()
+            if (hasPrev) {
+                navButtons +=
+                    InlineKeyboardButton(texts.myBookingsPrev(lang))
+                        .callbackData("bk:list:${(page - 1).coerceAtLeast(1)}")
+            }
+            if (hasNext) {
+                navButtons +=
+                    InlineKeyboardButton(texts.myBookingsNext(lang))
+                        .callbackData("bk:list:${page + 1}")
+            }
+            rows += navButtons.toTypedArray()
+        }
+        return InlineKeyboardMarkup(*rows.toTypedArray())
+    }
+
+    fun myBookingDetailsKeyboard(
+        lang: String?,
+        bookingId: UUID,
+        originatingPage: Int,
+        encodeCancel: (UUID) -> String,
+    ): InlineKeyboardMarkup {
+        val cancel = InlineKeyboardButton(texts.myBookingsCancelButton(lang)).callbackData(encodeCancel(bookingId))
+        val back = InlineKeyboardButton(texts.myBookingsBack(lang)).callbackData("bk:list:${originatingPage.coerceAtLeast(1)}")
+        return InlineKeyboardMarkup(arrayOf(cancel, back))
     }
 }
 
