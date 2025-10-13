@@ -6,6 +6,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SMOKE_DIR="${REPO_ROOT}/build/reports/smoke"
 DEFAULT_RESULTS_DIR="${SMOKE_DIR}/test-default"
 NOTIFY_RESULTS_DIR="${SMOKE_DIR}/test-notify"
+ADMIN_RESULTS_DIR="${SMOKE_DIR}/test-admin"
 APP_BOT_TEST_RESULTS="${REPO_ROOT}/app-bot/build/test-results/test"
 
 log() {
@@ -19,7 +20,7 @@ warn() {
 prepare_dirs() {
   log "Preparing smoke report directory at ${SMOKE_DIR}"
   rm -rf "${SMOKE_DIR}"
-  mkdir -p "${DEFAULT_RESULTS_DIR}" "${NOTIFY_RESULTS_DIR}"
+  mkdir -p "${DEFAULT_RESULTS_DIR}" "${NOTIFY_RESULTS_DIR}" "${ADMIN_RESULTS_DIR}"
 }
 
 run_gradle_build() {
@@ -84,6 +85,25 @@ clean_test_results() {
   rm -rf "${APP_BOT_TEST_RESULTS}"
 }
 
+run_outbox_admin_tests() {
+  clean_test_results
+  log "Running outbox admin targeted tests"
+  if OUTBOX_ADMIN_ENABLED=true RBAC_ENABLED=true ./gradlew :app-bot:test --tests "*OutboxAdmin*"; then
+    log "Outbox admin targeted tests succeeded"
+  else
+    warn "Outbox admin targeted tests failed"
+  fi
+
+  if [ -d "${APP_BOT_TEST_RESULTS}" ]; then
+    log "Archiving admin test results"
+    rm -rf "${ADMIN_RESULTS_DIR}"
+    mkdir -p "${ADMIN_RESULTS_DIR}"
+    cp -R "${APP_BOT_TEST_RESULTS}"/. "${ADMIN_RESULTS_DIR}"
+  else
+    warn "Expected test results directory ${APP_BOT_TEST_RESULTS} missing after admin run"
+  fi
+}
+
 run_app_bot_tests() {
   local mode=$1
   local dest_dir=$2
@@ -135,6 +155,8 @@ main() {
   run_targeted_smoke '*HealthRoutesTest' 'health/ready smoke'
   run_targeted_smoke '*NotifyRoutesWiringTest' 'notify routes smoke'
   run_targeted_smoke '*PaymentsObservabilitySmokeTest' 'payments observability'
+
+  run_outbox_admin_tests
 
   run_app_bot_tests "default" "${DEFAULT_RESULTS_DIR}" "false"
   run_app_bot_tests "notify" "${NOTIFY_RESULTS_DIR}" "true"
