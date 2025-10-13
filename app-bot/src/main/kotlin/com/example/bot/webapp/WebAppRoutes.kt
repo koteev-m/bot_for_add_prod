@@ -1,9 +1,9 @@
 package com.example.bot.webapp
 
-import com.example.bot.plugins.InitDataAuth
-import com.example.bot.plugins.InitDataAuth.requireInitData
+import com.example.bot.plugins.MiniAppUserKey
+import com.example.bot.plugins.TelegramMiniUser
 import com.example.bot.plugins.envString
-import com.example.bot.security.auth.TelegramUser
+import com.example.bot.plugins.withMiniAppAuth
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -53,13 +53,11 @@ fun Application.webAppRoutes() {
 
         staticResources("/app", "webapp/app")
 
+        val botTokenProvider = { envString("BOT_TOKEN") ?: "" }
         route("/miniapp") {
+            withMiniAppAuth(botTokenProvider)
             get("/me") {
-                val botToken = envString("BOT_TOKEN")
-                if (!call.requireInitData(botToken)) {
-                    return@get
-                }
-                val user = call.attributes[InitDataAuth.TelegramUserKey]
+                val user = call.attributes[MiniAppUserKey]
                 call.respond(HttpStatusCode.OK, MiniAppMeResponse(ok = true, user = user))
             }
         }
@@ -69,5 +67,5 @@ fun Application.webAppRoutes() {
 @Serializable
 private data class MiniAppMeResponse(
     val ok: Boolean,
-    val user: TelegramUser,
+    val user: TelegramMiniUser,
 )

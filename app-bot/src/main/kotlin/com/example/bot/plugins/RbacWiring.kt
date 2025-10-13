@@ -24,6 +24,7 @@ fun Application.installRbacIfEnabled() {
         return
     }
     rbacLogger.info("RBAC feature flag enabled")
+    environment.log.info("RBAC enabled")
 }
 
 fun Application.rbacSampleRoute() {
@@ -36,7 +37,7 @@ fun Application.rbacSampleRoute() {
     }
     routing {
         authorize(Role.MANAGER) {
-            get("/rbac/ping") {
+            get("/api/secure/ping") {
                 call.respond(HttpStatusCode.OK, mapOf("ok" to true))
             }
         }

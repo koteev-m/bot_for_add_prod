@@ -23,7 +23,7 @@ import io.ktor.server.testing.testApplication
 import io.mockk.coEvery
 import io.mockk.mockk
 
-class RbacWiringTest : FunSpec({
+class RbacFeatureFlagTest : FunSpec({
     val auditRepo = mockk<AuditLogRepository>(relaxed = true)
     coEvery { auditRepo.log(any(), any(), any(), any(), any(), any(), any()) } returns 1L
 
@@ -58,13 +58,13 @@ class RbacWiringTest : FunSpec({
             }
 
             val forbidden =
-                client.get("/rbac/ping") {
+                client.get("/api/secure/ping") {
                     header("X-Telegram-Id", "2")
                 }
             forbidden.status shouldBe HttpStatusCode.Forbidden
 
             val allowed =
-                client.get("/rbac/ping") {
+                client.get("/api/secure/ping") {
                     header("X-Telegram-Id", "1")
                 }
             allowed.status shouldBe HttpStatusCode.OK
@@ -83,7 +83,7 @@ class RbacWiringTest : FunSpec({
             }
 
             val response =
-                client.get("/rbac/ping")
+                client.get("/api/secure/ping")
             response.status shouldBe HttpStatusCode.NotFound
         }
     }
