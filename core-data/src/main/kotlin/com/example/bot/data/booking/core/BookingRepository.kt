@@ -15,13 +15,16 @@ import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.count
 import java.math.BigDecimal
 import java.time.Clock
 import java.time.Instant
@@ -606,6 +609,34 @@ class OutboxRepository(
         }
     }
 
+    suspend fun pickBatchForTopics(
+        limit: Int,
+        topics: Set<String>,
+    ): List<OutboxMessage> {
+        if (topics.isEmpty()) {
+            return emptyList()
+        }
+        val now = Instant.now(clock).toOffsetDateTime()
+        val topicList = topics.toList()
+        return withTxRetry {
+            newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+                BookingOutboxTable
+                    .selectAll()
+                    .where {
+                        (BookingOutboxTable.status eq OutboxMessageStatus.NEW.name) and
+                            (BookingOutboxTable.nextAttemptAt lessEq now) and
+                            (BookingOutboxTable.topic inList topicList)
+                    }
+                    .orderBy(
+                        BookingOutboxTable.nextAttemptAt to SortOrder.ASC,
+                        BookingOutboxTable.id to SortOrder.ASC,
+                    )
+                    .limit(limit)
+                    .map { it.toOutboxMessage() }
+            }
+        }
+    }
+
     suspend fun markSent(id: Long): BookingCoreResult<Unit> {
         return try {
             withTxRetry {
@@ -626,6 +657,42 @@ class OutboxRepository(
                         it[BookingOutboxTable.attempts] = attempts
                         it[BookingOutboxTable.nextAttemptAt] = now
                         it[BookingOutboxTable.lastError] = null
+                        it[BookingOutboxTable.updatedAt] = now
+                    }
+                    BookingCoreResult.Success(Unit)
+                }
+            }
+        } catch (ex: Throwable) {
+            when {
+                ex.isRetryLimitExceeded() -> BookingCoreResult.Failure(BookingCoreError.OptimisticRetryExceeded)
+                else -> throw ex
+            }
+        }
+    }
+
+    suspend fun markFailedPermanently(
+        id: Long,
+        reason: String,
+    ): BookingCoreResult<Unit> {
+        return try {
+            withTxRetry {
+                newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+                    val row =
+                        BookingOutboxTable
+                            .selectAll()
+                            .where { BookingOutboxTable.id eq id }
+                            .limit(1)
+                            .firstOrNull()
+                            ?: return@newSuspendedTransaction BookingCoreResult.Failure(
+                                BookingCoreError.OutboxRecordNotFound,
+                            )
+                    val attempts = row[BookingOutboxTable.attempts] + 1
+                    val now = Instant.now(clock).toOffsetDateTime()
+                    BookingOutboxTable.update({ BookingOutboxTable.id eq id }) {
+                        it[BookingOutboxTable.status] = OutboxMessageStatus.FAILED.name
+                        it[BookingOutboxTable.attempts] = attempts
+                        it[BookingOutboxTable.nextAttemptAt] = now
+                        it[BookingOutboxTable.lastError] = reason
                         it[BookingOutboxTable.updatedAt] = now
                     }
                     BookingCoreResult.Success(Unit)
@@ -673,6 +740,24 @@ class OutboxRepository(
             when {
                 ex.isRetryLimitExceeded() -> BookingCoreResult.Failure(BookingCoreError.OptimisticRetryExceeded)
                 else -> throw ex
+            }
+        }
+    }
+
+    suspend fun countPending(topics: Set<String>): Long {
+        if (topics.isEmpty()) {
+            return 0
+        }
+        val statusList = listOf(OutboxMessageStatus.NEW.name, OutboxMessageStatus.FAILED.name)
+        val topicList = topics.toList()
+        return withTxRetry {
+            newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+                BookingOutboxTable
+                    .select {
+                        (BookingOutboxTable.status inList statusList) and
+                            (BookingOutboxTable.topic inList topicList)
+                    }
+                    .count()
             }
         }
     }
@@ -736,6 +821,7 @@ class AuditLogRepository(
             }
         }
     }
+
 }
 
 private fun Instant.toOffsetDateTime(): OffsetDateTime = OffsetDateTime.ofInstant(this, ZoneOffset.UTC)

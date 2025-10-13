@@ -50,3 +50,25 @@ groups:
         annotations:
           summary: "Payments idempotent hit rate anomaly"
           description: "TODO: configure acceptable retry baseline and actions."
+
+      - alert: RefundOutboxStuck
+        expr: outbox_refund_backlog > 50
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Refund outbox backlog is elevated"
+          description: "Refund provider worker backlog above 50 items for 15 minutes."
+
+      - alert: RefundProviderErrorsHigh
+        expr: |
+          sum(rate(provider_refund_fail_total[5m]))
+            /
+          sum(rate(provider_refund_duration_seconds_count[5m]))
+            > 0.03
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Refund provider error rate above 3%"
+          description: "Investigate provider API availability or configuration issues."
