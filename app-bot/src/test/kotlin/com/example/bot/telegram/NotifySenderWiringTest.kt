@@ -17,54 +17,61 @@ import org.koin.dsl.module
 
 class NotifySenderWiringTest : StringSpec({
 
-    "binds DummySendPort by default" {
-        withSystemProperty("USE_NOTIFY_SENDER", null) {
-            val app =
-                koinApplication {
-                    modules(
-                        module { single { mockk<NotifySender>(relaxed = true) } },
-                        bookingModule,
-                    )
+    fun koinApp(
+        config: NotificationsDispatchConfig,
+        sender: NotifySender = mockk(relaxed = true),
+    ) =
+        koinApplication {
+            modules(
+                bookingModule,
+                module { single { sender } },
+                module(override = true) { single { config } },
+            )
+        }
+
+    "binds NotifySenderSendPort when notifications active" {
+        val sender = mockk<NotifySender>()
+        coEvery { sender.sendMessage(any(), any(), any(), any()) } returns SendResult.Ok(messageId = 1)
+
+        val app = koinApp(NotificationsDispatchConfig(flagEnabled = true, botToken = "token"), sender)
+
+        try {
+            val port = app.koin.get<SendPort>()
+            port.shouldBeInstanceOf<NotifySenderSendPort>()
+
+            val payload =
+                buildJsonObject {
+                    put("chatId", 123456L)
+                    put("text", "hello")
+                    put("dedup", "dedup-key")
                 }
 
-            try {
-                val port = app.koin.get<SendPort>()
-                port::class.simpleName shouldBe "DummySendPort"
-            } finally {
-                app.close()
-            }
+            port.send("topic", payload) shouldBe SendOutcome.Ok
+            coVerify { sender.sendMessage(123456L, "hello", null, "dedup-key") }
+        } finally {
+            app.close()
         }
     }
 
-    "uses NotifySender when flag enabled" {
-        withSystemProperty("USE_NOTIFY_SENDER", "true") {
-            val sender = mockk<NotifySender>()
-            coEvery { sender.sendMessage(any(), any(), any(), any()) } returns SendResult.Ok(messageId = 1)
+    "binds DummySendPort when disabled" {
+        val app = koinApp(NotificationsDispatchConfig(flagEnabled = false, botToken = "token"))
 
-            val app =
-                koinApplication {
-                    modules(
-                        module { single { sender } },
-                        bookingModule,
-                    )
-                }
+        try {
+            val port = app.koin.get<SendPort>()
+            port::class.simpleName shouldBe "DummySendPort"
+        } finally {
+            app.close()
+        }
+    }
 
-            try {
-                val port = app.koin.get<SendPort>()
-                port.shouldBeInstanceOf<NotifySenderSendPort>()
+    "binds DummySendPort when token missing" {
+        val app = koinApp(NotificationsDispatchConfig(flagEnabled = true, botToken = null))
 
-                val payload =
-                    buildJsonObject {
-                        put("chatId", 123456L)
-                        put("text", "hello")
-                        put("dedup", "dedup-key")
-                    }
-
-                port.send("topic", payload) shouldBe SendOutcome.Ok
-                coVerify { sender.sendMessage(123456L, "hello", null, "dedup-key") }
-            } finally {
-                app.close()
-            }
+        try {
+            val port = app.koin.get<SendPort>()
+            port::class.simpleName shouldBe "DummySendPort"
+        } finally {
+            app.close()
         }
     }
 
@@ -164,25 +171,3 @@ private data class MetricsExpectation(
     val permanent: Int = 0,
 )
 
-private suspend fun <T> withSystemProperty(
-    key: String,
-    value: String?,
-    block: suspend () -> T,
-): T {
-    val previous = System.getProperty(key)
-    if (value != null) {
-        System.setProperty(key, value)
-    } else {
-        System.clearProperty(key)
-    }
-
-    return try {
-        block()
-    } finally {
-        if (previous == null) {
-            System.clearProperty(key)
-        } else {
-            System.setProperty(key, previous)
-        }
-    }
-}

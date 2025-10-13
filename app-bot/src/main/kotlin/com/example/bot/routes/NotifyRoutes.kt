@@ -3,6 +3,7 @@ package com.example.bot.routes
 import com.example.bot.data.security.Role
 import com.example.bot.notifications.NotifyMessage
 import com.example.bot.notifications.ParseMode
+import com.example.bot.telegram.NotifyDispatchHealth
 import com.example.bot.security.rbac.RbacPlugin
 import com.example.bot.security.rbac.authorize
 import io.ktor.http.HttpStatusCode
@@ -123,6 +124,12 @@ private fun sanitize(
                 .replace("_", "\\_")
                 .replace("*", "\\*")
         else -> text
+    }
+}
+
+fun Route.notifyHealthRoute(healthProvider: () -> NotifyDispatchHealth) {
+    get("/notify/health") {
+        call.respond(healthProvider())
     }
 }
 

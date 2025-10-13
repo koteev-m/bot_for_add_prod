@@ -22,6 +22,7 @@ import com.pengrad.telegrambot.response.BaseResponse
 import com.pengrad.telegrambot.response.SendResponse
 import io.kotest.assertions.timing.eventually
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.doubles.shouldBeExactly
 import io.kotest.matchers.shouldBe
@@ -216,11 +217,21 @@ class MenuMyBookingsTest : StringSpec({
         val messages = captureMessages(bot)
 
         runHandler(handler, testScope, buildCallback("bk:cancel:1:$bookingId", chatId = 88L, fromId = telegramId, lang = "ru"))
+        eventually(2.seconds) {
+            transaction(database) {
+                BookingsTable
+                    .select { BookingsTable.id eq bookingId }
+                    .single()[BookingsTable.status] shouldBe BookingStatus.CANCELLED.name
+            }
+        }
         runHandler(handler, testScope, buildCallback("bk:cancel:1:$bookingId", chatId = 88L, fromId = telegramId, lang = "ru"))
 
         eventually(2.seconds) { messages.shouldHaveSize(4) }
-        val repeatMessage = messages[2].getParameters()["text"] as String
-        repeatMessage shouldBe texts.myBookingsCancelAlready("ru")
+        val payloads = messages.map { it.getParameters()["text"] as String }
+        payloads shouldContain texts.myBookingsCancelAlready("ru")
+        val shortId = bookingId.toString().replace("-", "").take(6).uppercase()
+        payloads.any { it.contains(shortId) && it.startsWith("Бронь") } shouldBe true
+        payloads.count { it == texts.myBookingsEmpty("ru") } shouldBe 2
 
         transaction(database) {
             BookingOutboxTable.selectAll().toList() shouldHaveSize 1

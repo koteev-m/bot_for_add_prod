@@ -25,6 +25,7 @@ import com.example.bot.promo.PromoAttributionService
 import com.example.bot.promo.PromoAttributionStore
 import com.example.bot.promo.PromoLinkRepository
 import com.example.bot.telegram.NotifyAdapterMetrics
+import com.example.bot.telegram.NotificationsDispatchConfig
 import com.example.bot.telegram.NotifySenderSendPort
 import com.example.bot.telegram.bookings.MyBookingsMetrics
 import com.example.bot.telegram.bookings.MyBookingsService
@@ -94,13 +95,13 @@ val bookingModule =
             )
         }
 
-        // Outbound port wiring (NotifySender via feature flag)
+        single { NotificationsDispatchConfig.fromEnvironment() }
+
+        // Outbound port wiring (NotifySender via environment toggle)
         single<SendPort> {
-            val useNotify =
-                System.getProperty("USE_NOTIFY_SENDER")?.equals("true", ignoreCase = true) == true ||
-                    System.getenv("USE_NOTIFY_SENDER")?.equals("true", ignoreCase = true) == true
-            if (useNotify) {
-                notifySendPortLogger.info("Using NotifySenderSendPort (USE_NOTIFY_SENDER=true)")
+            val dispatchConfig = get<NotificationsDispatchConfig>()
+            if (dispatchConfig.isDispatchActive) {
+                notifySendPortLogger.info("Using NotifySenderSendPort (notifications enabled)")
                 val metrics =
                     runCatching { get<MeterRegistry>() }
                         .map { registry ->
@@ -126,8 +127,16 @@ val bookingModule =
                         }.getOrNull()
                 NotifySenderSendPort(get(), metrics)
             } else {
+                notifySendPortLogger.info("Using DummySendPort (notifications disabled)")
                 DummySendPort
             }
+        }
+
+        single {
+            val config = get<NotificationsDispatchConfig>()
+            val port = get<SendPort>()
+            val implementation = port::class.simpleName ?: port::class.java.simpleName
+            config.toHealth(implementation)
         }
 
         // High-level services/workers
