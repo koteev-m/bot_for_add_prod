@@ -50,4 +50,12 @@ interface PaymentsRepository {
     )
 
     suspend fun findByPayload(payload: String): PaymentRecord?
+
+    suspend fun findByIdempotencyKey(idempotencyKey: String): PaymentRecord?
+
+    suspend fun updateStatus(
+        id: UUID,
+        status: String,
+        externalId: String?,
+    )
 }
