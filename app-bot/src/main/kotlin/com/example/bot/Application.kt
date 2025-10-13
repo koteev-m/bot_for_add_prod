@@ -50,6 +50,7 @@ import com.example.bot.routes.guestListRoutes
 import com.example.bot.routes.hallImageRoute
 import com.example.bot.routes.healthRoutes
 import com.example.bot.routes.musicRoutes
+import com.example.bot.routes.notifyHealthRoute
 import com.example.bot.routes.notifyRoutes
 import com.example.bot.routes.outboxAdminRoutes
 import com.example.bot.routes.paymentsCancelRefundRoutes
@@ -250,6 +251,10 @@ fun Application.module() {
     }
 
     healthRoutes(get())
+
+    routing {
+        notifyHealthRoute { getKoin().get() }
+    }
 
     launchCampaignSchedulerOnStart()
 

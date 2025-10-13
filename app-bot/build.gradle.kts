@@ -38,6 +38,7 @@ tasks.withType<Test>().configureEach {
 
     // TELEGRAM_BOT_TOKEN нужен для плагина InitDataAuth в тестах (MusicRoutesTest и др.)
     environment("TELEGRAM_BOT_TOKEN", "111111:TEST_BOT_TOKEN")
+    environment("NOTIFICATIONS_ENABLED", "false")
 }
 
 dependencies {
