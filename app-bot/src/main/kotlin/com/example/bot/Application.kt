@@ -47,6 +47,7 @@ import com.example.bot.routes.hallImageRoute
 import com.example.bot.routes.healthRoutes
 import com.example.bot.routes.musicRoutes
 import com.example.bot.routes.notifyRoutes
+import com.example.bot.routes.paymentsCancelRefundRoutes
 import com.example.bot.routes.paymentsFinalizeRoutes
 import com.example.bot.routes.securedRoutes
 import com.example.bot.routes.telegramWebhookRoutes
@@ -308,6 +309,7 @@ fun Application.module() {
 
     bookingFinalizeRoutes(bookingService) { telegramToken }
     paymentsFinalizeRoutes { telegramToken }
+    paymentsCancelRefundRoutes { telegramToken }
 
     // RBAC-защищённые брони: /api/clubs/{clubId}/bookings/hold|confirm
     securedRoutes(bookingService, initDataAuth = initDataAuthConfig)

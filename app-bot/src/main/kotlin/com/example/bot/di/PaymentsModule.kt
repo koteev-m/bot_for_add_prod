@@ -15,4 +15,9 @@ val paymentsModule = module {
             paymentsRepository = get(),
         )
     }
+    single<PaymentsService> {
+        DefaultPaymentsService(
+            finalizeService = get(),
+        )
+    }
 }
