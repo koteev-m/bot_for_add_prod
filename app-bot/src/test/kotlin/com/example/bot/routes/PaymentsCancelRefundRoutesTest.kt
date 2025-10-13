@@ -60,6 +60,8 @@ class PaymentsCancelRefundRoutesTest : StringSpec() {
                 val firstBody = Json.decodeFromString<CancelResponse>(first.bodyAsText())
                 firstBody.status shouldBe "CANCELLED"
                 firstBody.bookingId shouldBe bookingId.toString()
+                firstBody.idempotent shouldBe false
+                firstBody.alreadyCancelled shouldBe false
 
                 val second =
                     client.post("/api/clubs/1/bookings/${bookingId}/cancel") {
@@ -70,7 +72,9 @@ class PaymentsCancelRefundRoutesTest : StringSpec() {
                         setBody(payload)
                     }
                 second.status shouldBe HttpStatusCode.OK
-                second.bodyAsText() shouldBe first.bodyAsText()
+                val secondBody = Json.decodeFromString<CancelResponse>(second.bodyAsText())
+                secondBody.idempotent shouldBe true
+                secondBody.alreadyCancelled shouldBe false
             }
         }
 
@@ -93,6 +97,7 @@ class PaymentsCancelRefundRoutesTest : StringSpec() {
                 val body = Json.decodeFromString<RefundResponse>(response.bodyAsText())
                 body.status shouldBe "REFUNDED"
                 body.refundAmountMinor shouldBe 1_500
+                body.idempotent shouldBe false
             }
         }
 
@@ -114,6 +119,7 @@ class PaymentsCancelRefundRoutesTest : StringSpec() {
                 first.status shouldBe HttpStatusCode.OK
                 val firstBody = Json.decodeFromString<RefundResponse>(first.bodyAsText())
                 firstBody.refundAmountMinor shouldBe 700
+                firstBody.idempotent shouldBe false
 
                 val second =
                     client.post("/api/clubs/1/bookings/${bookingId}/refund") {
@@ -124,7 +130,9 @@ class PaymentsCancelRefundRoutesTest : StringSpec() {
                         setBody(payload)
                     }
                 second.status shouldBe HttpStatusCode.OK
-                second.bodyAsText() shouldBe first.bodyAsText()
+                val secondBody = Json.decodeFromString<RefundResponse>(second.bodyAsText())
+                secondBody.refundAmountMinor shouldBe 700
+                secondBody.idempotent shouldBe true
             }
         }
 
@@ -198,13 +206,16 @@ class PaymentsCancelRefundRoutesTest : StringSpec() {
 }
 
 private class FakePaymentsService : PaymentsService {
-    private data class CancelRecord(val clubId: Long, val bookingId: UUID)
+    private data class CancelRecord(
+        val clubId: Long,
+        val bookingId: UUID,
+        val alreadyCancelled: Boolean,
+    )
 
     private data class RefundRecord(
         val clubId: Long,
         val bookingId: UUID,
         val amount: Long,
-        val result: PaymentsService.RefundResult,
     )
 
     enum class BookingStatus { BOOKED, CANCELLED }
@@ -245,13 +256,17 @@ private class FakePaymentsService : PaymentsService {
         reason: String?,
         idemKey: String,
         actorUserId: Long,
-    ) {
+    ): PaymentsService.CancelResult {
         val existing = cancelHistory[idemKey]
         if (existing != null) {
             if (existing.clubId != clubId || existing.bookingId != bookingId) {
                 throw PaymentsService.ConflictException("idempotency mismatch")
             }
-            return
+            return PaymentsService.CancelResult(
+                bookingId = bookingId,
+                idempotent = true,
+                alreadyCancelled = existing.alreadyCancelled,
+            )
         }
 
         val state = bookings[clubId to bookingId] ?: throw PaymentsService.ValidationException("booking not found")
@@ -261,7 +276,12 @@ private class FakePaymentsService : PaymentsService {
             }
             state.status = BookingStatus.CANCELLED
         }
-        cancelHistory[idemKey] = CancelRecord(clubId, bookingId)
+        cancelHistory[idemKey] = CancelRecord(clubId, bookingId, alreadyCancelled = false)
+        return PaymentsService.CancelResult(
+            bookingId = bookingId,
+            idempotent = false,
+            alreadyCancelled = false,
+        )
     }
 
     override suspend fun refund(
@@ -279,7 +299,7 @@ private class FakePaymentsService : PaymentsService {
             if (amountMinor != null && existing.amount != amountMinor) {
                 throw PaymentsService.ConflictException("idempotency payload mismatch")
             }
-            return existing.result
+            return PaymentsService.RefundResult(existing.amount, idempotent = true)
         }
 
         if (amountMinor != null && amountMinor < 0) {
@@ -287,7 +307,7 @@ private class FakePaymentsService : PaymentsService {
         }
 
         val state = bookings[clubId to bookingId] ?: throw PaymentsService.ValidationException("booking not found")
-        val result: PaymentsService.RefundResult
+        val resultAmount: Long
         synchronized(state) {
             val remainder = state.capturedMinor - state.refundedMinor
             if (remainder <= 0) {
@@ -301,9 +321,9 @@ private class FakePaymentsService : PaymentsService {
                 throw PaymentsService.UnprocessableException("exceeds remainder")
             }
             state.refundedMinor += effective
-            result = PaymentsService.RefundResult(effective)
+            resultAmount = effective
         }
-        refundHistory[idemKey] = RefundRecord(clubId, bookingId, result.refundAmountMinor, result)
-        return result
+        refundHistory[idemKey] = RefundRecord(clubId, bookingId, resultAmount)
+        return PaymentsService.RefundResult(resultAmount, idempotent = false)
     }
 }

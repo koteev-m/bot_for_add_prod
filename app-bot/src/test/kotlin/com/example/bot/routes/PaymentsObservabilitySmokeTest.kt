@@ -1,5 +1,9 @@
 package com.example.bot.routes
 
+import com.example.bot.data.booking.BookingStatus
+import com.example.bot.data.booking.core.BookingCancellationResult
+import com.example.bot.data.booking.core.BookingRecord
+import com.example.bot.data.booking.core.PaymentsBookingRepository
 import com.example.bot.di.DefaultPaymentsService
 import com.example.bot.di.PaymentsService
 import com.example.bot.observability.MetricsProvider
@@ -9,6 +13,7 @@ import com.example.bot.plugins.resetMiniAppValidator
 import com.example.bot.plugins.withMiniAppAuth
 import com.example.bot.plugins.metricsRoute
 import com.example.bot.telemetry.PaymentsMetrics
+import com.example.bot.payments.PaymentsRepository
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.core.test.TestCase
 import io.kotest.core.test.TestResult
@@ -34,7 +39,11 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.koin.dsl.module
 import org.koin.ktor.plugin.Koin
+import java.math.BigDecimal
+import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 private const val TEST_TOKEN = "test-token"
 
@@ -55,13 +64,19 @@ class PaymentsObservabilitySmokeTest : StringSpec() {
         "exports metrics for cancel idempotency and refund errors" {
             val registry = MetricsProvider.prometheusRegistry()
             val metricsProvider = MetricsProvider(registry)
+            val paymentsRepository = InMemoryPaymentsRepository()
+            val bookingId = UUID.randomUUID()
+            val bookingRepository = TestPaymentsBookingRepository().apply {
+                seed(bookingId = bookingId, clubId = 1L, status = BookingStatus.BOOKED)
+            }
             val service = DefaultPaymentsService(
                 finalizeService = FakeFinalizeService(),
+                paymentsRepository = paymentsRepository,
+                bookingRepository = bookingRepository,
                 metricsProvider = metricsProvider,
                 tracer = null,
             )
 
-            val bookingId = UUID.randomUUID()
             service.seedLedger(
                 clubId = 1L,
                 bookingId = bookingId,
@@ -143,6 +158,133 @@ private fun Application.configurePaymentsTestApp(
         withMiniAppAuth { TEST_TOKEN }
         paymentsCancelRefundRoutes { TEST_TOKEN }
         metricsRoute(registry)
+    }
+}
+
+private class InMemoryPaymentsRepository : PaymentsRepository {
+    private val actions = ConcurrentHashMap<String, PaymentsRepository.SavedAction>()
+    private val idSequence = AtomicLong(0)
+
+    override suspend fun createInitiated(
+        bookingId: UUID?,
+        provider: String,
+        currency: String,
+        amountMinor: Long,
+        payload: String,
+        idempotencyKey: String,
+    ): PaymentsRepository.PaymentRecord {
+        throw UnsupportedOperationException("not used in test")
+    }
+
+    override suspend fun markPending(id: UUID) {
+        throw UnsupportedOperationException("not used in test")
+    }
+
+    override suspend fun markCaptured(
+        id: UUID,
+        externalId: String?,
+    ) {
+        throw UnsupportedOperationException("not used in test")
+    }
+
+    override suspend fun markDeclined(
+        id: UUID,
+        reason: String,
+    ) {
+        throw UnsupportedOperationException("not used in test")
+    }
+
+    override suspend fun markRefunded(
+        id: UUID,
+        externalId: String?,
+    ) {
+        throw UnsupportedOperationException("not used in test")
+    }
+
+    override suspend fun findByPayload(payload: String): PaymentsRepository.PaymentRecord? = null
+
+    override suspend fun findByIdempotencyKey(idempotencyKey: String): PaymentsRepository.PaymentRecord? = null
+
+    override suspend fun updateStatus(
+        id: UUID,
+        status: String,
+        externalId: String?,
+    ) {
+        throw UnsupportedOperationException("not used in test")
+    }
+
+    override suspend fun recordAction(
+        bookingId: UUID,
+        key: String,
+        action: PaymentsRepository.Action,
+        result: PaymentsRepository.Result,
+    ): PaymentsRepository.SavedAction {
+        val saved =
+            PaymentsRepository.SavedAction(
+                id = idSequence.incrementAndGet(),
+                bookingId = bookingId,
+                idempotencyKey = key,
+                action = action,
+                result = result,
+                createdAt = Instant.now(),
+            )
+        actions[key] = saved
+        return saved
+    }
+
+    override suspend fun findActionByIdempotencyKey(key: String): PaymentsRepository.SavedAction? = actions[key]
+}
+
+private class TestPaymentsBookingRepository : PaymentsBookingRepository {
+    private val bookings = ConcurrentHashMap<Pair<Long, UUID>, BookingRecord>()
+
+    fun seed(
+        bookingId: UUID,
+        clubId: Long,
+        status: BookingStatus,
+    ) {
+        bookings[clubId to bookingId] = newRecord(bookingId, clubId, status)
+    }
+
+    override suspend fun cancel(
+        bookingId: UUID,
+        clubId: Long,
+    ): BookingCancellationResult {
+        val key = clubId to bookingId
+        val current = bookings[key] ?: return BookingCancellationResult.NotFound
+        return when (current.status) {
+            BookingStatus.CANCELLED -> BookingCancellationResult.AlreadyCancelled(current)
+            BookingStatus.BOOKED -> {
+                val updated = current.copy(status = BookingStatus.CANCELLED)
+                bookings[key] = updated
+                BookingCancellationResult.Cancelled(updated)
+            }
+            else -> BookingCancellationResult.ConflictingStatus(current)
+        }
+    }
+
+    private fun newRecord(
+        bookingId: UUID,
+        clubId: Long,
+        status: BookingStatus,
+    ): BookingRecord {
+        return BookingRecord(
+            id = bookingId,
+            clubId = clubId,
+            tableId = 1L,
+            tableNumber = 1,
+            eventId = 1L,
+            guests = 2,
+            minRate = BigDecimal.ZERO,
+            totalRate = BigDecimal.ZERO,
+            slotStart = Instant.EPOCH,
+            slotEnd = Instant.EPOCH,
+            status = status,
+            qrSecret = "qr",
+            idempotencyKey = "seed",
+            createdAt = Instant.EPOCH,
+            updatedAt = Instant.EPOCH,
+        )
     }
 }
 

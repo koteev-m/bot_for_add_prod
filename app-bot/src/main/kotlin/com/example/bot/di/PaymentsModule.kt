@@ -6,6 +6,7 @@ import com.example.bot.observability.MetricsProvider
 import com.example.bot.payments.PaymentsRepository
 import com.example.bot.payments.finalize.DefaultPaymentsFinalizeService
 import com.example.bot.payments.finalize.PaymentsFinalizeService
+import com.example.bot.data.booking.core.PaymentsBookingRepository
 import io.micrometer.tracing.Tracer
 import org.koin.dsl.module
 
@@ -22,6 +23,8 @@ val paymentsModule = module {
         val tracer = runCatching { get<Tracer>() }.getOrNull()
         DefaultPaymentsService(
             finalizeService = get(),
+            paymentsRepository = get<PaymentsRepository>(),
+            bookingRepository = get<PaymentsBookingRepository>(),
             metricsProvider = metricsProvider,
             tracer = tracer,
         )

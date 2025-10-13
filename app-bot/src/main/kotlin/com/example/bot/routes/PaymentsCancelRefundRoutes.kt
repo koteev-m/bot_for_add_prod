@@ -43,13 +43,23 @@ private typealias RbacRouteWrapper = io.ktor.server.routing.Route.() -> Unit
 private data class CancelRequest(val reason: String? = null)
 
 @Serializable
-data class CancelResponse(val status: String, val bookingId: String)
+data class CancelResponse(
+    val status: String,
+    val bookingId: String,
+    val idempotent: Boolean,
+    val alreadyCancelled: Boolean = false,
+)
 
 @Serializable
 private data class RefundRequest(val amountMinor: Long? = null)
 
 @Serializable
-data class RefundResponse(val status: String, val bookingId: String, val refundAmountMinor: Long)
+data class RefundResponse(
+    val status: String,
+    val bookingId: String,
+    val refundAmountMinor: Long,
+    val idempotent: Boolean,
+)
 
 fun Application.paymentsCancelRefundRoutes(miniAppBotTokenProvider: () -> String) {
     val cancelEnabled = envBool("CANCEL_ENABLED", default = true)
@@ -158,17 +168,26 @@ private fun io.ktor.server.routing.Route.registerCancelRefundHandlers(
 
             tracer.spanSuspending("payments.cancel.handler", metadata) {
                 try {
-                    paymentsService.cancel(
-                        clubId = clubId,
-                        bookingId = bookingId,
-                        reason = payload.reason,
-                        idemKey = idempotencyKey,
-                        actorUserId = user.id,
-                    )
+                    val result =
+                        paymentsService.cancel(
+                            clubId = clubId,
+                            bookingId = bookingId,
+                            reason = payload.reason,
+                            idemKey = idempotencyKey,
+                            actorUserId = user.id,
+                        )
                     timer.record(Result.Ok)
                     setResult(Result.Ok)
-                    logger.info { "[payments] cancel result=ok club=$clubId booking=$bookingLabel requestId=$callId" }
-                    call.respond(CancelResponse(status = "CANCELLED", bookingId = bookingId.toString()))
+                    logger.info {
+                        "[payments] cancel result=ok club=$clubId booking=$bookingLabel requestId=$callId idempotent=${result.idempotent}" }
+                    call.respond(
+                        CancelResponse(
+                            status = "CANCELLED",
+                            bookingId = bookingId.toString(),
+                            idempotent = result.idempotent,
+                            alreadyCancelled = result.alreadyCancelled,
+                        ),
+                    )
                 } catch (validation: PaymentsService.ValidationException) {
                     timer.record(Result.Validation)
                     setResult(Result.Validation)
@@ -257,12 +276,14 @@ private fun io.ktor.server.routing.Route.registerCancelRefundHandlers(
                         )
                     timer.record(Result.Ok)
                     setResult(Result.Ok)
-                    logger.info { "[payments] refund result=ok club=$clubId booking=$bookingLabel requestId=$callId" }
+                    logger.info {
+                        "[payments] refund result=ok club=$clubId booking=$bookingLabel requestId=$callId idempotent=${result.idempotent}" }
                     call.respond(
                         RefundResponse(
                             status = "REFUNDED",
                             bookingId = bookingId.toString(),
                             refundAmountMinor = result.refundAmountMinor,
+                            idempotent = result.idempotent,
                         ),
                     )
                 } catch (validation: PaymentsService.ValidationException) {

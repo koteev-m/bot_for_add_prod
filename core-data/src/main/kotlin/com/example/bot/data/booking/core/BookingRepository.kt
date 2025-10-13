@@ -18,13 +18,13 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.count
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.update
-import org.jetbrains.exposed.sql.count
 import java.math.BigDecimal
 import java.time.Clock
 import java.time.Instant
@@ -34,10 +34,27 @@ import java.util.UUID
 
 private val ACTIVE_STATUSES = listOf(BookingStatus.BOOKED.name, BookingStatus.SEATED.name)
 
+sealed interface BookingCancellationResult {
+    data class Cancelled(val record: BookingRecord) : BookingCancellationResult
+
+    data class AlreadyCancelled(val record: BookingRecord) : BookingCancellationResult
+
+    data class ConflictingStatus(val record: BookingRecord) : BookingCancellationResult
+
+    data object NotFound : BookingCancellationResult
+}
+
+interface PaymentsBookingRepository {
+    suspend fun cancel(
+        bookingId: UUID,
+        clubId: Long,
+    ): BookingCancellationResult
+}
+
 class BookingRepository(
     private val db: Database,
     private val clock: Clock = Clock.systemUTC(),
-) {
+): PaymentsBookingRepository {
     suspend fun findById(id: UUID): BookingRecord? {
         return withTxRetry {
             newSuspendedTransaction(context = Dispatchers.IO, db = db) {
@@ -164,6 +181,61 @@ class BookingRepository(
             when {
                 ex.isRetryLimitExceeded() -> BookingCoreResult.Failure(BookingCoreError.OptimisticRetryExceeded)
                 else -> throw ex
+            }
+        }
+    }
+
+    override suspend fun cancel(
+        bookingId: UUID,
+        clubId: Long,
+    ): BookingCancellationResult {
+        return withTxRetry {
+            newSuspendedTransaction(context = Dispatchers.IO, db = db) {
+                val currentRow =
+                    BookingsTable
+                        .selectAll()
+                        .where { (BookingsTable.id eq bookingId) and (BookingsTable.clubId eq clubId) }
+                        .limit(1)
+                        .firstOrNull()
+                        ?: return@newSuspendedTransaction BookingCancellationResult.NotFound
+                val currentStatus = BookingStatus.valueOf(currentRow[BookingsTable.status])
+                when (currentStatus) {
+                    BookingStatus.CANCELLED -> BookingCancellationResult.AlreadyCancelled(currentRow.toBookingRecord())
+                    BookingStatus.BOOKED -> {
+                        val updated =
+                            BookingsTable.update({
+                                (BookingsTable.id eq bookingId) and
+                                    (BookingsTable.status eq BookingStatus.BOOKED.name)
+                            }) {
+                                it[status] = BookingStatus.CANCELLED.name
+                                it[updatedAt] = Instant.now(clock).toOffsetDateTime()
+                            }
+                        if (updated == 0) {
+                            val refreshed =
+                                BookingsTable
+                                    .selectAll()
+                                    .where { (BookingsTable.id eq bookingId) and (BookingsTable.clubId eq clubId) }
+                                    .limit(1)
+                                    .firstOrNull()
+                                    ?: return@newSuspendedTransaction BookingCancellationResult.NotFound
+                            val refreshedStatus = BookingStatus.valueOf(refreshed[BookingsTable.status])
+                            when (refreshedStatus) {
+                                BookingStatus.CANCELLED -> BookingCancellationResult.AlreadyCancelled(refreshed.toBookingRecord())
+                                BookingStatus.BOOKED -> BookingCancellationResult.ConflictingStatus(refreshed.toBookingRecord())
+                                else -> BookingCancellationResult.ConflictingStatus(refreshed.toBookingRecord())
+                            }
+                        } else {
+                            val refreshed =
+                                BookingsTable
+                                    .selectAll()
+                                    .where { BookingsTable.id eq bookingId }
+                                    .limit(1)
+                                    .first()
+                            BookingCancellationResult.Cancelled(refreshed.toBookingRecord())
+                        }
+                    }
+                    else -> BookingCancellationResult.ConflictingStatus(currentRow.toBookingRecord())
+                }
             }
         }
     }

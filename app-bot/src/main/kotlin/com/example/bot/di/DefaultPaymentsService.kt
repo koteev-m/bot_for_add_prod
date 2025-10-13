@@ -1,8 +1,17 @@
 package com.example.bot.di
 
+import com.example.bot.data.booking.BookingStatus
+import com.example.bot.data.booking.core.BookingCancellationResult
+import com.example.bot.data.booking.core.PaymentsBookingRepository
 import com.example.bot.observability.MetricsProvider
+import com.example.bot.payments.PaymentsRepository
+import com.example.bot.payments.PaymentsRepository.Action
+import com.example.bot.payments.PaymentsRepository.Result
+import com.example.bot.payments.PaymentsRepository.Result.Status as ActionStatus
+import com.example.bot.payments.PaymentsRepository.SavedAction
 import com.example.bot.payments.finalize.PaymentsFinalizeService
 import com.example.bot.telemetry.PaymentsMetrics
+import com.example.bot.telemetry.PaymentsSpanScope
 import com.example.bot.telemetry.PaymentsTraceMetadata
 import com.example.bot.telemetry.maskBookingId
 import com.example.bot.telemetry.setRefundAmount
@@ -14,23 +23,11 @@ import java.util.concurrent.ConcurrentHashMap
 
 class DefaultPaymentsService(
     private val finalizeService: PaymentsFinalizeService,
+    private val paymentsRepository: PaymentsRepository,
+    private val bookingRepository: PaymentsBookingRepository,
     private val metricsProvider: MetricsProvider?,
     private val tracer: Tracer?,
 ) : PaymentsService {
-
-    private data class CancelEntry(
-        val clubId: Long,
-        val bookingId: UUID,
-        val actorUserId: Long,
-    )
-
-    private data class RefundEntry(
-        val clubId: Long,
-        val bookingId: UUID,
-        val actorUserId: Long,
-        val amountMinor: Long,
-        val result: PaymentsService.RefundResult,
-    )
 
     private data class BookingLedger(
         var status: BookingStatus = BookingStatus.BOOKED,
@@ -38,11 +35,17 @@ class DefaultPaymentsService(
         var refundedMinor: Long = 0,
     )
 
-    private enum class BookingStatus { BOOKED, CANCELLED }
-
-    private val cancelRequests = ConcurrentHashMap<String, CancelEntry>()
-    private val refundRequests = ConcurrentHashMap<String, RefundEntry>()
     private val ledgers = ConcurrentHashMap<Pair<Long, UUID>, BookingLedger>()
+
+    private sealed interface RefundOutcome {
+        data class Success(val amount: Long, val remainderAfter: Long) : RefundOutcome
+
+        data class Conflict(val reason: String) : RefundOutcome
+
+        data class Unprocessable(val reason: String) : RefundOutcome
+
+        data class Validation(val reason: String) : RefundOutcome
+    }
 
     override suspend fun finalize(
         clubId: Long,
@@ -100,7 +103,7 @@ class DefaultPaymentsService(
         reason: String?,
         idemKey: String,
         actorUserId: Long,
-    ) {
+    ): PaymentsService.CancelResult {
         val traceMetadata =
             PaymentsTraceMetadata(
                 httpRoute = "/api/clubs/{clubId}/bookings/{bookingId}/cancel",
@@ -108,68 +111,84 @@ class DefaultPaymentsService(
                 idempotencyKeyPresent = idemKey.isNotBlank(),
                 bookingIdMasked = maskBookingId(bookingId),
             )
-        tracer.spanSuspending("payments.cancel", traceMetadata) {
+        return tracer.spanSuspending("payments.cancel", traceMetadata) {
             try {
-                val existing = cancelRequests[idemKey]
-                if (existing != null) {
-                    if (existing.clubId != clubId || existing.bookingId != bookingId) {
-                        PaymentsMetrics.incrementErrors(
-                            metricsProvider,
-                            PaymentsMetrics.Path.Cancel,
-                            PaymentsMetrics.ErrorKind.State,
-                        )
-                        setResult(PaymentsMetrics.Result.Conflict)
-                        throw PaymentsService.ConflictException("idempotency key mismatch")
-                    }
-                    PaymentsMetrics.incrementIdempotentHit(
-                        metricsProvider,
-                        PaymentsMetrics.Path.Cancel,
-                    )
-                    setResult(PaymentsMetrics.Result.Ok)
-                    return@spanSuspending
-                }
-
                 if (reason != null && reason.length > MAX_REASON_LENGTH) {
-                    PaymentsMetrics.incrementErrors(
-                        metricsProvider,
-                        PaymentsMetrics.Path.Cancel,
-                        PaymentsMetrics.ErrorKind.Validation,
-                    )
-                    setResult(PaymentsMetrics.Result.Validation)
                     throw PaymentsService.ValidationException("reason too long")
                 }
 
-                val ledgerKey = clubId to bookingId
-                val ledger = ledgers.computeIfAbsent(ledgerKey) { BookingLedger() }
-                synchronized(ledger) {
-                    if (ledger.status == BookingStatus.CANCELLED) {
-                        cancelRequests[idemKey] = CancelEntry(clubId, bookingId, actorUserId)
-                        PaymentsMetrics.incrementIdempotentHit(
-                            metricsProvider,
-                            PaymentsMetrics.Path.Cancel,
+                val existing = paymentsRepository.findActionByIdempotencyKey(idemKey)
+                if (existing != null) {
+                    return@spanSuspending handleExistingCancel(existing, clubId, bookingId)
+                }
+
+                val cancelResult = bookingRepository.cancel(bookingId, clubId)
+                return@spanSuspending when (cancelResult) {
+                    is BookingCancellationResult.Cancelled -> {
+                        updateLedgerStatus(clubId, bookingId, BookingStatus.CANCELLED)
+                        paymentsRepository.recordAction(
+                            bookingId = bookingId,
+                            key = idemKey,
+                            action = Action.CANCEL,
+                            result = Result(ActionStatus.OK, reason),
                         )
                         setResult(PaymentsMetrics.Result.Ok)
-                        return@spanSuspending
-                    }
-                    if (ledger.status != BookingStatus.BOOKED) {
-                        PaymentsMetrics.incrementErrors(
-                            metricsProvider,
-                            PaymentsMetrics.Path.Cancel,
-                            PaymentsMetrics.ErrorKind.State,
+                        PaymentsService.CancelResult(
+                            bookingId = bookingId,
+                            idempotent = false,
+                            alreadyCancelled = false,
                         )
-                        setResult(PaymentsMetrics.Result.Conflict)
-                        throw PaymentsService.ConflictException("cannot cancel in current state")
                     }
-                    ledger.status = BookingStatus.CANCELLED
+
+                    is BookingCancellationResult.AlreadyCancelled -> {
+                        updateLedgerStatus(clubId, bookingId, BookingStatus.CANCELLED)
+                        paymentsRepository.recordAction(
+                            bookingId = bookingId,
+                            key = idemKey,
+                            action = Action.CANCEL,
+                            result = Result(ActionStatus.ALREADY, reason ?: "already_cancelled"),
+                        )
+                        setResult(PaymentsMetrics.Result.Ok)
+                        PaymentsService.CancelResult(
+                            bookingId = bookingId,
+                            idempotent = false,
+                            alreadyCancelled = true,
+                        )
+                    }
+
+                    is BookingCancellationResult.ConflictingStatus -> {
+                        val message = "cannot cancel booking in status ${cancelResult.record.status}"
+                        paymentsRepository.recordAction(
+                            bookingId = bookingId,
+                            key = idemKey,
+                            action = Action.CANCEL,
+                            result = Result(ActionStatus.CONFLICT, message),
+                        )
+                        throw PaymentsService.ConflictException(message)
+                    }
+
+                    BookingCancellationResult.NotFound -> {
+                        throw PaymentsService.ValidationException("booking not found")
+                    }
                 }
-                cancelRequests[idemKey] = CancelEntry(clubId, bookingId, actorUserId)
-                setResult(PaymentsMetrics.Result.Ok)
+            } catch (validation: PaymentsService.ValidationException) {
+                PaymentsMetrics.incrementErrors(
+                    metricsProvider,
+                    PaymentsMetrics.Path.Cancel,
+                    PaymentsMetrics.ErrorKind.Validation,
+                )
+                setResult(PaymentsMetrics.Result.Validation)
+                throw validation
+            } catch (conflict: PaymentsService.ConflictException) {
+                PaymentsMetrics.incrementErrors(
+                    metricsProvider,
+                    PaymentsMetrics.Path.Cancel,
+                    PaymentsMetrics.ErrorKind.State,
+                )
+                setResult(PaymentsMetrics.Result.Conflict)
+                throw conflict
             } catch (unexpected: Throwable) {
-                if (
-                    unexpected !is PaymentsService.ValidationException &&
-                        unexpected !is PaymentsService.ConflictException &&
-                        unexpected !is PaymentsService.UnprocessableException
-                ) {
+                if (unexpected !is PaymentsService.UnprocessableException) {
                     PaymentsMetrics.incrementErrors(
                         metricsProvider,
                         PaymentsMetrics.Path.Cancel,
@@ -198,134 +217,111 @@ class DefaultPaymentsService(
             )
         return tracer.spanSuspending("payments.refund", traceMetadata) {
             try {
-                val existing = refundRequests[idemKey]
-                if (existing != null) {
-                    if (existing.clubId != clubId || existing.bookingId != bookingId) {
-                        PaymentsMetrics.incrementErrors(
-                            metricsProvider,
-                            PaymentsMetrics.Path.Refund,
-                            PaymentsMetrics.ErrorKind.State,
-                        )
-                        setResult(PaymentsMetrics.Result.Conflict)
-                        throw PaymentsService.ConflictException("idempotency key mismatch")
-                    }
-                    if (existing.amountMinor != (amountMinor ?: existing.amountMinor)) {
-                        PaymentsMetrics.incrementErrors(
-                            metricsProvider,
-                            PaymentsMetrics.Path.Refund,
-                            PaymentsMetrics.ErrorKind.State,
-                        )
-                        setResult(PaymentsMetrics.Result.Conflict)
-                        throw PaymentsService.ConflictException("idempotency payload mismatch")
-                    }
-                    PaymentsMetrics.incrementIdempotentHit(
-                        metricsProvider,
-                        PaymentsMetrics.Path.Refund,
-                    )
-                    setResult(PaymentsMetrics.Result.Ok)
-                    return@spanSuspending existing.result
+                if (amountMinor != null && amountMinor < 0) {
+                    throw PaymentsService.ValidationException("amount must be non-negative")
                 }
 
-                val requested = amountMinor ?: -1L
-                if (requested < 0 && amountMinor != null) {
-                    PaymentsMetrics.incrementErrors(
-                        metricsProvider,
-                        PaymentsMetrics.Path.Refund,
-                        PaymentsMetrics.ErrorKind.Validation,
-                    )
-                    setResult(PaymentsMetrics.Result.Validation)
-                    throw PaymentsService.ValidationException("amount must be non-negative")
+                val existing = paymentsRepository.findActionByIdempotencyKey(idemKey)
+                if (existing != null) {
+                    return@spanSuspending handleExistingRefund(existing, clubId, bookingId, amountMinor)
                 }
 
                 val ledgerKey = clubId to bookingId
                 val ledger = ledgers.computeIfAbsent(ledgerKey) { BookingLedger() }
-                val effectiveAmount: Long
-                val remainderAfter: Long
+                val outcome: RefundOutcome
                 synchronized(ledger) {
                     val remainder = ledger.capturedMinor - ledger.refundedMinor
-                    if (amountMinor == null && remainder <= 0) {
-                        PaymentsMetrics.incrementErrors(
-                            metricsProvider,
-                            PaymentsMetrics.Path.Refund,
-                            PaymentsMetrics.ErrorKind.State,
-                        )
-                        setResult(PaymentsMetrics.Result.Conflict)
-                        throw PaymentsService.ConflictException("nothing to refund")
-                    }
-                    if (amountMinor != null && amountMinor < 0) {
-                        PaymentsMetrics.incrementErrors(
-                            metricsProvider,
-                            PaymentsMetrics.Path.Refund,
-                            PaymentsMetrics.ErrorKind.Validation,
-                        )
-                        setResult(PaymentsMetrics.Result.Validation)
-                        throw PaymentsService.ValidationException("amount must be non-negative")
-                    }
-                    val target = amountMinor ?: remainder
-                    if (target < 0) {
-                        PaymentsMetrics.incrementErrors(
-                            metricsProvider,
-                            PaymentsMetrics.Path.Refund,
-                            PaymentsMetrics.ErrorKind.Validation,
-                        )
-                        setResult(PaymentsMetrics.Result.Validation)
-                        throw PaymentsService.ValidationException("invalid refund amount")
-                    }
-                    if (remainder <= 0 && target > 0) {
-                        PaymentsMetrics.incrementErrors(
-                            metricsProvider,
-                            PaymentsMetrics.Path.Refund,
-                            PaymentsMetrics.ErrorKind.State,
-                        )
-                        setResult(PaymentsMetrics.Result.Conflict)
-                        throw PaymentsService.ConflictException("nothing to refund")
-                    }
-                    if (target > remainder) {
-                        PaymentsMetrics.incrementErrors(
-                            metricsProvider,
-                            PaymentsMetrics.Path.Refund,
-                            PaymentsMetrics.ErrorKind.Unprocessable,
-                        )
-                        setResult(PaymentsMetrics.Result.Unprocessable)
-                        throw PaymentsService.UnprocessableException("exceeds remainder")
-                    }
-                    effectiveAmount = target
-                    ledger.refundedMinor += effectiveAmount
-                    remainderAfter = ledger.capturedMinor - ledger.refundedMinor
+                    outcome =
+                        when {
+                            amountMinor == null && remainder <= 0 -> RefundOutcome.Conflict("nothing to refund")
+                            else -> {
+                                val target = amountMinor ?: remainder
+                                when {
+                                    target < 0 -> RefundOutcome.Validation("invalid refund amount")
+                                    remainder <= 0 && target > 0 -> RefundOutcome.Conflict("nothing to refund")
+                                    target > remainder -> RefundOutcome.Unprocessable("exceeds remainder")
+                                    else -> {
+                                        ledger.refundedMinor += target
+                                        val remainderAfter = ledger.capturedMinor - ledger.refundedMinor
+                                        RefundOutcome.Success(target, remainderAfter)
+                                    }
+                                }
+                            }
+                        }
                 }
 
-                PaymentsMetrics.updateRefundRemainder(
+                when (outcome) {
+                    is RefundOutcome.Success -> {
+                        PaymentsMetrics.updateRefundRemainder(
+                            metricsProvider,
+                            clubId,
+                            maskBookingId(bookingId),
+                            outcome.remainderAfter,
+                        )
+                        paymentsRepository.recordAction(
+                            bookingId = bookingId,
+                            key = idemKey,
+                            action = Action.REFUND,
+                            result = Result(ActionStatus.OK, outcome.amount.toString()),
+                        )
+                        setResult(PaymentsMetrics.Result.Ok)
+                        setRefundAmount(outcome.amount)
+                        PaymentsService.RefundResult(outcome.amount, idempotent = false)
+                    }
+
+                    is RefundOutcome.Conflict -> {
+                        paymentsRepository.recordAction(
+                            bookingId = bookingId,
+                            key = idemKey,
+                            action = Action.REFUND,
+                            result = Result(ActionStatus.CONFLICT, outcome.reason),
+                        )
+                        throw PaymentsService.ConflictException(outcome.reason)
+                    }
+
+                    is RefundOutcome.Unprocessable -> {
+                        paymentsRepository.recordAction(
+                            bookingId = bookingId,
+                            key = idemKey,
+                            action = Action.REFUND,
+                            result = Result(ActionStatus.ERROR, outcome.reason),
+                        )
+                        throw PaymentsService.UnprocessableException(outcome.reason)
+                    }
+
+                    is RefundOutcome.Validation -> throw PaymentsService.ValidationException(outcome.reason)
+                }
+            } catch (validation: PaymentsService.ValidationException) {
+                PaymentsMetrics.incrementErrors(
                     metricsProvider,
-                    clubId,
-                    maskBookingId(bookingId),
-                    remainderAfter,
+                    PaymentsMetrics.Path.Refund,
+                    PaymentsMetrics.ErrorKind.Validation,
                 )
-
-                val result = PaymentsService.RefundResult(effectiveAmount)
-                refundRequests[idemKey] =
-                    RefundEntry(
-                        clubId = clubId,
-                        bookingId = bookingId,
-                        actorUserId = actorUserId,
-                        amountMinor = effectiveAmount,
-                        result = result,
-                    )
-                setResult(PaymentsMetrics.Result.Ok)
-                setRefundAmount(effectiveAmount)
-                result
+                setResult(PaymentsMetrics.Result.Validation)
+                throw validation
+            } catch (conflict: PaymentsService.ConflictException) {
+                PaymentsMetrics.incrementErrors(
+                    metricsProvider,
+                    PaymentsMetrics.Path.Refund,
+                    PaymentsMetrics.ErrorKind.State,
+                )
+                setResult(PaymentsMetrics.Result.Conflict)
+                throw conflict
+            } catch (unprocessable: PaymentsService.UnprocessableException) {
+                PaymentsMetrics.incrementErrors(
+                    metricsProvider,
+                    PaymentsMetrics.Path.Refund,
+                    PaymentsMetrics.ErrorKind.Unprocessable,
+                )
+                setResult(PaymentsMetrics.Result.Unprocessable)
+                throw unprocessable
             } catch (unexpected: Throwable) {
-                if (
-                    unexpected !is PaymentsService.ValidationException &&
-                        unexpected !is PaymentsService.ConflictException &&
-                        unexpected !is PaymentsService.UnprocessableException
-                ) {
-                    PaymentsMetrics.incrementErrors(
-                        metricsProvider,
-                        PaymentsMetrics.Path.Refund,
-                        PaymentsMetrics.ErrorKind.Unexpected,
-                    )
-                    setResult(PaymentsMetrics.Result.Unexpected)
-                }
+                PaymentsMetrics.incrementErrors(
+                    metricsProvider,
+                    PaymentsMetrics.Path.Refund,
+                    PaymentsMetrics.ErrorKind.Unexpected,
+                )
+                setResult(PaymentsMetrics.Result.Unexpected)
                 throw unexpected
             }
         }
@@ -353,6 +349,130 @@ class DefaultPaymentsService(
             maskBookingId(bookingId),
             capturedMinor - refundedMinor,
         )
+    }
+
+    private fun updateLedgerStatus(
+        clubId: Long,
+        bookingId: UUID,
+        status: BookingStatus,
+    ) {
+        val ledger = ledgers.computeIfAbsent(clubId to bookingId) { BookingLedger() }
+        synchronized(ledger) {
+            ledger.status = status
+        }
+    }
+
+    private fun PaymentsSpanScope.handleExistingCancel(
+        existing: SavedAction,
+        clubId: Long,
+        bookingId: UUID,
+    ): PaymentsService.CancelResult {
+        if (existing.action != Action.CANCEL) {
+            throw PaymentsService.ConflictException("idempotency key already used for ${existing.action}")
+        }
+        if (existing.bookingId != bookingId) {
+            throw PaymentsService.ConflictException("idempotency key mismatch")
+        }
+        return when (existing.result.status) {
+            ActionStatus.OK -> {
+                PaymentsMetrics.incrementIdempotentHit(
+                    metricsProvider,
+                    PaymentsMetrics.Path.Cancel,
+                )
+                updateLedgerStatus(clubId, bookingId, BookingStatus.CANCELLED)
+                setResult(PaymentsMetrics.Result.Ok)
+                PaymentsService.CancelResult(bookingId, idempotent = true, alreadyCancelled = false)
+            }
+
+            ActionStatus.ALREADY -> {
+                PaymentsMetrics.incrementIdempotentHit(
+                    metricsProvider,
+                    PaymentsMetrics.Path.Cancel,
+                )
+                updateLedgerStatus(clubId, bookingId, BookingStatus.CANCELLED)
+                setResult(PaymentsMetrics.Result.Ok)
+                PaymentsService.CancelResult(bookingId, idempotent = true, alreadyCancelled = true)
+            }
+
+            ActionStatus.CONFLICT -> {
+                PaymentsMetrics.incrementErrors(
+                    metricsProvider,
+                    PaymentsMetrics.Path.Cancel,
+                    PaymentsMetrics.ErrorKind.State,
+                )
+                setResult(PaymentsMetrics.Result.Conflict)
+                throw PaymentsService.ConflictException(existing.result.reason ?: "cannot cancel")
+            }
+
+            ActionStatus.ERROR -> {
+                PaymentsMetrics.incrementErrors(
+                    metricsProvider,
+                    PaymentsMetrics.Path.Cancel,
+                    PaymentsMetrics.ErrorKind.Validation,
+                )
+                setResult(PaymentsMetrics.Result.Validation)
+                throw PaymentsService.ValidationException(existing.result.reason ?: "cannot cancel")
+            }
+        }
+    }
+
+    private fun PaymentsSpanScope.handleExistingRefund(
+        existing: SavedAction,
+        clubId: Long,
+        bookingId: UUID,
+        requestedAmount: Long?,
+    ): PaymentsService.RefundResult {
+        if (existing.action != Action.REFUND) {
+            throw PaymentsService.ConflictException("idempotency key already used for ${existing.action}")
+        }
+        if (existing.bookingId != bookingId) {
+            throw PaymentsService.ConflictException("idempotency key mismatch")
+        }
+        return when (existing.result.status) {
+            ActionStatus.OK -> {
+                val amount = existing.result.reason?.toLongOrNull()
+                    ?: throw PaymentsService.ValidationException("stored refund amount missing")
+                if (requestedAmount != null && requestedAmount != amount) {
+                    throw PaymentsService.ConflictException("idempotency payload mismatch")
+                }
+                PaymentsMetrics.incrementIdempotentHit(
+                    metricsProvider,
+                    PaymentsMetrics.Path.Refund,
+                )
+                setResult(PaymentsMetrics.Result.Ok)
+                PaymentsService.RefundResult(amount, idempotent = true)
+            }
+
+            ActionStatus.ALREADY -> {
+                val amount = existing.result.reason?.toLongOrNull() ?: 0L
+                PaymentsMetrics.incrementIdempotentHit(
+                    metricsProvider,
+                    PaymentsMetrics.Path.Refund,
+                )
+                setResult(PaymentsMetrics.Result.Ok)
+                PaymentsService.RefundResult(amount, idempotent = true)
+            }
+
+            ActionStatus.CONFLICT -> {
+                PaymentsMetrics.incrementErrors(
+                    metricsProvider,
+                    PaymentsMetrics.Path.Refund,
+                    PaymentsMetrics.ErrorKind.State,
+                )
+                setResult(PaymentsMetrics.Result.Conflict)
+                throw PaymentsService.ConflictException(existing.result.reason ?: "refund conflict")
+            }
+
+            ActionStatus.ERROR -> {
+                PaymentsMetrics.incrementErrors(
+                    metricsProvider,
+                    PaymentsMetrics.Path.Refund,
+                    PaymentsMetrics.ErrorKind.Validation,
+                )
+                setResult(PaymentsMetrics.Result.Validation)
+                throw PaymentsService.ValidationException(existing.result.reason ?: "refund error")
+            }
+        }
     }
 
     companion object {
