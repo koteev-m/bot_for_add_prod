@@ -302,10 +302,16 @@ fun Application.module() {
         initDataAuth = initDataAuthConfig,
     )
 
-    notifyRoutes(
-        tx = get(),
-        campaigns = get(),
-    )
+    val notifyRoutesEnabled = resolveFlag("NOTIFY_ROUTES_ENABLED", default = true)
+    if (notifyRoutesEnabled) {
+        notifyRoutes(
+            tx = get(),
+            campaigns = get(),
+        )
+        bootstrapLogger.info("notifyRoutes enabled under /api")
+    } else {
+        bootstrapLogger.info("notifyRoutes disabled by flag")
+    }
 
     val telegramStartupLogger = LoggerFactory.getLogger("TelegramStartup")
     val koinAppConfig: AppConfig? = runCatching { get<AppConfig>() }.getOrNull()
