@@ -13,9 +13,8 @@ import java.util.HashMap
 import java.util.LinkedHashMap
 import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.statements.api.PreparedStatementApi
@@ -121,26 +120,26 @@ private sealed interface SqlParameter {
 
     data class StringParam(val value: String) : SqlParameter {
         override fun bind(statement: PreparedStatementApi, index: Int) {
-            statement.set(index, value)
+            statement[index] = value
         }
     }
 
     data class IntParam(val value: Int) : SqlParameter {
         override fun bind(statement: PreparedStatementApi, index: Int) {
-            statement.set(index, value)
+            statement[index] = value
         }
     }
 
     data class LongParam(val value: Long) : SqlParameter {
         override fun bind(statement: PreparedStatementApi, index: Int) {
-            statement.set(index, value)
+            statement[index] = value
         }
     }
 
     data class InstantParam(val value: Instant) : SqlParameter {
         override fun bind(statement: PreparedStatementApi, index: Int) {
             val offset = OffsetDateTime.ofInstant(value, ZoneOffset.UTC)
-            statement.set(index, offset)
+            statement[index] = offset
         }
     }
 }
@@ -252,7 +251,7 @@ class OutboxAdminRepositoryImpl(
             ) combined
             ORDER BY $sortColumn $sortDirection
             LIMIT ? OFFSET ?
-            """
+            """.trimIndent()
 
         val params =
             bookingConditions.params +
@@ -285,8 +284,8 @@ class OutboxAdminRepositoryImpl(
         return newSuspendedTransaction(context = Dispatchers.IO, db = db) {
             val bookingRows =
                 BookingOutboxTable
-                    .slice(BookingOutboxTable.id, BookingOutboxTable.topic, BookingOutboxTable.status, BookingOutboxTable.createdAt)
-                    .select { (BookingOutboxTable.id inList uniqueIds) and (BookingOutboxTable.status inList allowedReplayStatuses) }
+                    .selectAll()
+                    .where { (BookingOutboxTable.id inList uniqueIds) and (BookingOutboxTable.status inList allowedReplayStatuses) }
                     .map { row ->
                         ReplayCandidate(
                             id = row[BookingOutboxTable.id],
@@ -297,12 +296,8 @@ class OutboxAdminRepositoryImpl(
                     }
             val notificationRows =
                 NotificationsOutboxTable
-                    .slice(
-                        NotificationsOutboxTable.id,
-                        NotificationsOutboxTable.kind,
-                        NotificationsOutboxTable.status,
-                        NotificationsOutboxTable.createdAt,
-                    ).select {
+                    .selectAll()
+                    .where {
                         (NotificationsOutboxTable.id inList uniqueIds) and
                             (NotificationsOutboxTable.status inList allowedReplayStatuses)
                     }
@@ -494,7 +489,7 @@ class OutboxAdminRepositoryImpl(
             ${conditions.toWhereClause()}
             ORDER BY ${spec.createdAtColumn} ASC
             LIMIT ?
-            """
+            """.trimIndent()
         val params = conditions.params + SqlParameter.IntParam(limit)
         val statement = connection.prepareStatement(sql, false)
         try {
@@ -579,4 +574,3 @@ class OutboxAdminRepositoryImpl(
         )
     }
 }
-

@@ -35,6 +35,7 @@ import com.example.bot.plugins.installRbacIfEnabled
 import com.example.bot.plugins.installRequestLogging
 import com.example.bot.plugins.installTracingFromEnv
 import com.example.bot.plugins.MiniAppUserKey
+import com.example.bot.plugins.installMiniAppAuthStatusPage
 import com.example.bot.plugins.meterRegistry
 import com.example.bot.plugins.rbacSampleRoute
 import com.example.bot.plugins.resolveFlag
@@ -183,6 +184,7 @@ fun Application.module() {
     installMigrationsAndDatabase()
     installAppConfig()
     installRequestLogging()
+    installMiniAppAuthStatusPage()
     val tracingSetup = installTracingFromEnv()
     install(ContentNegotiation) { json() }
 

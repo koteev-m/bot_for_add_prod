@@ -4,19 +4,21 @@ import com.example.bot.security.auth.InitDataValidator
 import com.example.bot.security.auth.TelegramUser
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.application.ApplicationCallPipeline
-import io.ktor.server.application.call
+import io.ktor.server.application.createRouteScopedPlugin
+import io.ktor.server.application.install
+import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.contentType
 import io.ktor.server.request.header
 import io.ktor.server.request.receiveParameters
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.intercept
 import io.ktor.util.AttributeKey
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
+import java.io.Serial
 
 val MiniAppUserKey: AttributeKey<TelegramMiniUser> = AttributeKey("miniapp.user")
 
@@ -30,44 +32,81 @@ data class TelegramMiniUser(
 
 private val logger = LoggerFactory.getLogger("InitDataAuth")
 
+/** Подменяемый валидатор (для тестов). */
 private var validator: (String, String) -> TelegramMiniUser? = { raw, token ->
     InitDataValidator.validate(raw, token)?.toMiniUser()
 }
 
-fun Route.withMiniAppAuth(botTokenProvider: () -> String) {
-    intercept(ApplicationCallPipeline.Plugins) {
-        val initData = extractInitData(call)
-        if (initData.isNullOrBlank()) {
-            call.respondUnauthorized("initData missing")
-            finish()
-            return@intercept
-        }
-
-        val botToken = botTokenProvider.invoke()
-        if (botToken.isBlank()) {
-            call.respondUnauthorized("bot token missing")
-            finish()
-            return@intercept
-        }
-
-        val user = runCatching { validator(initData, botToken) }.getOrElse { throwable ->
-            logger.warn("initData validation threw", throwable)
-            null
-        }
-
-        if (user == null) {
-            call.respondUnauthorized("initData invalid")
-            finish()
-            return@intercept
-        }
-
-        call.attributes.put(MiniAppUserKey, user)
+/**
+ * Служебное исключение для прерывания пайплайна после 401.
+ * Делаем классом (а не object), чтобы не ловить предупреждение про readResolve().
+ */
+internal class MiniAppAuthAbort : RuntimeException() {
+    companion object {
+        @Serial
+        private const val serialVersionUID: Long = 1L
     }
 }
 
-internal fun overrideMiniAppValidatorForTesting(
-    override: (String, String) -> TelegramMiniUser?,
-) {
+private class MiniAppAuthConfig {
+    lateinit var botTokenProvider: () -> String
+}
+
+/**
+ * Route-scoped plugin: валидирует Telegram Mini App initData,
+ * кладёт TelegramMiniUser в attributes и при неуспехе возвращает 401.
+ */
+private val MiniAppAuth =
+    createRouteScopedPlugin("MiniAppAuth", ::MiniAppAuthConfig) {
+        val tokenProvider = pluginConfig.botTokenProvider
+
+        onCall { call ->
+            val initData = extractInitData(call)
+            if (initData.isNullOrBlank()) {
+                call.respondUnauthorized("initData missing")
+                throw MiniAppAuthAbort()
+            }
+
+            // было: getOrElse { "" }.orEmpty() — .orEmpty() лишний
+            val botToken = runCatching { tokenProvider() }.getOrElse { "" }
+            if (botToken.isBlank()) {
+                call.respondUnauthorized("bot token missing")
+                throw MiniAppAuthAbort()
+            }
+
+            val user =
+                runCatching { validator(initData, botToken) }
+                    .onFailure { logger.warn("initData validation threw", it) }
+                    .getOrNull()
+
+            if (user == null) {
+                call.respondUnauthorized("initData invalid")
+                throw MiniAppAuthAbort()
+            }
+
+            call.attributes.put(MiniAppUserKey, user)
+        }
+    }
+
+/** Удобный фасад для подключения плагина к ветке роутов. */
+fun Route.withMiniAppAuth(botTokenProvider: () -> String) {
+    install(MiniAppAuth) { this.botTokenProvider = botTokenProvider }
+}
+
+/**
+ * StatusPages-хук, чтобы «молча» проглатывать MiniAppAuthAbort.
+ * Вызови ОДИН раз в Application.module до регистрации роутов.
+ */
+fun Application.installMiniAppAuthStatusPage() {
+    install(StatusPages) {
+        exception<MiniAppAuthAbort> { _, _ ->
+            // Ответ уже отправлен (401) — никакой доп. обработки не нужно.
+        }
+    }
+}
+
+/** Тестовые хуки. */
+internal fun overrideMiniAppValidatorForTesting(override: (String, String) -> TelegramMiniUser?) {
     validator = override
 }
 
@@ -78,18 +117,16 @@ internal fun resetMiniAppValidator() {
 private fun TelegramUser.toMiniUser(): TelegramMiniUser =
     TelegramMiniUser(id = id, username = username)
 
+/* -------------------- helpers -------------------- */
+
 private suspend fun extractInitData(call: ApplicationCall): String? {
-    val queryValue = call.request.queryParameters["initData"]?.takeIf { it.isNotBlank() }
-    val headerValue = call.request.header("X-Telegram-InitData")?.takeIf { it.isNotBlank() }
-        ?: call.request.header("X-Telegram-Init-Data")?.takeIf { it.isNotBlank() }
+    val q = call.request.queryParameters["initData"]?.takeIf { it.isNotBlank() }
+    val h =
+        call.request.header("X-Telegram-InitData")?.takeIf { it.isNotBlank() }
+            ?: call.request.header("X-Telegram-Init-Data")?.takeIf { it.isNotBlank() }
 
-    if (!queryValue.isNullOrBlank()) {
-        return queryValue
-    }
-    if (!headerValue.isNullOrBlank()) {
-        return headerValue
-    }
-
+    if (!q.isNullOrBlank()) return q
+    if (!h.isNullOrBlank()) return h
     return extractInitDataFromBodyOrNull(call)
 }
 
@@ -101,9 +138,8 @@ private suspend fun ApplicationCall.respondUnauthorized(reason: String) {
 private suspend fun extractInitDataFromBodyOrNull(call: ApplicationCall): String? {
     return try {
         when {
-            call.request.contentType().match(ContentType.Application.FormUrlEncoded) -> {
+            call.request.contentType().match(ContentType.Application.FormUrlEncoded) ->
                 call.receiveParameters()["initData"]
-            }
 
             call.request.contentType().match(ContentType.Application.Json) -> {
                 val body = call.receiveText()
@@ -112,7 +148,7 @@ private suspend fun extractInitDataFromBodyOrNull(call: ApplicationCall): String
 
             else -> null
         }
-    } catch (ignore: Throwable) {
+    } catch (_: Throwable) {
         null
     }
 }

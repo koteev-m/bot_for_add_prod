@@ -6,7 +6,6 @@ import com.example.bot.data.booking.EventsTable
 import com.example.bot.data.booking.core.OutboxRepository
 import com.example.bot.data.security.User
 import com.example.bot.data.security.UserRepository
-import com.example.bot.telegram.bookings.MyBookingsService.CancelResult
 import com.example.bot.text.BotLocales
 import com.example.bot.text.BotTexts
 import kotlinx.coroutines.Dispatchers
@@ -17,10 +16,8 @@ import org.jetbrains.exposed.sql.Column
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.update
 import org.slf4j.LoggerFactory
@@ -133,7 +130,10 @@ class MyBookingsService(
         return newSuspendedTransaction(context = Dispatchers.IO, db = database) {
             val rows =
                 BookingsTable
-                    .select { (BookingsTable.guestUserId eq userId) and (BookingsTable.status inList ACTIVE_STATUSES) }
+                    .selectAll()
+                    .where {
+                        (BookingsTable.guestUserId eq userId) and (BookingsTable.status inList ACTIVE_STATUSES)
+                    }
                     .orderBy(BookingsTable.slotStart to SortOrder.ASC)
                     .limit(limit, offset)
                     .toList()
@@ -148,7 +148,9 @@ class MyBookingsService(
         return newSuspendedTransaction(context = Dispatchers.IO, db = database) {
             val row =
                 BookingsTable
-                    .select { (BookingsTable.id eq bookingId) and (BookingsTable.guestUserId eq userId) }
+                    .selectAll()
+                    .where{
+                        (BookingsTable.id eq bookingId) and (BookingsTable.guestUserId eq userId) }
                     .limit(1)
                     .firstOrNull()
             if (row == null) {
@@ -234,7 +236,10 @@ class MyBookingsService(
         if (ids.isEmpty()) return emptyMap()
         val results =
             ClubsLite
-                .select { ClubsLite.id inList ids.toList() }
+                .selectAll()
+                .where{
+                    ClubsLite.id inList ids.toList()
+                }
                 .associateBy({ it[ClubsLite.id] }, { ClubRow.fromRow(it) })
         return results
     }
@@ -242,7 +247,10 @@ class MyBookingsService(
     private fun loadEvents(ids: Set<Long>): Map<Long, EventRow> {
         if (ids.isEmpty()) return emptyMap()
         return EventsTable
-            .select { EventsTable.id inList ids.toList() }
+            .selectAll()
+            .where{
+                EventsTable.id inList ids.toList()
+            }
             .associateBy({ it[EventsTable.id] }, { EventRow.fromRow(it) })
     }
 
