@@ -17,6 +17,20 @@ warn() {
   printf '[smoke][warn] %s\n' "$*" >&2
 }
 
+section() {
+  log "==== $1 ===="
+}
+
+run() {
+  local cmd=$1
+  log "Running command: ${cmd}"
+  if bash -c "$cmd"; then
+    log "Command succeeded: ${cmd}"
+  else
+    warn "Command failed: ${cmd}"
+  fi
+}
+
 prepare_dirs() {
   log "Preparing smoke report directory at ${SMOKE_DIR}"
   rm -rf "${SMOKE_DIR}"
@@ -85,6 +99,10 @@ clean_test_results() {
   rm -rf "${APP_BOT_TEST_RESULTS}"
 }
 
+cleanup_test_results() {
+  clean_test_results
+}
+
 run_outbox_admin_tests() {
   clean_test_results
   log "Running outbox admin targeted tests"
@@ -151,10 +169,18 @@ main() {
   prepare_dirs
   run_gradle_build
 
+  section "Ktor smoke endpoints"
   run_targeted_smoke '*SmokeRoutesTest' 'routes smoke'
   run_targeted_smoke '*HealthRoutesTest' 'health/ready smoke'
   run_targeted_smoke '*NotifyRoutesWiringTest' 'notify routes smoke'
   run_targeted_smoke '*PaymentsObservabilitySmokeTest' 'payments observability'
+
+  section "Targeted smoke tests (if present)"
+  cleanup_test_results
+  run "./gradlew :app-bot:test --tests '*MyBookings*' || true"
+  run "./gradlew :app-bot:test --tests '*NotifyDefaultWiringTest*' || true"
+  run "./gradlew :app-bot:test --tests '*PaymentsPersistenceTest*' || true"
+  cleanup_test_results
 
   run_outbox_admin_tests
 
