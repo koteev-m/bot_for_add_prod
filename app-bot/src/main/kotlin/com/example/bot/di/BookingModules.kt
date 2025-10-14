@@ -150,6 +150,7 @@ val bookingModule =
                 get(),
                 get(),
                 get(),
+                runCatching { get<MeterRegistry>() }.getOrNull(),
             )
         }
         single {
