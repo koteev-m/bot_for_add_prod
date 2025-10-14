@@ -1,13 +1,16 @@
 package com.example.bot.booking
 
+import com.example.bot.data.booking.BookingStatus
 import com.example.bot.data.booking.core.AuditLogRepository
 import com.example.bot.data.booking.core.BookingCoreError
 import com.example.bot.data.booking.core.BookingCoreResult
 import com.example.bot.data.booking.core.BookingHoldRepository
+import com.example.bot.data.booking.core.BookingRecord
 import com.example.bot.data.booking.core.BookingRepository
 import com.example.bot.data.booking.core.OutboxRepository
 import com.example.bot.data.db.withTxRetry
 import com.example.bot.promo.PromoAttributionCoordinator
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -31,6 +34,14 @@ sealed interface BookingCmdResult {
     data object NotFound : BookingCmdResult
 }
 
+sealed interface BookingStatusUpdateResult {
+    data class Success(val record: BookingRecord) : BookingStatusUpdateResult
+
+    data class Conflict(val record: BookingRecord) : BookingStatusUpdateResult
+
+    data object NotFound : BookingStatusUpdateResult
+}
+
 data class HoldRequest(
     val clubId: Long,
     val tableId: Long,
@@ -46,6 +57,7 @@ class BookingService(
     private val outboxRepository: OutboxRepository,
     private val auditLogRepository: AuditLogRepository,
     private val promoAttribution: PromoAttributionCoordinator = PromoAttributionCoordinator.Noop,
+    private val meterRegistry: MeterRegistry? = null,
 ) {
     suspend fun hold(
         req: HoldRequest,
@@ -275,6 +287,32 @@ class BookingService(
             BookingCmdResult.Booked(record.id)
         }
 
+    suspend fun seat(
+        clubId: Long,
+        bookingId: UUID,
+    ): BookingStatusUpdateResult =
+        updateStatus(
+            clubId = clubId,
+            bookingId = bookingId,
+            targetStatus = BookingStatus.SEATED,
+            action = "booking.seat",
+            metricName = "booking.seated.total",
+            outboxTopic = "booking.seated",
+        )
+
+    suspend fun markNoShow(
+        clubId: Long,
+        bookingId: UUID,
+    ): BookingStatusUpdateResult =
+        updateStatus(
+            clubId = clubId,
+            bookingId = bookingId,
+            targetStatus = BookingStatus.NO_SHOW,
+            action = "booking.no_show",
+            metricName = "booking.noshow.total",
+            outboxTopic = "booking.no_show",
+        )
+
     private suspend fun log(
         action: String,
         clubId: Long?,
@@ -291,4 +329,78 @@ class BookingService(
             meta = meta,
         )
     }
+
+    private suspend fun updateStatus(
+        clubId: Long,
+        bookingId: UUID,
+        targetStatus: BookingStatus,
+        action: String,
+        metricName: String,
+        outboxTopic: String,
+    ): BookingStatusUpdateResult {
+        val current = bookingRepository.findById(bookingId)
+            ?: run {
+                log(action, clubId, "not_found", metaFor(bookingId, null))
+                return BookingStatusUpdateResult.NotFound
+            }
+        if (current.clubId != clubId) {
+            log(action, clubId, "not_found", metaFor(bookingId, null))
+            return BookingStatusUpdateResult.NotFound
+        }
+        if (current.status != BookingStatus.BOOKED) {
+            log(action, clubId, "conflict", metaFor(bookingId, current.status))
+            return BookingStatusUpdateResult.Conflict(current)
+        }
+
+        return when (val updated = bookingRepository.setStatus(bookingId, targetStatus)) {
+            is BookingCoreResult.Success -> {
+                val record = updated.value
+                val payload = payloadFor(record)
+                meterRegistry?.counter(metricName, "club_id", clubId.toString())?.increment()
+                outboxRepository.enqueue(outboxTopic, payload)
+                log(action, clubId, "ok", payload)
+                BookingStatusUpdateResult.Success(record)
+            }
+
+            is BookingCoreResult.Failure -> {
+                when (updated.error) {
+                    BookingCoreError.BookingNotFound -> {
+                        log(action, clubId, "not_found", metaFor(bookingId, null))
+                        BookingStatusUpdateResult.NotFound
+                    }
+
+                    BookingCoreError.OptimisticRetryExceeded -> {
+                        val refreshed = bookingRepository.findById(bookingId) ?: current
+                        log(action, clubId, "retry_exceeded", metaFor(bookingId, refreshed.status))
+                        BookingStatusUpdateResult.Conflict(refreshed)
+                    }
+
+                    else -> {
+                        log(action, clubId, "unexpected", metaFor(bookingId, current.status))
+                        throw IllegalStateException("unexpected booking status update error: ${updated.error}")
+                    }
+                }
+            }
+        }
+    }
+
+    private fun payloadFor(record: BookingRecord): JsonObject =
+        buildJsonObject {
+            put("bookingId", record.id.toString())
+            put("clubId", record.clubId)
+            put("tableId", record.tableId)
+            put("status", record.status.name)
+            put("slotStart", record.slotStart.toString())
+            put("slotEnd", record.slotEnd.toString())
+            put("guests", record.guests)
+        }
+
+    private fun metaFor(
+        bookingId: UUID,
+        status: BookingStatus?,
+    ): JsonObject =
+        buildJsonObject {
+            put("bookingId", bookingId.toString())
+            status?.let { put("status", it.name) }
+        }
 }

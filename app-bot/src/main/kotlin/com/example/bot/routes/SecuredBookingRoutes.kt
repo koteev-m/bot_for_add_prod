@@ -2,6 +2,7 @@ package com.example.bot.routes
 
 import com.example.bot.booking.BookingCmdResult
 import com.example.bot.booking.BookingService
+import com.example.bot.booking.BookingStatusUpdateResult
 import com.example.bot.booking.dto.ConfirmRequest
 import com.example.bot.booking.dto.HoldRequest
 import com.example.bot.data.security.Role
@@ -18,6 +19,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.UUID
 
 fun Route.securedBookingRoutes(bookingService: BookingService) {
     route("/api/clubs/{clubId}/bookings") {
@@ -106,6 +108,29 @@ fun Route.securedBookingRoutes(bookingService: BookingService) {
                 }
             }
         }
+        authorize(
+            Role.CLUB_ADMIN,
+            Role.MANAGER,
+            Role.ENTRY_MANAGER,
+            Role.HEAD_MANAGER,
+            Role.GLOBAL_ADMIN,
+            Role.OWNER,
+        ) {
+            clubScoped(ClubScope.Own) {
+                post("/{bookingId}/seat") {
+                    val clubId = call.clubIdOrBadRequest() ?: return@post
+                    val bookingId = call.bookingIdOrBadRequest() ?: return@post
+                    val result = withContext(Dispatchers.IO) { bookingService.seat(clubId, bookingId) }
+                    respondStatusChange(call, result, "seated")
+                }
+                post("/{bookingId}/no-show") {
+                    val clubId = call.clubIdOrBadRequest() ?: return@post
+                    val bookingId = call.bookingIdOrBadRequest() ?: return@post
+                    val result = withContext(Dispatchers.IO) { bookingService.markNoShow(clubId, bookingId) }
+                    respondStatusChange(call, result, "no_show")
+                }
+            }
+        }
     }
 }
 
@@ -152,5 +177,47 @@ private suspend fun respondBookingResult(
 
         BookingCmdResult.NotFound ->
             call.respond(HttpStatusCode.NotFound, mapOf("error" to "not_found"))
+    }
+}
+
+private suspend fun ApplicationCall.clubIdOrBadRequest(): Long? {
+    val clubId = parameters["clubId"]?.toLongOrNull()
+    if (clubId == null) {
+        respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid_club"))
+        return null
+    }
+    return clubId
+}
+
+private suspend fun ApplicationCall.bookingIdOrBadRequest(): UUID? {
+    val raw = parameters["bookingId"]
+    val bookingId = raw?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+    if (bookingId == null) {
+        respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid_booking"))
+        return null
+    }
+    return bookingId
+}
+
+private suspend fun respondStatusChange(
+    call: ApplicationCall,
+    result: BookingStatusUpdateResult,
+    statusLabel: String,
+) {
+    when (result) {
+        is BookingStatusUpdateResult.Success ->
+            call.respond(HttpStatusCode.OK, mapOf("status" to statusLabel))
+
+        is BookingStatusUpdateResult.NotFound ->
+            call.respond(HttpStatusCode.NotFound, mapOf("error" to "not_found"))
+
+        is BookingStatusUpdateResult.Conflict ->
+            call.respond(
+                HttpStatusCode.Conflict,
+                mapOf(
+                    "error" to "status_conflict",
+                    "status" to result.record.status.name,
+                ),
+            )
     }
 }

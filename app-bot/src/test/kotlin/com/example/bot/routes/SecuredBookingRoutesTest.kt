@@ -2,7 +2,10 @@ package com.example.bot.routes
 
 import com.example.bot.booking.BookingCmdResult
 import com.example.bot.booking.BookingService
+import com.example.bot.booking.BookingStatusUpdateResult
+import com.example.bot.data.booking.BookingStatus
 import com.example.bot.data.booking.core.AuditLogRepository
+import com.example.bot.data.booking.core.BookingRecord
 import com.example.bot.data.security.Role
 import com.example.bot.data.security.User
 import com.example.bot.data.security.UserRepository
@@ -39,6 +42,10 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.flywaydb.core.Flyway
 import org.h2.jdbcx.JdbcDataSource
 import org.jetbrains.exposed.sql.Database
@@ -53,6 +60,7 @@ import org.koin.ktor.plugin.Koin
 import java.time.Instant
 import java.util.UUID
 import io.ktor.server.request.header as serverHeader
+import java.math.BigDecimal
 
 // ---------- Вспомогательные сущности и таблицы (file-private) ----------
 
@@ -127,6 +135,29 @@ private fun prepareDatabase(): BookingDbSetup {
 
     return BookingDbSetup(ds, db)
 }
+
+private fun bookingRecord(
+    id: UUID = UUID.randomUUID(),
+    clubId: Long = 1L,
+    status: BookingStatus = BookingStatus.SEATED,
+): BookingRecord =
+    BookingRecord(
+        id = id,
+        clubId = clubId,
+        tableId = 42L,
+        tableNumber = 7,
+        eventId = 100L,
+        guests = 3,
+        minRate = BigDecimal.TEN,
+        totalRate = BigDecimal.TEN,
+        slotStart = Instant.parse("2025-04-01T10:00:00Z"),
+        slotEnd = Instant.parse("2025-04-01T12:00:00Z"),
+        status = status,
+        qrSecret = "qr",
+        idempotencyKey = "idem",
+        createdAt = Instant.parse("2025-03-01T10:00:00Z"),
+        updatedAt = Instant.parse("2025-03-01T10:00:00Z"),
+    )
 
 /** Ленивая «расслабленная» заглушка аудита. */
 private fun relaxedAuditRepository(): AuditLogRepository = mockk(relaxed = true)
@@ -481,5 +512,82 @@ class SecuredBookingRoutesTest : StringSpec({
             println("DBG confirm-missing: status=${response.status} body=${response.bodyAsText()}")
             response.status shouldBe HttpStatusCode.NotFound
         }
+    }
+
+    "seat requires club admin role" {
+        val bookingService = mockk<BookingService>()
+        registerUser(telegramId = 710L, roles = setOf(Role.PROMOTER), clubs = setOf(1L))
+        val bookingId = UUID.randomUUID()
+
+        testApplication {
+            applicationDev { testModule(bookingService) }
+            val authed = authenticatedClient(telegramId = 710L)
+            val response = authed.post("/api/clubs/1/bookings/$bookingId/seat")
+            println("DBG seat-forbidden: status=${response.status} body=${response.bodyAsText()}")
+            response.status shouldBe HttpStatusCode.Forbidden
+        }
+
+        coVerify(exactly = 0) { bookingService.seat(any(), any()) }
+    }
+
+    "seat happy path returns 200" {
+        val bookingService = mockk<BookingService>()
+        registerUser(telegramId = 720L, roles = setOf(Role.CLUB_ADMIN), clubs = setOf(1L))
+        val bookingId = UUID.randomUUID()
+        coEvery { bookingService.seat(1L, bookingId) } returns
+            BookingStatusUpdateResult.Success(bookingRecord(id = bookingId, clubId = 1L, status = BookingStatus.SEATED))
+
+        testApplication {
+            applicationDev { testModule(bookingService) }
+            val authed = authenticatedClient(telegramId = 720L)
+            val response = authed.post("/api/clubs/1/bookings/$bookingId/seat")
+            println("DBG seat-success: status=${response.status} body=${response.bodyAsText()}")
+            response.status shouldBe HttpStatusCode.OK
+            val payload = json.parseToJsonElement(response.bodyAsText()).jsonObject
+            payload["status"]?.jsonPrimitive?.content shouldBe "seated"
+        }
+
+        coVerify(exactly = 1) { bookingService.seat(1L, bookingId) }
+    }
+
+    "seat conflict returns 409" {
+        val bookingService = mockk<BookingService>()
+        registerUser(telegramId = 730L, roles = setOf(Role.CLUB_ADMIN), clubs = setOf(1L))
+        val bookingId = UUID.randomUUID()
+        coEvery { bookingService.seat(1L, bookingId) } returns
+            BookingStatusUpdateResult.Conflict(bookingRecord(id = bookingId, clubId = 1L, status = BookingStatus.SEATED))
+
+        testApplication {
+            applicationDev { testModule(bookingService) }
+            val authed = authenticatedClient(telegramId = 730L)
+            val response = authed.post("/api/clubs/1/bookings/$bookingId/seat")
+            println("DBG seat-conflict: status=${response.status} body=${response.bodyAsText()}")
+            response.status shouldBe HttpStatusCode.Conflict
+            val payload = json.parseToJsonElement(response.bodyAsText()).jsonObject
+            payload["error"]?.jsonPrimitive?.content shouldBe "status_conflict"
+            payload["status"]?.jsonPrimitive?.content shouldBe BookingStatus.SEATED.name
+        }
+
+        coVerify(exactly = 1) { bookingService.seat(1L, bookingId) }
+    }
+
+    "no-show happy path returns 200" {
+        val bookingService = mockk<BookingService>()
+        registerUser(telegramId = 740L, roles = setOf(Role.MANAGER), clubs = setOf(1L))
+        val bookingId = UUID.randomUUID()
+        coEvery { bookingService.markNoShow(1L, bookingId) } returns
+            BookingStatusUpdateResult.Success(bookingRecord(id = bookingId, clubId = 1L, status = BookingStatus.NO_SHOW))
+
+        testApplication {
+            applicationDev { testModule(bookingService) }
+            val authed = authenticatedClient(telegramId = 740L)
+            val response = authed.post("/api/clubs/1/bookings/$bookingId/no-show")
+            println("DBG noshow-success: status=${response.status} body=${response.bodyAsText()}")
+            response.status shouldBe HttpStatusCode.OK
+            val payload = json.parseToJsonElement(response.bodyAsText()).jsonObject
+            payload["status"]?.jsonPrimitive?.content shouldBe "no_show"
+        }
+
+        coVerify(exactly = 1) { bookingService.markNoShow(1L, bookingId) }
     }
 })
