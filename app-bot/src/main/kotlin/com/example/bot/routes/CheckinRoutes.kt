@@ -42,8 +42,10 @@ fun Application.checkinRoutes(
     val logger = LoggerFactory.getLogger("CheckinRoutes")
 
     routing {
+        // Mini-App auth только на /api/clubs/{clubId}/checkin
         route("/api/clubs/{clubId}/checkin") {
             install(InitDataAuthPlugin, initDataAuth)
+
             authorize(Role.CLUB_ADMIN, Role.MANAGER, Role.ENTRY_MANAGER) {
                 clubScoped(ClubScope.Own) {
                     post("/scan") {

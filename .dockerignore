@@ -5,6 +5,7 @@
 .idea
 .vscode
 *.iml
+out/
 
 # Gradle / build
 .gradle
@@ -24,3 +25,12 @@ miniapp/dist
 .env
 .env.*
 docker-compose*.yml
+
+# VCS / OS
+.git/
+.gitignore
+.DS_Store
+
+# Node / web
+node_modules/
+app-bot/src/main/resources/miniapp/dist/*

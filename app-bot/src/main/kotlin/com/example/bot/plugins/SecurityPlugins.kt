@@ -9,6 +9,7 @@ import com.example.bot.webapp.InitDataPrincipalKey
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
+import io.ktor.server.application.pluginOrNull
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.header
@@ -17,6 +18,10 @@ import org.jetbrains.exposed.sql.Database
 
 /**
  * Installs RBAC security and basic error handling.
+ * StatusPages ставим один раз, с обработчиками:
+ * - BadRequestException -> 400
+ * - Throwable -> 500
+ * - MiniAppAuthAbort -> проглатываем (401 уже отдан в InitDataAuth)
  */
 fun Application.configureSecurity() {
     val dataSource = DataSourceHolder.dataSource ?: error("DataSource is not initialised")
@@ -41,12 +46,17 @@ fun Application.configureSecurity() {
         }
     }
 
-    install(StatusPages) {
-        exception<BadRequestException> { call, cause ->
-            call.respond(HttpStatusCode.BadRequest, mapOf("error" to cause.message))
-        }
-        exception<Throwable> { call, cause ->
-            call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (cause.message ?: "error")))
+    if (pluginOrNull(StatusPages) == null) {
+        install(StatusPages) {
+            exception<BadRequestException> { call, cause ->
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to (cause.message ?: "bad_request")))
+            }
+            exception<MiniAppAuthAbort> { _, _ ->
+                // 401 уже отправлен в InitDataAuth
+            }
+            exception<Throwable> { call, cause ->
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (cause.message ?: "error")))
+            }
         }
     }
 }

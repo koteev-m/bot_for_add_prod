@@ -26,9 +26,9 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.koin.core.context.stopKoin
 import org.koin.dsl.koinApplication
 import org.koin.dsl.module
-import org.koin.core.context.stopKoin
 import kotlin.test.assertEquals
 
 class NotifyDefaultWiringTest : StringSpec({
@@ -36,20 +36,23 @@ class NotifyDefaultWiringTest : StringSpec({
     val json = Json { ignoreUnknownKeys = true }
 
     afterSpec {
-        stopKoin()
+        // На всякий случай, если где-то поднялся глобальный Koin
+        runCatching { stopKoin() }
     }
 
     fun koinApp(
         config: NotificationsDispatchConfig,
         sender: NotifySender = mockk(relaxed = true),
-    ) =
-        koinApplication {
-            modules(
-                bookingModule,
-                module { single { sender } },
-                module(override = true) { single { config } },
-            )
-        }
+    ) = koinApplication {
+        // ключ: включаем разрешение переопределений
+        allowOverride(true)
+        // порядок важен: сначала «прод» модуль, потом наши тестовые биндинги, которые его переопределят
+        modules(
+            bookingModule,
+            module { single { sender } },
+            module { single { config } },
+        )
+    }
 
     "binds NotifySenderSendPort when notifications enabled" {
         val sender = mockk<NotifySender>(relaxed = true)

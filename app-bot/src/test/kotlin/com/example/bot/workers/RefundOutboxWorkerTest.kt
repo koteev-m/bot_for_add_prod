@@ -143,11 +143,14 @@ class RefundOutboxWorkerTest {
         coEvery { outbox.pickBatchForTopics(any(), any()) } returns listOf(message)
         coEvery { outbox.markSent(message.id) } returns BookingCoreResult.Success(Unit)
         val commands = mutableListOf<ProviderRefundCommand>()
+
         val koinApp =
             startKoin {
+                // ключ: разрешаем переопределения
+                allowOverride(true)
                 modules(
                     refundWorkerModule,
-                    module(override = true) {
+                    module {
                         single { outbox }
                         single { metrics }
                         single { clock }

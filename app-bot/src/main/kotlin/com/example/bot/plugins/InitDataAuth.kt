@@ -8,6 +8,8 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.createRouteScopedPlugin
 import io.ktor.server.application.install
+import io.ktor.server.application.pluginOrNull
+import io.ktor.server.application.DuplicatePluginException
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.contentType
 import io.ktor.server.request.header
@@ -15,6 +17,7 @@ import io.ktor.server.request.receiveParameters
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.application
 import io.ktor.util.AttributeKey
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
@@ -32,15 +35,10 @@ data class TelegramMiniUser(
 
 private val logger = LoggerFactory.getLogger("InitDataAuth")
 
-/** Подменяемый валидатор (для тестов). */
 private var validator: (String, String) -> TelegramMiniUser? = { raw, token ->
     InitDataValidator.validate(raw, token)?.toMiniUser()
 }
 
-/**
- * Служебное исключение для прерывания пайплайна после 401.
- * Делаем классом (а не object), чтобы не ловить предупреждение про readResolve().
- */
 internal class MiniAppAuthAbort : RuntimeException() {
     companion object {
         @Serial
@@ -52,10 +50,6 @@ private class MiniAppAuthConfig {
     lateinit var botTokenProvider: () -> String
 }
 
-/**
- * Route-scoped plugin: валидирует Telegram Mini App initData,
- * кладёт TelegramMiniUser в attributes и при неуспехе возвращает 401.
- */
 private val MiniAppAuth =
     createRouteScopedPlugin("MiniAppAuth", ::MiniAppAuthConfig) {
         val tokenProvider = pluginConfig.botTokenProvider
@@ -67,7 +61,6 @@ private val MiniAppAuth =
                 throw MiniAppAuthAbort()
             }
 
-            // было: getOrElse { "" }.orEmpty() — .orEmpty() лишний
             val botToken = runCatching { tokenProvider() }.getOrElse { "" }
             if (botToken.isBlank()) {
                 call.respondUnauthorized("bot token missing")
@@ -88,24 +81,37 @@ private val MiniAppAuth =
         }
     }
 
-/** Удобный фасад для подключения плагина к ветке роутов. */
+/* -------- идемпотентность установки -------- */
+
+private val MiniAppAuthRouteMarker = AttributeKey<Boolean>("miniapp.auth.installed.route")
+private val MiniAppAuthAppMarker  = AttributeKey<Boolean>("miniapp.auth.installed.app")
+
 fun Route.withMiniAppAuth(botTokenProvider: () -> String) {
-    install(MiniAppAuth) { this.botTokenProvider = botTokenProvider }
+    if (attributes.contains(MiniAppAuthRouteMarker)) return
+    val app = this.application
+    if (app.attributes.getOrNull(MiniAppAuthAppMarker) == true) {
+        attributes.put(MiniAppAuthRouteMarker, true)
+        return
+    }
+    try {
+        install(MiniAppAuth) { this.botTokenProvider = botTokenProvider }
+    } catch (_: DuplicatePluginException) {
+        // уже установлен выше
+    }
+    attributes.put(MiniAppAuthRouteMarker, true)
+    if (app.attributes.getOrNull(MiniAppAuthAppMarker) != true) {
+        app.attributes.put(MiniAppAuthAppMarker, true)
+    }
 }
 
-/**
- * StatusPages-хук, чтобы «молча» проглатывать MiniAppAuthAbort.
- * Вызови ОДИН раз в Application.module до регистрации роутов.
- */
 fun Application.installMiniAppAuthStatusPage() {
-    install(StatusPages) {
-        exception<MiniAppAuthAbort> { _, _ ->
-            // Ответ уже отправлен (401) — никакой доп. обработки не нужно.
+    if (pluginOrNull(StatusPages) == null) {
+        install(StatusPages) {
+            exception<MiniAppAuthAbort> { _, _ -> /* 401 уже отправлен */ }
         }
     }
 }
 
-/** Тестовые хуки. */
 internal fun overrideMiniAppValidatorForTesting(override: (String, String) -> TelegramMiniUser?) {
     validator = override
 }
@@ -117,7 +123,7 @@ internal fun resetMiniAppValidator() {
 private fun TelegramUser.toMiniUser(): TelegramMiniUser =
     TelegramMiniUser(id = id, username = username)
 
-/* -------------------- helpers -------------------- */
+/* -------- helpers -------- */
 
 private suspend fun extractInitData(call: ApplicationCall): String? {
     val q = call.request.queryParameters["initData"]?.takeIf { it.isNotBlank() }
