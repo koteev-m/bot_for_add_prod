@@ -26,23 +26,29 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 
-    // показывать println() и System.out/System.err в консоли Gradle
     testLogging {
         showStandardStreams = true
         events("passed", "failed", "skipped", "standardOut", "standardError")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }
 
-    // Для Kotest: явно просим не глушить stdout
+    // Для Kotest: явно не глушим stdout
     systemProperty("kotest.framework.dump.test.stdout", "true")
 
-    // TELEGRAM_BOT_TOKEN нужен для плагина InitDataAuth в тестах (MusicRoutesTest и др.)
+    // Нужен для InitDataAuth в тестах
     environment("TELEGRAM_BOT_TOKEN", "111111:TEST_BOT_TOKEN")
     environment("NOTIFICATIONS_ENABLED", "false")
+
+    // Локации миграций: unit → H2, интеграционные (-PrunIT) → PostgreSQL
+    if (project.hasProperty("runIT")) {
+        systemProperty("FLYWAY_LOCATIONS", "classpath:db/migration/postgresql")
+    } else {
+        systemProperty("FLYWAY_LOCATIONS", "classpath:db/migration/h2")
+    }
 }
 
 dependencies {
-    // Ktor (через алиасы каталога версий)
+    // Ktor
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.content.negotiation)
@@ -66,8 +72,13 @@ dependencies {
     implementation(projects.coreTelemetry)
     implementation(projects.coreSecurity)
 
-    // DB (если действительно нужны в app-боте; чаще это в core-data)
+    // DB (Exposed в core-data; тут подстрахуем драйвер PG на runtime)
     implementation(libs.exposed.jdbc)
+    runtimeOnly(libs.postgres)
+
+    // Миграции — НУЖНО в main (иначе org.flywaydb.core.Flyway не резолвится)
+    implementation(libs.flyway.core)
+    implementation(libs.flyway.pg)
 
     // Observability / logging
     implementation(libs.micrometer.core)
@@ -96,9 +107,6 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.h2)
-    testImplementation(libs.postgres)
-    testImplementation(libs.flyway.core)
-    testImplementation(libs.flyway.pg)
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.testcontainers.junit)
     testImplementation(projects.coreTesting)
@@ -114,53 +122,32 @@ val miniAppDistDir = rootProject.layout.projectDirectory.dir("miniapp/dist")
 tasks.register<Copy>("copyMiniAppDist") {
     description = "Copy Mini App compiled assets into resources so Ktor can serve them from the JAR."
     group = "build"
-
-    // провайдер-директория — безопасно для configuration cache
     from(miniAppDistDir)
     include("**/*")
-
     into(layout.buildDirectory.dir("generated/miniapp/webapp/app"))
-
-    // ⚠️ больше никакого onlyIf { ... } — Copy просто ничего не скопирует, если папка пуста/не существует
-    // при желании можно явно пометить вход каталога как опциональный:
     inputs.dir(miniAppDistDir).optional()
 }
 
 tasks.named<ProcessResources>("processResources") {
     dependsOn("copyMiniAppDist")
-    from(layout.buildDirectory.dir("generated/miniapp")) {
-        into("")
-    }
+    from(layout.buildDirectory.dir("generated/miniapp")) { into("") }
 }
 
 application {
     // EngineMain + application.conf (modules = [ com.example.bot.ApplicationKt.module ])
-    mainClass.set("io.ktor.server.netty.EngineMain")
-
-    // listOf — каждый аргумент на своей строке + запятая в конце (требование ktlint)
-    applicationDefaultJvmArgs =
-        listOf(
-            "-Dfile.encoding=UTF-8",
-            "-XX:+ExitOnOutOfMemoryError",
-        )
+    mainClass.set("com.example.bot.ApplicationKt")
+    applicationDefaultJvmArgs = listOf(
+        "-Dfile.encoding=UTF-8",
+        "-XX:+ExitOnOutOfMemoryError",
+    )
 }
 
 /**
  * Утилита для запуска миграций из рантайма приложения.
- * Стиль registering(JavaExec::class) не триггерит ktlint rule 'multiline-expression-wrapping'.
  */
 val runMigrations by tasks.registering(JavaExec::class) {
     group = "application"
     description = "Run Flyway migrations using app runtime"
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.example.bot.tools.MigrateMainKt")
-}
-
-tasks.test {
-    if (project.hasProperty("runIT")) {
-        systemProperty("junit.jupiter.tags.include", "it")
-    } else {
-        systemProperty("junit.jupiter.tags.exclude", "it")
-    }
-    systemProperty("FLYWAY_LOCATIONS", "classpath:db/migration,classpath:db/migration/postgresql")
 }

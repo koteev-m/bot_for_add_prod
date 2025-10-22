@@ -24,6 +24,8 @@ import com.example.bot.guestlists.GuestListRepository
 import com.example.bot.metrics.AppMetricsBinder
 import com.example.bot.music.MusicService
 import com.example.bot.observability.MetricsProvider
+import com.example.bot.payments.provider.ProviderRefundClient
+import com.example.bot.payments.provider.ProviderRefundHealth
 import com.example.bot.plugins.appConfig
 import com.example.bot.plugins.configureSecurity
 import com.example.bot.plugins.installAppConfig
@@ -89,6 +91,7 @@ import com.pengrad.telegrambot.request.GetWebhookInfo
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.request.SetWebhook
 import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStarted
@@ -120,6 +123,7 @@ import org.slf4j.LoggerFactory
 /** Значения по умолчанию для запуска сервера (выносим «магические» литералы). */
 private const val DEFAULT_HTTP_PORT: Int = 8080
 private const val DEFAULT_BIND_HOST: String = "0.0.0.0"
+private const val START_CLUBS_LIMIT = 4 // максимум для стартового меню
 
 /**
  * Точка входа приложения — для Docker/`installDist`.
@@ -246,29 +250,70 @@ fun Application.module() {
 
     install(Koin) {
         slf4jLogger()
-        val moduleList = mutableListOf<Module>()
-        tracingModule?.let { moduleList += it }
-        moduleList += listOf(
+
+        val refundEnabled: Boolean =
+            System.getenv("REFUND_WORKER_ENABLED")?.equals("true", ignoreCase = true) ?: false
+
+        // Быстрая предвалидация секрета, если включено
+        fun requireRefundSecretIfEnabled() {
+            if (!refundEnabled) return
+            val token = System.getenv("REFUND_PROVIDER_TOKEN")
+                ?: System.getenv("REFUND_PROVIDER_API_KEY") // совместимость с твоим .env
+            require(!token.isNullOrBlank()) {
+                "Refund worker is enabled (REFUND_WORKER_ENABLED=true) but refund token is missing. " +
+                    "Set REFUND_PROVIDER_TOKEN or REFUND_PROVIDER_API_KEY."
+            }
+        }
+        requireRefundSecretIfEnabled()
+
+        val moduleList = mutableListOf(
             bookingModule,
             securityModule,
             webAppModule,
             availabilityModule,
-            telegramModule,
+            /* telegramModule добавляется ниже */ telegramModule,
             musicModule,
             schedulerModule,
             healthModule,
             notifyModule,
             paymentsModule,
-            refundWorkerModule,
             outboxAdminModule,
-        )
+        ).apply {
+            if (refundEnabled) {
+                add(refundWorkerModule)
+            } else {
+                LoggerFactory.getLogger("RefundOutboxWorker")
+                    .info("Refund module skipped (REFUND_WORKER_ENABLED=false)")
+            }
+        }
+
         modules(*moduleList.toTypedArray())
     }
 
     healthRoutes(get())
 
     routing {
-        notifyHealthRoute { getKoin().get() }
+        get("/refund/health") {
+            val koin = getKoin()
+            val clientOrNull = runCatching { koin.get<ProviderRefundClient>() }.getOrNull()
+            if (clientOrNull == null) {
+                call.respondText("NOT_SUPPORTED", status = HttpStatusCode.NotImplemented)
+                return@get
+            }
+            val healthCapable = clientOrNull as? ProviderRefundHealth
+            if (healthCapable == null) {
+                call.respondText("NOT_SUPPORTED", status = HttpStatusCode.NotImplemented)
+                return@get
+            }
+            runCatching { healthCapable.ping() }
+                .onSuccess { call.respondText("OK") }
+                .onFailure { ex ->
+                    call.respondText(
+                        "DOWN: ${ex.message ?: ex::class.simpleName}",
+                        status = HttpStatusCode.ServiceUnavailable
+                    )
+                }
+        }
     }
 
     launchCampaignSchedulerOnStart()
@@ -289,6 +334,7 @@ fun Application.module() {
     val guestFlowHandler by inject<GuestFlowHandler>()
     val clubRepository by inject<ClubRepository>()
     val startMenuLogger = LoggerFactory.getLogger("TelegramStartMenu")
+    val updateHandlerLogger = LoggerFactory.getLogger("TelegramUpdateHandler")
     val webAppBaseUrl = resolveWebAppBaseUrl()
     val musicService: MusicService = get()
     val refundWorkerLogger = LoggerFactory.getLogger("RefundOutboxWorker")
@@ -383,6 +429,8 @@ fun Application.module() {
     val telegramStartupLogger = LoggerFactory.getLogger("TelegramStartup")
     val koinAppConfig: AppConfig? = runCatching { get<AppConfig>() }.getOrNull()
     val resolvedAppConfig = koinAppConfig ?: runCatching { appConfig }.getOrNull()
+
+    // Определяем режим бота
     val runMode =
         resolvedAppConfig?.runMode ?: run {
             val pollingEnv =
@@ -394,9 +442,20 @@ fun Application.module() {
     telegramStartupLogger.info("bot.runMode={}", runMode)
 
     val updateHandlerScope = CoroutineScope(coroutineContext + SupervisorJob())
-    val updateHandlerLogger = LoggerFactory.getLogger("TelegramUpdateHandler")
 
     val handleUpdate: suspend (Update) -> Unit = handler@{ update ->
+        // Базовая диагностика
+        try {
+            val hasMsg = update.message() != null
+            val hasCb = update.callbackQuery() != null
+            updateHandlerLogger.info(
+                "telegram.update received: message={}, callback={}, chatId={}",
+                hasMsg, hasCb, runCatching { update.message()?.chat()?.id() }.getOrNull()
+            )
+        } catch (_: Throwable) {
+            // no-op
+        }
+
         if (update.callbackQuery() != null) {
             callbackHandler.handle(update)
             return@handler
@@ -410,11 +469,35 @@ fun Application.module() {
             text.startsWith("/start", ignoreCase = true) ||
                 text.equals("start", ignoreCase = true) ||
                 text.equals("старт", ignoreCase = true) -> {
-                if (text.startsWith("/start", ignoreCase = true)) {
-                    guestFlowHandler.handle(update)
+
+                // 1) Дадим базовый ответ всегда
+                runCatching {
+                    bot.execute(
+                        SendMessage(
+                            chatId,
+                            "Бот запущен ✅\n" +
+                                "Если кнопки ниже не появились, отправь команду /demo для теста."
+                        )
+                    )
                 }
-                val clubs = clubRepository.listClubs(limit = START_CLUBS_LIMIT).take(START_CLUBS_LIMIT)
-                if (clubs.size == START_CLUBS_LIMIT) {
+
+                // 2) Гостевой flow (если нужен deep-link и т.п.)
+                runCatching { guestFlowHandler.handle(update) }
+                    .onFailure { t ->
+                        updateHandlerLogger.warn("guestFlow.handle failed: {}", t.toString())
+                    }
+
+                // 3) Попробуем показать меню клубов — при любом количестве (1..N)
+                val clubs = runCatching {
+                    clubRepository.listClubs(limit = START_CLUBS_LIMIT).take(START_CLUBS_LIMIT)
+                }.getOrElse { emptyList() }
+
+                if (clubs.isEmpty()) {
+                    startMenuLogger.warn(
+                        "telegram.start_menu.skipped chatId={} reason=empty_clubs",
+                        chatId
+                    )
+                } else {
                     val keyboard = buildStartKeyboard(webAppBaseUrl, clubs)
                     val message = SendMessage(chatId, "Выберите клуб:").replyMarkup(keyboard)
                     bot.execute(message)
@@ -422,13 +505,6 @@ fun Application.module() {
                         "telegram.start_menu.sent chatId={} clubs={}",
                         chatId,
                         clubs.map { it.id },
-                    )
-                } else {
-                    startMenuLogger.warn(
-                        "telegram.start_menu.skipped chatId={} reason={} available={}",
-                        chatId,
-                        "insufficient_clubs",
-                        clubs.size,
                     )
                 }
             }
@@ -453,12 +529,20 @@ fun Application.module() {
         updateHandlerScope.launch(Dispatchers.IO) {
             runCatching { handleUpdate(update) }
                 .onFailure { t ->
-                    updateHandlerLogger.warn(
-                        "telegram.update.failed: {}",
-                        t.toString(),
-                    )
+                    updateHandlerLogger.warn("telegram.update.failed: {}", t.toString())
                 }
         }
+    }
+
+    // ---- Fallback-секрет вебхука и установка вебхука ----
+    fun resolveWebhookSecretToken(config: AppConfig?): String? {
+        val fromConfig = runCatching { config?.webhook?.secretToken }.getOrNull()
+        if (!fromConfig.isNullOrBlank()) return fromConfig
+        val env1 = System.getenv("WEBHOOK_SECRET_TOKEN")
+        if (!env1.isNullOrBlank()) return env1
+        val env2 = System.getenv("TELEGRAM_WEBHOOK_SECRET")
+        if (!env2.isNullOrBlank()) return env2
+        return null
     }
 
     when (runMode) {
@@ -490,8 +574,10 @@ fun Application.module() {
         BotRunMode.WEBHOOK -> {
             telegramStartupLogger.info("telegram.runMode=WEBHOOK: updates listener NOT started")
 
-            val baseUrl = resolvedAppConfig?.webhook?.baseUrl
-            val secret = resolvedAppConfig?.webhook?.secretToken
+            val baseUrl = (resolvedAppConfig?.webhook?.baseUrl)
+                ?: System.getenv("BASE_URL") // безопасный fallback на ENV
+            val secret: String? = resolveWebhookSecretToken(resolvedAppConfig)
+
             if (!baseUrl.isNullOrBlank() && !secret.isNullOrBlank()) {
                 val webhookUrl = baseUrl.trimEnd('/') + "/telegram/webhook"
                 try {
@@ -512,7 +598,9 @@ fun Application.module() {
                 }
             } else {
                 telegramStartupLogger.warn(
-                    "telegram.webhook not set: webhook baseUrl/secretToken is missing in AppConfig",
+                    "telegram.webhook not set: baseUrl or secretToken is missing (baseUrl set? {}, secret set? {})",
+                    !baseUrl.isNullOrBlank(),
+                    !secret.isNullOrBlank(),
                 )
             }
 
@@ -531,13 +619,13 @@ fun Application.module() {
                 telegramStartupLogger.warn("telegram.getWebhookInfo failed: {}", t.toString())
             }
 
+            // Передаём тот же секрет в маршруты вебхука (плагин безопасности проверит заголовок)
             telegramWebhookRoutes(bot, secret) { update -> dispatchUpdate(update) }
         }
     }
 }
 
-private const val START_CLUBS_LIMIT = 4
-
+/** Определение базового URL для Mini App. */
 private fun Application.resolveWebAppBaseUrl(): String {
     val envBase = System.getenv("WEBAPP_BASE_URL")?.takeIf { it.isNotBlank() }
     val configBase =
@@ -549,15 +637,17 @@ private fun Application.resolveWebAppBaseUrl(): String {
     return base.removeSuffix("/")
 }
 
+/** Собираем клавиатуру старта для 1..N клубов (максимум START_CLUBS_LIMIT), по 2 кнопки в ряд. */
 @Suppress("SpreadOperator")
 private fun buildStartKeyboard(
     baseUrl: String,
     clubs: List<ClubDto>,
 ): InlineKeyboardMarkup {
-    require(clubs.size >= START_CLUBS_LIMIT) { "Expected at least $START_CLUBS_LIMIT clubs" }
+    require(clubs.isNotEmpty()) { "No clubs to build keyboard" }
     val normalizedBase = baseUrl.removeSuffix("/")
+    val count = minOf(START_CLUBS_LIMIT, clubs.size)
     val buttons =
-        clubs.take(START_CLUBS_LIMIT).map { club ->
+        clubs.take(count).map { club ->
             InlineKeyboardButton(club.name).webApp(
                 WebAppInfo("$normalizedBase/app?clubId=${club.id}"),
             )

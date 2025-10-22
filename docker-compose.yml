@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   db:
     image: postgres:16-alpine
@@ -13,6 +15,9 @@ services:
       retries: 20
     volumes:
       - pgdata:/var/lib/postgresql/data
+    # нужно для локальных инструментов/psql с хоста
+    ports:
+      - "15432:5432"
     restart: unless-stopped
 
   app:
@@ -24,7 +29,7 @@ services:
     environment:
       # --- profile/runtime ---
       APP_PROFILE: PROD
-      PORT: "8080"                     # приложение слушает внутри контейнера
+      PORT: "8080"
 
       # --- database (через сервис db) ---
       DATABASE_URL: jdbc:postgresql://db:5432/${DB_NAME:-botdb}
@@ -37,10 +42,14 @@ services:
 
       # --- telegram / security ---
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      BOT_TOKEN: ${BOT_TOKEN}          # укажите в .env и держите равным TELEGRAM_BOT_TOKEN
+      BOT_TOKEN: ${BOT_TOKEN}                # ДОЛЖЕН совпадать с TELEGRAM_BOT_TOKEN
       TELEGRAM_USE_POLLING: "false"
+
+      # единый ключ для вебхука; поддерживаем оба имени на всякий случай
+      WEBHOOK_SECRET_TOKEN: ${WEBHOOK_SECRET_TOKEN:-${TELEGRAM_WEBHOOK_SECRET}}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET}
-      TELEGRAM_WEBHOOK_PUBLIC_PATH: ${TELEGRAM_WEBHOOK_PUBLIC_PATH}
+
+      TELEGRAM_WEBHOOK_PUBLIC_PATH: ${TELEGRAM_WEBHOOK_PUBLIC_PATH:-/telegram/webhook}
       OWNER_TELEGRAM_ID: ${OWNER_TELEGRAM_ID}
       QR_SECRET: ${QR_SECRET}
 
@@ -58,7 +67,8 @@ services:
     expose:
       - "8080"
     healthcheck:
-      test: ["CMD","curl","-fsS","http://localhost:8080/health"]
+      # используем wget (обычно есть в busybox). Если в образе есть curl — можешь вернуть curl-вариант.
+      test: ["CMD-SHELL","wget -qO- http://localhost:8080/health >/dev/null 2>&1 || exit 1"]
       interval: 20s
       timeout: 3s
       retries: 3
